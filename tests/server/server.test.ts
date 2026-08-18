@@ -92,7 +92,7 @@ describe("local content server", () => {
     const navigationBody = await navigation.text();
     expect(navigationBody).toContain('<h2>nested</h2>');
     expect(navigationBody).toContain(
-      '<a href="./nested/page.html" title="Nested">Nested</a>',
+      '<a href="./nested/page.html" title="Nested"><span class="viewer-navigation-title">Nested</span><time datetime=',
     );
     expect(await nested.text()).toContain("Nested");
     expect(asset.headers.get("content-type")).toBe("image/svg+xml");
@@ -154,7 +154,7 @@ describe("local content server", () => {
 
     const navigation = await fetch(`${origin}/_spec-html/navigation`);
     expect(await navigation.text()).toContain(
-      '<a href="./new-document.html" title="New &amp; updated">New &amp; updated</a>',
+      '<a href="./new-document.html" title="New &amp; updated"><span class="viewer-navigation-title">New &amp; updated</span><time datetime=',
     );
   });
 

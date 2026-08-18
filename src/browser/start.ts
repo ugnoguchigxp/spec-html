@@ -8,7 +8,11 @@ import { buildSrcdoc } from "./frame.js";
 import type { FrameIntegrations } from "./frame.js";
 import { createLayout, renderLoadState } from "./layout.js";
 import { isPlainPrimaryClick } from "./links.js";
-import { mountNavigation, updateActiveNavigation } from "./navigation.js";
+import {
+  mountNavigation,
+  sortNavigation,
+  updateActiveNavigation,
+} from "./navigation.js";
 import {
   createContentUrl,
   createShellUrl,
@@ -18,7 +22,7 @@ import {
 } from "./router.js";
 import {
   applyDocumentTitle,
-  getFrameTitle,
+  getFragmentTitle,
   resetDocumentTitle,
 } from "./title.js";
 import {
@@ -32,6 +36,8 @@ import type {
   NavigationItem,
   RouteParseResult,
   RouteState,
+  SortDirection,
+  SortPreference,
   ViewerElements,
 } from "./types.js";
 
@@ -55,18 +61,21 @@ async function initializeViewer(): Promise<void> {
   };
 
   let themePreference = readThemePreference();
+  let sortPreference: SortPreference = "name";
+  let sortDirection: SortDirection = "ascending";
   applyThemePreference(document.documentElement, themePreference);
   const elements = createLayout(app);
   updateThemeButtons(elements, themePreference);
+  updateSortButtons(elements, sortPreference, sortDirection);
   const contentBaseUrl = new URL(CONTENT_PREFIX, window.location.origin);
   const navigationUrl = new URL(NAVIGATION_PATH, window.location.origin);
   let navigationItems: NavigationItem[] = [];
   let activeAbortController: AbortController | undefined;
   let currentDocument: string | null = null;
+  let currentDocumentSource: string | null = null;
   let currentRoute: RouteState = { doc: null, hash: "" };
   let detailsOpenedForPrint: HTMLDetailsElement[] = [];
   const mobileViewport = window.matchMedia("(max-width: 767px)");
-  const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
 
   const syncSidebarInteractivity = (): void => {
     const isHidden =
@@ -88,10 +97,18 @@ async function initializeViewer(): Promise<void> {
   syncSidebarInteractivity();
   mobileViewport.addEventListener("change", syncSidebarInteractivity);
 
+  const closeSourceDialog = (): void => {
+    if (elements.sourceDialog.open) {
+      elements.sourceDialog.close();
+    }
+  };
+
   const clearDocument = (): void => {
     activeAbortController?.abort();
     activeAbortController = undefined;
     currentDocument = null;
+    currentDocumentSource = null;
+    closeSourceDialog();
     elements.frame.title = "設計書";
     resetDocumentTitle();
     updateActiveNavigation(navigationItems, { doc: null, hash: "" });
@@ -166,6 +183,9 @@ async function initializeViewer(): Promise<void> {
     activeAbortController?.abort();
     const abortController = new AbortController();
     activeAbortController = abortController;
+    currentDocument = null;
+    currentDocumentSource = null;
+    closeSourceDialog();
     renderLoadState(elements, { kind: "loading", doc });
     setSidebarOpen(false);
 
@@ -176,6 +196,7 @@ async function initializeViewer(): Promise<void> {
         return;
       }
 
+      const title = getFragmentTitle(fragment, doc);
       const srcdoc = buildSrcdoc(
         fragment,
         documentUrl,
@@ -188,17 +209,16 @@ async function initializeViewer(): Promise<void> {
         return;
       }
 
+      activeAbortController = undefined;
+      currentDocument = doc;
+      currentDocumentSource = fragment;
+      elements.frame.title = title;
+      applyDocumentTitle(title);
+      updateActiveNavigation(navigationItems, route);
       const frameDocument = elements.frame.contentDocument;
       if (frameDocument === null) {
         throw new Error("iframe documentを取得できません");
       }
-
-      const title = getFrameTitle(frameDocument, doc);
-      activeAbortController = undefined;
-      currentDocument = doc;
-      elements.frame.title = title;
-      applyDocumentTitle(title);
-      updateActiveNavigation(navigationItems, route);
       installFrameLinkHandler(frameDocument, navigate);
       renderLoadState(elements, { kind: "ready", doc, title });
       scrollToHash(route.hash);
@@ -217,14 +237,6 @@ async function initializeViewer(): Promise<void> {
     }
   };
 
-  colorScheme.addEventListener("change", () => {
-    if (themePreference !== "system" || currentDocument === null) {
-      return;
-    }
-    currentDocument = null;
-    void navigate(currentRoute, "none");
-  });
-
   for (const preference of THEME_PREFERENCES) {
     elements.themeButtons[preference].addEventListener("click", () => {
       if (themePreference === preference) {
@@ -234,10 +246,34 @@ async function initializeViewer(): Promise<void> {
       applyThemePreference(document.documentElement, themePreference);
       saveThemePreference(themePreference);
       updateThemeButtons(elements, themePreference);
-      if (currentDocument !== null) {
+      if (currentDocument !== null || activeAbortController !== undefined) {
         currentDocument = null;
         void navigate(currentRoute, "none");
       }
+    });
+  }
+
+  elements.documentModeButton.addEventListener("click", () => {
+    if (currentDocumentSource === null || elements.root.dataset.state !== "ready") {
+      return;
+    }
+    elements.sourceDialogCode.textContent = currentDocumentSource;
+    elements.sourceDialog.showModal();
+  });
+  elements.sourceDialogCloseButton.addEventListener("click", closeSourceDialog);
+
+  for (const preference of ["name", "date"] as const) {
+    elements.sortButtons[preference].addEventListener("click", () => {
+      if (sortPreference === preference) {
+        sortDirection = sortDirection === "ascending"
+          ? "descending"
+          : "ascending";
+      } else {
+        sortPreference = preference;
+        sortDirection = preference === "date" ? "descending" : "ascending";
+      }
+      sortNavigation(elements.navigation, sortPreference, sortDirection);
+      updateSortButtons(elements, sortPreference, sortDirection);
     });
   }
 
@@ -321,6 +357,7 @@ async function initializeViewer(): Promise<void> {
       await navigationResponse.text(),
       contentBaseUrl,
     );
+    sortNavigation(elements.navigation, sortPreference, sortDirection);
   } catch (error: unknown) {
     elements.navigation.textContent = "Navigationを読み込めません";
     renderLoadState(elements, {
@@ -496,6 +533,31 @@ function messageForDocumentError(error: unknown, doc: string): string {
     return `設計書を取得できません: HTTP ${error.status}。ページを再読み込みしてください`;
   }
   return "設計書を表示できません";
+}
+
+function updateSortButtons(
+  elements: ViewerElements,
+  preference: SortPreference,
+  direction: SortDirection,
+): void {
+  for (const value of ["name", "date"] as const) {
+    const button = elements.sortButtons[value];
+    const isActive = value === preference;
+    const label = value === "name" ? "Name" : "Date";
+    button.setAttribute("aria-pressed", String(isActive));
+    button.textContent = isActive
+      ? `${label} ${direction === "ascending" ? "↑" : "↓"}`
+      : label;
+    button.setAttribute(
+      "aria-label",
+      isActive ? `${label}, ${direction}` : `Sort by ${label.toLowerCase()}`,
+    );
+    if (isActive) {
+      button.title = "Reverse sort order";
+    } else {
+      button.removeAttribute("title");
+    }
+  }
 }
 
 function updateThemeButtons(

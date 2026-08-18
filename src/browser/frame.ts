@@ -12,21 +12,7 @@ export function buildSrcdoc(
   integrations: FrameIntegrations,
   themePreference: ThemePreference,
 ): string {
-  const frameDocument = document.implementation.createHTMLDocument("");
-  frameDocument.documentElement.lang = "ja";
-  if (themePreference !== "system") {
-    frameDocument.documentElement.dataset.theme = themePreference;
-  }
-  frameDocument.head.querySelector("title")?.remove();
-
-  appendMeta(frameDocument, "charset", "utf-8");
-  appendMeta(frameDocument, "name", "viewport", "width=device-width, initial-scale=1");
-
-  const base = frameDocument.createElement("base");
-  base.href = documentUrl.href;
-  frameDocument.head.append(base);
-
-  appendStyleSheet(frameDocument, runtimeUrl(documentUrl, "document.css"));
+  const frameDocument = createFrameDocument(documentUrl, themePreference);
   if (integrations.chartJs) {
     appendScript(
       frameDocument,
@@ -39,6 +25,30 @@ export function buildSrcdoc(
   }
 
   frameDocument.body.innerHTML = fragment;
+  return serializeFrameDocument(frameDocument);
+}
+
+function createFrameDocument(
+  documentUrl: URL,
+  themePreference: ThemePreference,
+): Document {
+  const frameDocument = document.implementation.createHTMLDocument("");
+  frameDocument.documentElement.lang = "ja";
+  frameDocument.documentElement.dataset.theme = themePreference;
+  frameDocument.head.querySelector("title")?.remove();
+
+  appendMeta(frameDocument, "charset", "utf-8");
+  appendMeta(frameDocument, "name", "viewport", "width=device-width, initial-scale=1");
+
+  const base = frameDocument.createElement("base");
+  base.href = documentUrl.href;
+  frameDocument.head.append(base);
+
+  appendStyleSheet(frameDocument, runtimeUrl(documentUrl, "document.css"));
+  return frameDocument;
+}
+
+function serializeFrameDocument(frameDocument: Document): string {
   return `<!doctype html>\n${frameDocument.documentElement.outerHTML}`;
 }
 

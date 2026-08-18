@@ -10,6 +10,12 @@ export function getFrameTitle(frameDocument: Document, doc: string): string {
   return filename.replace(/\.html$/i, "") || "Documentation";
 }
 
+export function getFragmentTitle(fragment: string, doc: string): string {
+  const fragmentDocument = document.implementation.createHTMLDocument("");
+  fragmentDocument.body.innerHTML = fragment;
+  return getFrameTitle(fragmentDocument, doc);
+}
+
 export function applyDocumentTitle(title: string): void {
   document.title = `${title} — ${TITLE_SUFFIX}`;
 }

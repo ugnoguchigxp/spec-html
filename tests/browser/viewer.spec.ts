@@ -62,13 +62,28 @@ test("shows the first navigation document and updates active navigation", async 
       ),
     )
     .toEqual([0, 0]);
-  await expect(page.locator(".viewer-brand")).toHaveText("spec-html");
-  await expect(page.locator(".viewer-brand")).toHaveCSS("font-size", "11px");
-  const longTitle = page.getByRole("link", { name: "Overview" });
-  await expect(longTitle).toHaveAttribute("title", "Overview");
+  await expect(page.locator(".viewer-brand")).toHaveCount(0);
+  const sortSwitcher = page.getByRole("group", { name: "Sort by" });
+  await expect(
+    sortSwitcher.locator('[data-sort-value="name"]'),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    sortSwitcher.locator('[data-sort-value="date"]'),
+  ).toHaveAttribute("aria-pressed", "false");
+  const longTitleLink = page.getByRole("link", { name: "Overview" });
+  const longTitle = longTitleLink.locator(".viewer-navigation-title");
+  const updatedAt = longTitleLink.locator("time");
+  await expect(longTitleLink).toHaveAttribute("title", "Overview");
   await expect(longTitle).toHaveCSS("text-overflow", "ellipsis");
   await expect(longTitle).toHaveCSS("white-space", "nowrap");
-  await longTitle.evaluate((link) => {
+  await expect(updatedAt).toHaveAttribute(
+    "datetime",
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+  );
+  await expect(updatedAt).toHaveText(
+    /^(?:just now|\d+ min|\d+ (?:hour|day)s? ago|\d{4}-\d{2}-\d{2})$/,
+  );
+  await longTitleLink.evaluate((link) => {
     link.style.width = "40px";
   });
   await expect
@@ -83,6 +98,167 @@ test("shows the first navigation document and updates active navigation", async 
       ),
     )
     .toBe(true);
+
+});
+
+test("opens source HTML in a modal without replacing the document preview", async ({ page }) => {
+  await page.goto("/");
+
+  const frame = page.frameLocator("iframe.viewer-document");
+  const modeButton = page.getByRole("button", { name: "ソースHTMLを表示" });
+  await expect(modeButton).toBeVisible();
+  await expect(modeButton).toHaveCSS("position", "absolute");
+  await expect(modeButton).toHaveCSS("right", "16px");
+  await expect(modeButton).toHaveCSS("bottom", "16px");
+
+  await page.getByRole("link", { name: "Chart" }).click();
+  await expect(frame.locator("h1")).toHaveText("Chart");
+  await page.evaluate(() => {
+    const frame = document.querySelector<HTMLIFrameElement>("iframe.viewer-document");
+    if (frame === null || frame.contentDocument === null) {
+      throw new Error("Document frame not found");
+    }
+    const frameDocument = frame.contentDocument;
+    Object.assign(window, {
+      chartDocumentBeforeSourceDialog: frameDocument,
+      chartCanvasBeforeSourceDialog: frameDocument.querySelector(
+        "#latency-chart",
+      ),
+    });
+  });
+
+  await modeButton.click();
+  const sourceDialog = page.getByRole("dialog", { name: "ソースHTML" });
+  await expect(sourceDialog).toBeVisible();
+  await expect(sourceDialog.locator("pre")).toContainText("<h1>Chart</h1>");
+  await expect(frame.locator("h1")).toHaveText("Chart");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const frame = document.querySelector<HTMLIFrameElement>(
+          "iframe.viewer-document",
+        );
+        const stored = window as Window & {
+          chartDocumentBeforeSourceDialog?: Document;
+          chartCanvasBeforeSourceDialog?: Element | null;
+        };
+        if (frame === null || frame.contentDocument === null) {
+          return false;
+        }
+        return frame.contentDocument === stored.chartDocumentBeforeSourceDialog &&
+          frame.contentDocument.querySelector("#latency-chart") ===
+            stored.chartCanvasBeforeSourceDialog;
+      }),
+    )
+    .toBe(true);
+
+  const closeButton = sourceDialog.getByRole("button", { name: "Close" });
+  await expect(closeButton.locator("svg")).toHaveCount(1);
+  await closeButton.click();
+  await expect(sourceDialog).toBeHidden();
+
+  await page.getByRole("link", { name: "Diagram" }).click();
+  const diagram = frame.locator(".mermaid svg");
+  await expect(diagram).toBeVisible();
+  await page.evaluate(() => {
+    const frame = document.querySelector<HTMLIFrameElement>("iframe.viewer-document");
+    if (frame === null || frame.contentDocument === null) {
+      throw new Error("Document frame not found");
+    }
+    const frameDocument = frame.contentDocument;
+    Object.assign(window, {
+      diagramDocumentBeforeSourceDialog: frameDocument,
+    });
+  });
+
+  await modeButton.click();
+  await expect(sourceDialog.locator("pre")).toContainText("<h1>Diagram</h1>");
+  await expect(frame.locator(".mermaid svg")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const frame = document.querySelector<HTMLIFrameElement>(
+          "iframe.viewer-document",
+        );
+        const stored = window as Window & {
+          diagramDocumentBeforeSourceDialog?: Document;
+        };
+        return frame?.contentDocument === stored.diagramDocumentBeforeSourceDialog;
+      }),
+    )
+    .toBe(true);
+
+  await page.emulateMedia({ media: "print" });
+  await expect(sourceDialog).toBeHidden();
+});
+
+test("wraps long source HTML lines inside the modal", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "ソースHTMLを表示" }).click();
+  const sourceCode = page
+    .getByRole("dialog", { name: "ソースHTML" })
+    .locator("pre");
+  await sourceCode.evaluate((element) => {
+    element.textContent = `  <p data-value="${"x".repeat(400)}">\n    content\n  </p>`;
+  });
+
+  await expect(sourceCode).toHaveCSS("white-space", "pre-wrap");
+  await expect(sourceCode).toHaveCSS("overflow-wrap", "anywhere");
+  await expect
+    .poll(() =>
+      sourceCode.evaluate((element) => element.scrollWidth <= element.clientWidth),
+    )
+    .toBe(true);
+});
+
+test("sorts navigation by name or updated date", async ({ page }) => {
+  await page.route("**/_spec-html/navigation", async (route) => {
+    await route.fulfill({
+      contentType: "text/html",
+      body: [
+        '<nav aria-label="Documents">',
+        '  <a href="./overview.html" title="Overview"><span class="viewer-navigation-title">Overview</span><time datetime="2026-08-16T00:00:00.000Z">2 days ago</time></a>',
+        '  <a href="./chart.html" title="Chart"><span class="viewer-navigation-title">Chart</span><time datetime="2026-08-18T00:00:00.000Z">just now</time></a>',
+        '  <a href="./diagram.html" title="Diagram"><span class="viewer-navigation-title">Diagram</span><time datetime="2026-08-17T00:00:00.000Z">1 day ago</time></a>',
+        "</nav>",
+      ].join("\n"),
+    });
+  });
+  await page.goto("/");
+
+  const titles = page.locator(".viewer-navigation-title");
+  await expect(titles).toHaveText(["Overview", "Chart", "Diagram"]);
+
+  const sortSwitcher = page.getByRole("group", { name: "Sort by" });
+  const nameButton = sortSwitcher.locator('[data-sort-value="name"]');
+  const dateButton = sortSwitcher.locator('[data-sort-value="date"]');
+
+  await expect(nameButton).toHaveText("Name ↑");
+  await expect(nameButton).toHaveAttribute("aria-label", "Name, ascending");
+  await nameButton.click();
+  await expect(titles).toHaveText(["Diagram", "Chart", "Overview"]);
+  await expect(nameButton).toHaveText("Name ↓");
+  await expect(nameButton).toHaveAttribute("aria-label", "Name, descending");
+
+  await nameButton.click();
+  await expect(titles).toHaveText(["Overview", "Chart", "Diagram"]);
+  await dateButton.click();
+  await expect(titles).toHaveText(["Chart", "Diagram", "Overview"]);
+  await expect(dateButton).toHaveText("Date ↓");
+  await expect(dateButton).toHaveAttribute("aria-label", "Date, descending");
+  await expect(dateButton).toHaveAttribute("aria-pressed", "true");
+  await expect(nameButton).toHaveAttribute("aria-pressed", "false");
+
+  await dateButton.click();
+  await expect(titles).toHaveText(["Overview", "Diagram", "Chart"]);
+  await expect(dateButton).toHaveText("Date ↑");
+  await expect(dateButton).toHaveAttribute("aria-label", "Date, ascending");
+
+  await nameButton.click();
+  await expect(titles).toHaveText(["Overview", "Chart", "Diagram"]);
+  await expect(nameButton).toHaveText("Name ↑");
+  await expect(nameButton).toHaveAttribute("aria-pressed", "true");
 });
 
 test("applies theme-aware document styles on desktop and mobile", async ({
@@ -129,7 +305,10 @@ test("applies theme-aware document styles on desktop and mobile", async ({
     )
     .toBe("120px");
 
-  await page.emulateMedia({ colorScheme: "dark" });
+  await page
+    .getByRole("group", { name: "Theme" })
+    .getByRole("button", { name: "Dark" })
+    .click();
   await expect
     .poll(() =>
       page.locator(".viewer").evaluate((element) =>
@@ -156,13 +335,12 @@ test("applies theme-aware document styles on desktop and mobile", async ({
     .toBe("16px");
 });
 
-test("selects and persists light, system, and dark themes", async ({ page }) => {
+test("selects and persists light and dark themes", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/");
 
   const themeSwitcher = page.getByRole("group", { name: "Theme" });
   const lightButton = themeSwitcher.getByRole("button", { name: "Light" });
-  const systemButton = themeSwitcher.getByRole("button", { name: "Auto" });
   const darkButton = themeSwitcher.getByRole("button", { name: "Dark" });
   const frame = page.frameLocator("iframe.viewer-document");
 
@@ -170,7 +348,9 @@ test("selects and persists light, system, and dark themes", async ({ page }) => 
   await expect(
     themeSwitcher.locator("xpath=ancestor::aside[@id='viewer-sidebar']"),
   ).toHaveCount(1);
-  await expect(systemButton).toHaveAttribute("aria-pressed", "true");
+  await expect(themeSwitcher.getByRole("button")).toHaveCount(2);
+  await expect(lightButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await darkButton.click();
   await expect(darkButton).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -212,15 +392,6 @@ test("selects and persists light, system, and dark themes", async ({ page }) => 
       }),
     )
     .toBe("#57606a");
-
-  await systemButton.click();
-  await expect(systemButton).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("html")).not.toHaveAttribute("data-theme");
-  await expect(frame.locator("html")).not.toHaveAttribute("data-theme");
-  await expect(page.locator(".viewer")).toHaveCSS(
-    "background-color",
-    "rgb(255, 255, 255)",
-  );
 
   await page.getByRole("link", { name: "Diagram" }).click();
   const actor = frame.locator(".mermaid svg rect.actor").first();
@@ -422,6 +593,29 @@ test("renders Chart.js and Mermaid when optional integrations are installed", as
     .toBe("rgb(51, 51, 51)");
 });
 
+test("keeps canvas names and non-JavaScript fallbacks available", async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "Chart" }).click();
+  const canvas = page.frameLocator("iframe.viewer-document").locator("#latency-chart");
+  expect(await canvas.ariaSnapshot()).toContain("P95 latency chart");
+
+  const fallbackContext = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const fallbackPage = await fallbackContext.newPage();
+    await fallbackPage.goto(`${baseURL}/_content/chart.html`);
+    await expect(fallbackPage.getByRole("table")).toContainText("180 ms");
+    await expect(fallbackPage.locator("figcaption")).toContainText("P95 latency");
+    await fallbackPage.goto(`${baseURL}/_content/diagram.html`);
+    await expect(fallbackPage.locator("pre.mermaid")).toContainText("Browser->>API: Login");
+  } finally {
+    await fallbackContext.close();
+  }
+});
+
 test("uses dark palettes for Chart.js and Mermaid", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/");
@@ -447,51 +641,21 @@ test("uses dark palettes for Chart.js and Mermaid", async ({ page }) => {
     .toBe("rgb(41, 46, 66)");
 });
 
-test("reloads integrations when the operating system theme changes", async ({
+test("uses the operating system theme initially without an Auto option", async ({
   page,
 }) => {
-  await page.emulateMedia({ colorScheme: "light" });
+  await page.emulateMedia({ colorScheme: "dark" });
   await page.goto("/");
 
-  await page.getByRole("link", { name: "Chart" }).click();
-  const frame = page.frameLocator("iframe.viewer-document");
-  await expect
-    .poll(() =>
-      frame.locator("#latency-chart").evaluate((canvas) => {
-        const chartWindow = canvas.ownerDocument.defaultView as Window & {
-          Chart?: { defaults: { color: string } };
-        };
-        return chartWindow.Chart?.defaults.color;
-      }),
-    )
-    .toBe("#57606a");
-
-  await page.emulateMedia({ colorScheme: "dark" });
-  await expect
-    .poll(() =>
-      frame
-        .locator("#latency-chart")
-        .evaluate((canvas) => {
-          const chartWindow = canvas.ownerDocument.defaultView as Window & {
-            Chart?: { defaults: { color: string } };
-          };
-          return chartWindow.Chart?.defaults.color;
-        })
-        .catch(() => undefined),
-    )
-    .toBe("#a9b1d6");
-
-  await page.getByRole("link", { name: "Diagram" }).click();
-  await expect(frame.locator(".mermaid svg rect.actor").first()).toHaveCSS(
-    "fill",
-    "rgb(41, 46, 66)",
-  );
+  const themeSwitcher = page.getByRole("group", { name: "Theme" });
+  const darkButton = themeSwitcher.getByRole("button", { name: "Dark" });
+  await expect(themeSwitcher.getByRole("button")).toHaveCount(2);
+  await expect(darkButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   await page.emulateMedia({ colorScheme: "light" });
-  await expect(frame.locator(".mermaid svg rect.actor").first()).toHaveCSS(
-    "fill",
-    "rgb(236, 236, 255)",
-  );
+  await expect(darkButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
 test("shows an in-viewer error for a missing document and supports the mobile menu", async ({
@@ -598,8 +762,14 @@ test("keeps the latest document after a slow request is aborted", async ({
   await page.getByRole("link", { name: "Overview" }).click();
 
   await expect(frame.locator("h1")).toHaveText("Overview");
+  await expect(page.locator(".viewer")).toHaveAttribute("data-state", "ready");
+  await expect(page.locator("iframe.viewer-document")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "ソースHTMLを表示" }),
+  ).toBeVisible();
   await page.waitForTimeout(300);
   await expect(frame.locator("h1")).toHaveText("Overview");
+  await expect(page.locator(".viewer")).toHaveAttribute("data-state", "ready");
 });
 
 test("clears the previous document state when a linked document is missing", async ({

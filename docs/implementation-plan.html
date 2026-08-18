@@ -772,16 +772,19 @@ export function isPlainPrimaryClick(event: MouseEvent): boolean;
 ├─ button.menu-button（mobileのみ）
 ├─ aside.viewer-sidebar
 │  ├─ div.viewer-sidebar-controls
-│  │  ├─ span.viewer-brand（spec-html）
+│  │  ├─ div.sort-switcher
+│  │  │  ├─ button.sort-button（Name）
+│  │  │  └─ button.sort-button（Date）
 │  │  └─ div.theme-switcher
 │  │     ├─ button.theme-button（Light）
-│  │     ├─ button.theme-button（Auto）
 │  │     └─ button.theme-button（Dark）
 │  └─ div.viewer-navigation
 │     └─ nav content
-└─ main.viewer-main
-   ├─ div.viewer-status
-   └─ iframe.viewer-document
+├─ main.viewer-main
+│  ├─ div.viewer-status
+│  ├─ iframe.viewer-document
+│  └─ button.document-mode-button
+└─ dialog.source-dialog
 </code></pre>
 <p>iframeには現在の文書名を使った<code>title</code>属性を設定する。</p>
 <p>Viewer起動時は次の順番を変えない。</p>
@@ -1047,9 +1050,9 @@ sequenceDiagram
 <li>hr、mark、kbd、abbr、sub、sup、caption</li>
 <li><code>aside[data-type]</code>によるnote、warning、danger、success callout</li>
 </ul>
-<p>CSS Custom Propertiesは内部実装として使用してよいが、v0.1では公開theme APIとして互換性を保証しない。Sidebar上部には小さな<code>spec-html</code>ラベルとLight／Auto／Darkの3択buttonを同じ行に配置し、選択内容を<code>localStorage</code>へ保存する。Sidebar幅を超える文書タイトルは末尾を省略表示し、linkの<code>title</code>属性で全文を確認可能にする。ShellとDocumentは選択したthemeへ即時に同期し、Autoの場合だけ<code>prefers-color-scheme</code>へ追従する。light／dark双方で十分なcontrastを保つ。dark表示はTokyo Night Stormの<code>bg</code>、<code>bg_dark</code>、<code>fg</code>、<code>blue</code>などを基準にした青みのあるpaletteとする。Chart.jsはDocumentのCSS Custom Propertiesから色を取得し、Mermaidはdark時に<code>base</code> themeと同paletteの<code>themeVariables</code>を使用する。theme選択変更時と、Auto選択中のOS設定変更時は現在の文書を再読み込みし、Chart.jsとMermaidも新しいthemeで描画する。</p>
+<p>CSS Custom Propertiesは内部実装として使用してよいが、v0.1では公開theme APIとして互換性を保証しない。Sidebar上部にはName／Dateの並び替えbuttonとLight／Darkのtheme buttonを配置する。並び替えbuttonは選択中の項目を再度押すと昇順と降順を反転する。themeは初回表示時にOS設定から選び、明示的な選択を<code>localStorage</code>へ保存する。Sidebar幅を超える文書タイトルは末尾を省略表示し、linkの<code>title</code>属性で全文を確認可能にする。ShellとDocumentは選択したthemeへ即時に同期し、light／dark双方で十分なcontrastを保つ。dark表示はTokyo Night Stormの<code>bg</code>、<code>bg_dark</code>、<code>fg</code>、<code>blue</code>などを基準にした青みのあるpaletteとする。Chart.jsはDocumentのCSS Custom Propertiesから色を取得し、Mermaidはdark時に<code>base</code> themeと同paletteの<code>themeVariables</code>を使用する。theme選択変更時は現在の文書を再読み込みし、Chart.jsとMermaidも新しいthemeで描画する。</p>
 <p>Document body自身を<code>box-sizing: border-box</code>、<code>max-width: 920px</code>、<code>margin: 0 auto</code>として中央寄せし、desktopで<code>32px</code>、mobileで<code>16px</code>のpaddingを持たせる。横長tableと<code>pre</code>は要素単位で横scrollさせ、ページ全体の不要な横scrollを発生させない。画像、SVG、canvas、video、audioには<code>max-width: 100%</code>を設定するが、インライン画像と小型canvasを強制的にblock化または全幅化しない。描画済みMermaidはコードブロック背景を解除し、themeに合った文書背景上へ表示する。</p>
-<p>印刷時はShellのSidebar、mobile menu button、statusを非表示にし、iframeを文書のscroll heightまで拡張する。Documentはlight配色、余白<code>16mm</code>で印刷し、見出し直後の改ページと主要block内の不要な改ページを避ける。閉じている<code>details</code>の本文も印刷対象とする。</p>
+<p>印刷時はShellのSidebar、mobile menu button、source表示button、source dialog、statusを非表示にし、iframeを文書のscroll heightまで拡張する。Documentはlight配色、余白<code>16mm</code>で印刷し、見出し直後の改ページと主要block内の不要な改ページを避ける。閉じている<code>details</code>の本文も印刷対象とする。</p>
 <h3>14.3 アクセシビリティ最低要件</h3>
 <ul>
 <li>keyboardでSidebar linkへ移動できる。</li>
@@ -1200,8 +1203,9 @@ sequenceDiagram
 <li>MermaidがSVGへ変換される。</li>
 <li>Chart.jsがcanvasへ描画する。</li>
 <li>light／dark双方でMermaidの文字と背景が判別できる。</li>
-<li>Sidebar上部からLight／Auto／Darkを選択でき、再読み込み後も選択が復元される。</li>
-<li>OS theme変更後にChart.jsとMermaidが新しいthemeで再描画される。</li>
+<li>Sidebar上部からName／Dateの昇順・降順を切り替えられる。</li>
+<li>Sidebar上部からLight／Darkを選択でき、再読み込み後も選択が復元される。</li>
+<li>保存済みthemeがない初回表示ではOS themeを反映する。</li>
 <li>印刷時にShellを除外し、文書をlight配色で全高へ展開する。</li>
 <li>インラインSVGと小型canvasが強制的にblock化または全幅化されない。</li>
 <li>mobile viewportでmenu buttonを操作できる。</li>

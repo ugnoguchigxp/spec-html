@@ -1,15 +1,23 @@
-import { readFile, readdir } from "node:fs/promises";
-import { basename, dirname, extname, join } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { basename, dirname, extname } from "node:path";
+import { findContentDocuments } from "../content/documents.js";
 
 interface NavigationDocument {
   path: string;
   title: string;
+  updatedAt: Date;
 }
 
-const IGNORED_DIRECTORIES = new Set(["node_modules"]);
+const MINUTE_IN_MS = 60 * 1000;
+const HOUR_IN_MS = 60 * MINUTE_IN_MS;
+const DAY_IN_MS = 24 * HOUR_IN_MS;
+const RELATIVE_TIME_LIMIT_IN_MS = 7 * DAY_IN_MS;
 
-export async function createNavigationHtml(contentRoot: string): Promise<string> {
-  const documents = await findDocuments(contentRoot);
+export async function createNavigationHtml(
+  contentRoot: string,
+  now = new Date(),
+): Promise<string> {
+  const documents = await findNavigationDocuments(contentRoot);
   const groups = new Map<string, NavigationDocument[]>();
 
   for (const document of documents) {
@@ -38,8 +46,10 @@ export async function createNavigationHtml(contentRoot: string): Promise<string>
     }
     for (const document of groupDocuments) {
       const title = escapeHtml(document.title);
+      const updatedAt = document.updatedAt.toISOString();
+      const updatedLabel = formatUpdatedAt(document.updatedAt, now);
       lines.push(
-        `  <a href="./${encodePath(document.path)}" title="${title}">${title}</a>`,
+        `  <a href="./${encodePath(document.path)}" title="${title}"><span class="viewer-navigation-title">${title}</span><time datetime="${updatedAt}">${updatedLabel}</time></a>`,
       );
     }
   }
@@ -70,40 +80,50 @@ function documentRank(path: string): number {
   return 3;
 }
 
-async function findDocuments(
-  directory: string,
-  relativeDirectory = "",
+async function findNavigationDocuments(
+  contentRoot: string,
 ): Promise<NavigationDocument[]> {
-  const entries = await readdir(directory, { withFileTypes: true });
-  entries.sort((left, right) => left.name.localeCompare(right.name, "en"));
+  const contentDocuments = await findContentDocuments(contentRoot);
+  return Promise.all(
+    contentDocuments.map(async ({ absolutePath, path }) => {
+      const [html, fileStats] = await Promise.all([
+        readFile(absolutePath, "utf8"),
+        stat(absolutePath),
+      ]);
+      return {
+        path,
+        title: documentTitle(html, basename(path)),
+        updatedAt: fileStats.mtime,
+      };
+    }),
+  );
+}
 
-  const documents: NavigationDocument[] = [];
-  for (const entry of entries) {
-    if (entry.name.startsWith(".")) {
-      continue;
-    }
+function formatUpdatedAt(updatedAt: Date, now: Date): string {
+  const elapsed = Math.max(0, now.getTime() - updatedAt.getTime());
 
-    const relativePath = relativeDirectory
-      ? `${relativeDirectory}/${entry.name}`
-      : entry.name;
-    const absolutePath = join(directory, entry.name);
-
-    if (entry.isDirectory() && !IGNORED_DIRECTORIES.has(entry.name)) {
-      documents.push(...(await findDocuments(absolutePath, relativePath)));
-      continue;
-    }
-    if (
-      !entry.isFile() ||
-      extname(entry.name).toLowerCase() !== ".html" ||
-      entry.name.toLowerCase() === "nav.html"
-    ) {
-      continue;
-    }
-
-    const html = await readFile(absolutePath, "utf8");
-    documents.push({ path: relativePath, title: documentTitle(html, entry.name) });
+  if (elapsed < MINUTE_IN_MS) {
+    return "just now";
   }
-  return documents;
+  if (elapsed < HOUR_IN_MS) {
+    return `${Math.floor(elapsed / MINUTE_IN_MS)} min`;
+  }
+  if (elapsed < DAY_IN_MS) {
+    return formatRelativeTime(Math.floor(elapsed / HOUR_IN_MS), "hour");
+  }
+  if (elapsed < RELATIVE_TIME_LIMIT_IN_MS) {
+    return formatRelativeTime(Math.floor(elapsed / DAY_IN_MS), "day");
+  }
+
+  return [
+    updatedAt.getFullYear(),
+    String(updatedAt.getMonth() + 1).padStart(2, "0"),
+    String(updatedAt.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function formatRelativeTime(value: number, unit: string): string {
+  return `${value} ${unit}${value === 1 ? "" : "s"} ago`;
 }
 
 function documentTitle(html: string, filename: string): string {

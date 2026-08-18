@@ -13,8 +13,9 @@ LLM生成ドキュメントをMarkdownから構造的なHTMLへ置き換え、Ma
 - 公式ES moduleを遅延読み込みするoptional Mermaid integration
 - desktop・mobile navigationとkeyboard accessibility
 - 上部タイトルバーを省いた全高layoutとSidebar上部のtheme controls
-- Tokyo Night Stormを参考にしたlight／dark／OS連動の表示切り替え、選択内容の保存、文書印刷、theme変更時の図表再描画
+- Tokyo Night Stormを参考にしたlight／darkの表示切り替え、初回表示でのOS設定反映、選択内容の保存、文書印刷、theme変更時の図表再描画
 - semantic HTMLの既定styleとアクセシブルなcallout pattern
+- HTML fragmentの構文、構造、参照、accessibilityを検査する`spec-html lint` CLI
 - unit、server、Chromium、consumer package test
 - GitHub Actionsによるcross-platform CI
 - 公開npm packageや公開serviceを対象外とするlocal-only方針

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -21,6 +21,7 @@ afterEach(async () => {
 
 describe("createNavigationHtml", () => {
   it("uses h1 titles and groups HTML files by directory", async () => {
+    const now = new Date("2026-08-18T12:00:00.000Z");
     await Promise.all([
       writeFile(
         join(root, "overview.html"),
@@ -36,18 +37,49 @@ describe("createNavigationHtml", () => {
       writeFile(join(root, "node_modules", "package.html"), "<h1>Package</h1>"),
       writeFile(join(root, "asset.svg"), "<svg></svg>"),
     ]);
+    await Promise.all([
+      utimes(join(root, "overview.html"), now, now),
+      utimes(join(root, "release-notes.html"), now, now),
+      utimes(join(root, "api", "end points.html"), now, now),
+    ]);
 
-    await expect(createNavigationHtml(root)).resolves.toBe(
+    await expect(createNavigationHtml(root, now)).resolves.toBe(
       [
         '<nav aria-label="Documents">',
-        '  <a href="./overview.html" title="Overview &amp; goals">Overview &amp; goals</a>',
-        '  <a href="./release-notes.html" title="release notes">release notes</a>',
+        '  <a href="./overview.html" title="Overview &amp; goals"><span class="viewer-navigation-title">Overview &amp; goals</span><time datetime="2026-08-18T12:00:00.000Z">just now</time></a>',
+        '  <a href="./release-notes.html" title="release notes"><span class="viewer-navigation-title">release notes</span><time datetime="2026-08-18T12:00:00.000Z">just now</time></a>',
         "  <h2>api</h2>",
-        '  <a href="./api/end%20points.html" title="API &lt;endpoints&gt;">API &lt;endpoints&gt;</a>',
+        '  <a href="./api/end%20points.html" title="API &lt;endpoints&gt;"><span class="viewer-navigation-title">API &lt;endpoints&gt;</span><time datetime="2026-08-18T12:00:00.000Z">just now</time></a>',
         "</nav>",
         "",
       ].join("\n"),
     );
+  });
+
+  it("shows recent updates relatively and older updates as dates", async () => {
+    const now = new Date(2026, 7, 18, 12, 0, 0);
+    const files = [
+      ["minute.html", 60 * 1000, "1 min"],
+      ["minutes.html", 3 * 60 * 1000, "3 min"],
+      ["hours.html", 5 * 60 * 60 * 1000, "5 hours ago"],
+      ["days.html", 6 * 24 * 60 * 60 * 1000, "6 days ago"],
+      ["week.html", 7 * 24 * 60 * 60 * 1000, "2026-08-11"],
+    ] as const;
+
+    for (const [filename, elapsed] of files) {
+      const path = join(root, filename);
+      const updatedAt = new Date(now.getTime() - elapsed);
+      await writeFile(path, `<h1>${filename}</h1>`);
+      await utimes(path, updatedAt, updatedAt);
+    }
+
+    const navigation = await createNavigationHtml(root, now);
+    for (const [filename, , label] of files) {
+      expect(navigation).toContain(
+        `<span class="viewer-navigation-title">${filename}</span><time datetime=`,
+      );
+      expect(navigation).toContain(`>${label}</time></a>`);
+    }
   });
 
   it("returns an empty nav for a directory without documents", async () => {

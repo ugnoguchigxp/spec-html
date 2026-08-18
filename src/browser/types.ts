@@ -13,12 +13,20 @@ export type RouteParseResult =
 export interface ViewerElements {
   root: HTMLDivElement;
   menuButton: HTMLButtonElement;
+  documentModeButton: HTMLButtonElement;
+  sourceDialog: HTMLDialogElement;
+  sourceDialogCode: HTMLPreElement;
+  sourceDialogCloseButton: HTMLButtonElement;
+  sortButtons: Record<SortPreference, HTMLButtonElement>;
   themeButtons: Record<ThemePreference, HTMLButtonElement>;
   sidebar: HTMLElement;
   navigation: HTMLDivElement;
   status: HTMLDivElement;
   frame: HTMLIFrameElement;
 }
+
+export type SortPreference = "name" | "date";
+export type SortDirection = "ascending" | "descending";
 
 export type LoadState =
   | { kind: "idle" }

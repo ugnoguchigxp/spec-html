@@ -60,7 +60,7 @@ Viewerはdirectory内の`.html`を再帰的に読み取り、最初の`h1`を表
 各設計書はHTML document全体ではなく、`article`などから始まるfragmentとして保存します。
 
 ```html
-<article>
+<article lang="en">
   <h1>Authentication</h1>
   <p>Authentication is based on OpenID Connect.</p>
   <img src="./assets/login-flow.svg" alt="Authentication flow">
@@ -71,6 +71,14 @@ Viewerはdirectory内の`.html`を再帰的に読み取り、最初の`h1`を表
 
 ```bash
 npx --no-install spec-html ./specs
+```
+
+Viewerで開く前に、文書構造、参照、accessibilityを静的検査できます。通常は簡潔な診断を使い、修正方法が不明なruleだけ説明を表示します。
+
+```bash
+npx --no-install spec-html lint ./specs
+npx --no-install spec-html lint ./specs --warnings-as-errors
+npx --no-install spec-html lint --explain DOC001
 ```
 
 普段使う場合は利用プロジェクトの`package.json`へ登録します。
@@ -87,7 +95,7 @@ npx --no-install spec-html ./specs
 
 ## Appearance
 
-Sidebar上部の`spec-html`ラベル横にある「Light」「Auto」「Dark」から表示themeを選択できます。「Auto」はOSのlight／dark設定へ追従し、選択内容はbrowserへ保存されます。Shell、文書、Chart.js、Mermaidは同時に切り替わり、dark表示は[Tokyo Night Storm](https://github.com/folke/tokyonight.nvim)を参考にした青みのあるpaletteです。Auto選択中にOS設定が変わった場合も、現在の文書と図表を同期します。Sidebar幅を超える文書タイトルは末尾を省略表示し、hover時のtooltipで全文を確認できます。
+Sidebar上部の「Name」「Date」で、各directory内の文書を名前順または更新日順に並び替えられます。選択中のボタンをもう一度押すと、昇順と降順が反転します。「Light」「Dark」からは表示themeを選択でき、選択内容はbrowserへ保存されます。初回表示ではOS設定に合うthemeを使用します。Shell、文書、Chart.js、Mermaidは同時に切り替わり、dark表示は[Tokyo Night Storm](https://github.com/folke/tokyonight.nvim)を参考にした青みのあるpaletteです。Sidebar幅を超える文書タイトルは末尾を省略表示し、hover時のtooltipで全文を確認できます。
 
 見出し、list、table、code、blockquote、details、figureなどのsemantic HTMLには既定styleが適用されます。`aside`はnote表示になり、`data-type`へ`warning`、`danger`、`success`を指定できます。
 
@@ -105,7 +113,7 @@ Sidebar上部の`spec-html`ラベル横にある「Light」「Auto」「Dark」�
 `chart.js`が導入されている場合、通常のChart.jsコードをinline scriptで使用できます。
 
 ```html
-<canvas id="latency-chart" width="320" height="180"></canvas>
+<canvas id="latency-chart" width="320" height="180" aria-label="P95 latency chart"></canvas>
 <script>
   const canvas = document.getElementById("latency-chart");
   new Chart(canvas, {
@@ -141,6 +149,8 @@ spec-html [directory] [options]
 --no-open        browserを開かない
 --help           helpを表示
 --version        versionを表示
+
+spec-html lint [directory] [options]
 ```
 
 ## Security model

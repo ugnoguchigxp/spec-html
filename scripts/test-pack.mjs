@@ -62,6 +62,19 @@ try {
   if (versionOutput.stdout.trim() !== installedPackageJson.version) {
     throw new Error("installしたspec-html CLIをpackage bin経由で実行できません");
   }
+  await run(npmCommand, ["exec", "--", "spec-html", "lint", "./specs"], temporaryRoot);
+  await expectExitCode(
+    npmCommand,
+    ["exec", "--", "spec-html", "lint", "./invalid"],
+    temporaryRoot,
+    1,
+  );
+  await expectExitCode(
+    npmCommand,
+    ["exec", "--", "spec-html", "lint", "./missing"],
+    temporaryRoot,
+    2,
+  );
 
   viewerProcess = spawn(
     process.execPath,
@@ -137,14 +150,19 @@ function parsePackOutput(stdout) {
 async function writeConsumerFixture(root) {
   const specsRoot = join(root, "specs");
   await mkdir(join(specsRoot, "assets"), { recursive: true });
+  await mkdir(join(root, "invalid"), { recursive: true });
   await Promise.all([
     writeFile(
       join(specsRoot, "overview.html"),
-      "<article><h1>Consumer overview</h1></article>",
+      '<article lang="en"><h1>Consumer overview</h1></article>',
     ),
     writeFile(
       join(specsRoot, "assets", "pixel.svg"),
       '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>',
+    ),
+    writeFile(
+      join(root, "invalid", "bad.html"),
+      '<article lang="en"><h1>Bad</h1><img src="missing.svg"></article>',
     ),
   ]);
 }
@@ -171,6 +189,17 @@ function run(command, args, cwd) {
       reject(new Error(`${command} ${args.join(" ")} failed: ${stderr || stdout}`));
     });
   });
+}
+
+async function expectExitCode(command, args, cwd, expected) {
+  const result = await new Promise((resolvePromise, reject) => {
+    const child = spawn(command, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    child.once("error", reject);
+    child.once("exit", (code) => resolvePromise(code));
+  });
+  if (result !== expected) {
+    throw new Error(`${command} ${args.join(" ")} returned ${result}, expected ${expected}`);
+  }
 }
 
 function waitForViewerUrl(child) {
@@ -202,6 +231,19 @@ function waitForViewerUrl(child) {
 
 function stopViewer(child) {
   return new Promise((resolvePromise, reject) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      if (isExpectedViewerExit(child.exitCode, child.signalCode)) {
+        resolvePromise();
+      } else {
+        reject(
+          new Error(
+            `Viewerが正常終了しませんでした: ${child.exitCode ?? child.signalCode ?? "unknown"}`,
+          ),
+        );
+      }
+      return;
+    }
+
     const timeout = setTimeout(() => {
       child.kill("SIGKILL");
       reject(new Error("Viewerを終了できません"));
@@ -212,12 +254,23 @@ function stopViewer(child) {
     });
     child.once("exit", (code, signal) => {
       clearTimeout(timeout);
-      if (code === 0 || signal !== null) {
+      if (isExpectedViewerExit(code, signal)) {
         resolvePromise();
         return;
       }
-      reject(new Error(`Viewerが正常終了しませんでした: ${code ?? "signal"}`));
+      reject(
+        new Error(
+          `Viewerが正常終了しませんでした: ${code ?? signal ?? "unknown"}`,
+        ),
+      );
     });
     child.kill("SIGINT");
   });
+}
+
+function isExpectedViewerExit(code, signal) {
+  return (
+    (code === 0 && signal === null) ||
+    (process.platform === "win32" && signal !== null)
+  );
 }

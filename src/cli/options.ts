@@ -1,5 +1,7 @@
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
+import { RULE_BY_ID } from "../lint/rules.js";
+import type { RuleId } from "../lint/diagnostics.js";
 
 export interface CliRunOptions {
   contentRoot: string;
@@ -8,9 +10,19 @@ export interface CliRunOptions {
   openBrowser: boolean;
 }
 
+export interface CliLintOptions {
+  contentRoot: string;
+  format: "compact" | "json";
+  warningsAsErrors: boolean;
+  maxIssues: number;
+}
+
 export type CliCommand =
   | { kind: "run"; options: CliRunOptions }
+  | { kind: "lint"; options: CliLintOptions }
+  | { kind: "explain"; rule: RuleId }
   | { kind: "help" }
+  | { kind: "lint-help" }
   | { kind: "version" };
 
 export class CliUsageError extends Error {
@@ -21,6 +33,14 @@ export function parseCliCommand(
   args: readonly string[],
   cwd: string,
 ): CliCommand {
+  if (args[0] === "lint") {
+    return parseLintCommand(args.slice(1), cwd);
+  }
+
+  return parseRunCommand(args, cwd);
+}
+
+function parseRunCommand(args: readonly string[], cwd: string): CliCommand {
   let parsed: ReturnType<typeof parseCommandArgs>;
   try {
     parsed = parseCommandArgs([...args]);
@@ -76,6 +96,71 @@ export function parseCliCommand(
   };
 }
 
+function parseLintCommand(args: readonly string[], cwd: string): CliCommand {
+  let parsed: ReturnType<typeof parseLintArgs>;
+  try {
+    parsed = parseLintArgs([...args]);
+  } catch (error: unknown) {
+    throw new CliUsageError(messageForParseArgsError(error));
+  }
+
+  if (parsed.positionals.length > 1) {
+    throw new CliUsageError("directoryは1つだけ指定してください");
+  }
+
+  const hasExplain = parsed.values.explain !== undefined;
+  const hasLintOptions =
+    parsed.values.format !== undefined ||
+    parsed.values["warnings-as-errors"] === true ||
+    parsed.values["max-issues"] !== undefined;
+  if (hasExplain && (parsed.positionals.length > 0 || hasLintOptions)) {
+    throw new CliUsageError("--explainはdirectoryやlint optionと同時に指定できません");
+  }
+  if (parsed.values.help === true && hasExplain) {
+    throw new CliUsageError("--helpと--explainは同時に指定できません");
+  }
+  if (parsed.values.help === true) {
+    return { kind: "lint-help" };
+  }
+  if (hasExplain) {
+    const rule = parsed.values.explain;
+    if (rule === undefined || !RULE_BY_ID.has(rule as RuleId)) {
+      throw new CliUsageError(`未対応のruleです: ${rule ?? ""}`);
+    }
+    return { kind: "explain", rule: rule as RuleId };
+  }
+
+  const format = parsed.values.format ?? "compact";
+  if (format !== "compact" && format !== "json") {
+    throw new CliUsageError("formatはcompactまたはjsonで指定してください");
+  }
+  const maxIssues = parseMaxIssues(parsed.values["max-issues"]);
+  const directory = parsed.positionals[0] ?? "./specs";
+  return {
+    kind: "lint",
+    options: {
+      contentRoot: resolve(cwd, directory),
+      format,
+      warningsAsErrors: parsed.values["warnings-as-errors"] === true,
+      maxIssues,
+    },
+  };
+}
+
+function parseMaxIssues(value: string | undefined): number {
+  if (value === undefined) {
+    return 50;
+  }
+  if (!/^(?:0|[1-9][0-9]*)$/.test(value)) {
+    throw new CliUsageError("max-issuesは0以上の整数で指定してください");
+  }
+  const maxIssues = Number(value);
+  if (!Number.isSafeInteger(maxIssues)) {
+    throw new CliUsageError("max-issuesは0以上の安全な整数で指定してください");
+  }
+  return maxIssues;
+}
+
 function messageForParseArgsError(error: unknown): string {
   if (
     error instanceof Error &&
@@ -112,6 +197,21 @@ function parseCommandArgs(args: string[]) {
       "no-open": { type: "boolean" },
       help: { type: "boolean" },
       version: { type: "boolean" },
+    },
+  });
+}
+
+function parseLintArgs(args: string[]) {
+  return parseArgs({
+    args,
+    allowPositionals: true,
+    strict: true,
+    options: {
+      format: { type: "string" },
+      "warnings-as-errors": { type: "boolean" },
+      "max-issues": { type: "string" },
+      explain: { type: "string" },
+      help: { type: "boolean" },
     },
   });
 }

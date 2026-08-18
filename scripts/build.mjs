@@ -24,12 +24,12 @@ const commonOptions = {
 
 await build({
   ...commonOptions,
-  entryPoints: [resolve(sourceRoot, "cli/main.ts")],
+  entryPoints: [resolve(sourceRoot, "cli/entry.ts")],
   outfile: resolve(distRoot, "cli.js"),
   platform: "node",
   format: "esm",
   target: "node24",
-  external: ["open"],
+  external: ["open", "html-validate"],
   banner: { js: "#!/usr/bin/env node" },
   define: {
     __SPEC_HTML_VERSION__: JSON.stringify(packageJson.version),
