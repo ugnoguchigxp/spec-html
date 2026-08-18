@@ -1,0 +1,206 @@
+:root {
+  --shell-background: #ffffff;
+  --shell-surface: #f6f8fa;
+  --shell-surface-hover: #eaeef2;
+  --shell-text: #24292f;
+  --shell-muted: #57606a;
+  --shell-border: #d0d7de;
+  --shell-header-background: #24292f;
+  --shell-header-text: #f6f8fa;
+  --shell-button-border: #768390;
+  --shell-accent: #0969da;
+  --shell-accent-text: #ffffff;
+  --shell-focus: #54aeff;
+  --shell-error: #cf222e;
+  --shell-sidebar-shadow: rgb(31 35 40 / 18%);
+  color: var(--shell-text);
+  background: var(--shell-surface);
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+.viewer {
+  display: grid;
+  grid-template-rows: 48px minmax(0, 1fr);
+  grid-template-columns: 280px minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  color: var(--shell-text);
+  background: var(--shell-background);
+}
+
+.viewer-header {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 0 16px;
+  color: var(--shell-header-text);
+  background: var(--shell-header-background);
+}
+
+.viewer-title {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-button {
+  display: none;
+  min-height: 32px;
+  border: 1px solid var(--shell-button-border);
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.viewer-sidebar {
+  min-width: 0;
+  padding: 20px 12px;
+  overflow: auto;
+  border-right: 1px solid var(--shell-border);
+  background: var(--shell-surface);
+}
+
+.viewer-sidebar nav {
+  display: grid;
+  gap: 4px;
+}
+
+.viewer-sidebar h2 {
+  margin: 20px 8px 6px;
+  color: var(--shell-muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.viewer-sidebar h2:first-child {
+  margin-top: 0;
+}
+
+.viewer-sidebar a {
+  display: block;
+  padding: 7px 8px;
+  border-radius: 6px;
+  color: var(--shell-text);
+  text-decoration: none;
+}
+
+.viewer-sidebar a:hover {
+  background: var(--shell-surface-hover);
+}
+
+.viewer-sidebar a[aria-current="page"] {
+  color: var(--shell-accent-text);
+  background: var(--shell-accent);
+}
+
+.viewer-sidebar a:focus-visible,
+.menu-button:focus-visible {
+  outline: 2px solid var(--shell-focus);
+  outline-offset: 2px;
+}
+
+.viewer-main {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--shell-background);
+}
+
+.viewer-document {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.viewer-status {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 24px;
+  color: var(--shell-muted);
+  text-align: center;
+}
+
+.viewer[data-state="error"] .viewer-status {
+  color: var(--shell-error);
+}
+
+@media (max-width: 767px) {
+  .viewer {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 48px minmax(0, 1fr);
+  }
+
+  .menu-button {
+    display: inline-block;
+  }
+
+  .viewer-sidebar {
+    position: fixed;
+    z-index: 10;
+    top: 48px;
+    bottom: 0;
+    left: 0;
+    width: min(280px, 88vw);
+    box-shadow: 4px 0 16px var(--shell-sidebar-shadow);
+    transform: translateX(-105%);
+    transition: transform 160ms ease;
+  }
+
+  .viewer[data-sidebar-open="true"] .viewer-sidebar {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --shell-background: #0d1117;
+    --shell-surface: #161b22;
+    --shell-surface-hover: #21262d;
+    --shell-text: #e6edf3;
+    --shell-muted: #8b949e;
+    --shell-border: #30363d;
+    --shell-header-background: #010409;
+    --shell-header-text: #e6edf3;
+    --shell-button-border: #6e7681;
+    --shell-accent: #1f6feb;
+    --shell-accent-text: #ffffff;
+    --shell-focus: #58a6ff;
+    --shell-error: #ff7b72;
+    --shell-sidebar-shadow: rgb(1 4 9 / 48%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-sidebar {
+    transition: none;
+  }
+}

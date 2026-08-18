@@ -1,0 +1,14 @@
+<article>
+  <h1>Latency</h1>
+  <canvas id="latency-chart" width="320" height="180"></canvas>
+  <script>
+    const canvas = document.getElementById("latency-chart");
+    new Chart(canvas, {
+      type: "line",
+      data: {
+        labels: ["2.1", "2.2", "2.3"],
+        datasets: [{ label: "P95", data: [180, 220, 230] }]
+      }
+    });
+  </script>
+</article>

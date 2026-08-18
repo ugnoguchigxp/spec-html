@@ -1,0 +1,14 @@
+<article>
+  <h1>Chart</h1>
+  <canvas id="latency-chart" width="320" height="180"></canvas>
+  <script>
+    const latencyCanvas = document.getElementById("latency-chart");
+    window.fixtureChart = new Chart(latencyCanvas, {
+      type: "line",
+      data: {
+        labels: ["2.1", "2.2", "2.3"],
+        datasets: [{ label: "P95", data: [180, 220, 230] }]
+      }
+    });
+  </script>
+</article>

@@ -1,0 +1,75 @@
+{
+  "name": "html-docs",
+  "version": "0.1.0",
+  "description": "Local HTML document viewer for AI-generated specifications.",
+  "keywords": [
+    "documentation",
+    "html",
+    "viewer",
+    "mermaid",
+    "chart.js"
+  ],
+  "license": "MIT",
+  "author": "HTML Docs contributors",
+  "type": "module",
+  "bin": {
+    "html-docs": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "RELEASING.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "docs/authoring.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "clean": "node ./scripts/clean.mjs",
+    "build": "node ./scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "test:pack": "node ./scripts/test-pack.mjs",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build && npm run test:browser && npm run test:pack",
+    "release:metadata": "node ./scripts/check-release.mjs",
+    "release:check": "npm run release:metadata && npm run check && npm publish --dry-run --ignore-scripts",
+    "prepack": "npm run typecheck && npm test && npm run build",
+    "prepublishOnly": "npm run release:check"
+  },
+  "dependencies": {
+    "open": "^11.0.1"
+  },
+  "peerDependencies": {
+    "chart.js": "^4.5.1",
+    "mermaid": "^11.16.1"
+  },
+  "peerDependenciesMeta": {
+    "chart.js": {
+      "optional": true
+    },
+    "mermaid": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.2.0",
+    "chart.js": "^4.5.1",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.8.1",
+    "globals": "^17.11.0",
+    "mermaid": "^11.16.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.1.10"
+  }
+}

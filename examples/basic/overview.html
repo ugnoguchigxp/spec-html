@@ -1,0 +1,74 @@
+<article>
+  <h1>Overview</h1>
+  <p>HTML Docs displays <strong>AI-generated specifications</strong> as regular HTML fragments.</p>
+
+  <h2>Requirements</h2>
+  <ul>
+    <li>Write semantic HTML.</li>
+    <li>Keep navigation in <code>nav.html</code>.</li>
+    <li><input type="checkbox" checked disabled> Review the document structure.</li>
+  </ul>
+
+  <aside>
+    <strong>Note</strong>
+    <p>The default styles follow the operating system's light or dark appearance.</p>
+  </aside>
+
+  <aside data-type="warning">
+    <strong>Warning</strong>
+    <p>Only open trusted HTML because inline scripts are executed.</p>
+  </aside>
+
+  <h2 id="semantics">Semantic elements</h2>
+  <p>Use <mark>meaningful elements</mark> and press <kbd>Tab</kbd> to verify focus order.</p>
+
+  <dl>
+    <dt>Fragment</dt>
+    <dd>HTML content beginning with an element such as <code>article</code>.</dd>
+    <dt>Navigation</dt>
+    <dd>Links stored in <code>nav.html</code>.</dd>
+  </dl>
+
+  <blockquote>
+    Semantic HTML keeps the document useful with or without the Viewer.
+  </blockquote>
+
+  <table>
+    <caption>Supported presentation</caption>
+    <thead>
+      <tr><th>Element</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>aside</code></td><td>Callouts</td></tr>
+      <tr><td><code>details</code></td><td>Disclosure</td></tr>
+      <tr><td><code>figure</code></td><td>Captioned media</td></tr>
+    </tbody>
+  </table>
+
+  <pre><code>&lt;article&gt;
+  &lt;h1&gt;Specification&lt;/h1&gt;
+&lt;/article&gt;</code></pre>
+
+  <details>
+    <summary>HTML fragment example</summary>
+    <p>A fragment does not need <code>html</code>, <code>head</code>, or <code>body</code>.</p>
+  </details>
+
+  <figure>
+    <svg viewBox="0 0 480 120" role="img" aria-labelledby="flow-title flow-description">
+      <title id="flow-title">Document flow</title>
+      <desc id="flow-description">HTML fragment flows through the viewer into the browser.</desc>
+      <rect x="10" y="30" width="120" height="60" rx="8" fill="currentColor" opacity="0.12"></rect>
+      <rect x="180" y="30" width="120" height="60" rx="8" fill="currentColor" opacity="0.12"></rect>
+      <rect x="350" y="30" width="120" height="60" rx="8" fill="currentColor" opacity="0.12"></rect>
+      <path d="M130 60h50m120 0h50" stroke="currentColor" stroke-width="2"></path>
+      <text x="70" y="66" text-anchor="middle" fill="currentColor">HTML</text>
+      <text x="240" y="66" text-anchor="middle" fill="currentColor">Viewer</text>
+      <text x="410" y="66" text-anchor="middle" fill="currentColor">Browser</text>
+    </svg>
+    <figcaption>Standard HTML remains the source of the rendered document.</figcaption>
+  </figure>
+
+  <hr>
+  <p><small>Version 0.1 semantic style sample.</small></p>
+</article>
