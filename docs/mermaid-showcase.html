@@ -1,0 +1,92 @@
+<article lang="ja">
+  <header>
+    <h1>Mermaid showcase</h1>
+    <p>設計書でよく使うMermaid diagramの表示例です。図はHTML fragment内のsourceからViewerが描画し、OSのlight／dark設定へ自動的に追従します。</p>
+  </header>
+
+  <aside aria-labelledby="mermaid-note">
+    <strong id="mermaid-note">このページについて</strong>
+    <p>すべての図は<code>&lt;pre class="mermaid"&gt;</code>で記述しています。生成済みSVGを管理する必要はありません。</p>
+  </aside>
+
+  <section id="system-flow">
+  <h2>System flow</h2>
+  <p>利用者の操作から永続化までの主要componentとdata flowを俯瞰します。</p>
+  <figure>
+    <pre class="mermaid">
+flowchart LR
+  User([利用者]) --> Browser[Browser]
+  Browser -->|HTTPS| Viewer[Spec HTML Viewer]
+  Viewer -->|HTML fragment| Document[設計書]
+  Viewer -->|optional| Mermaid[Mermaid]
+  Viewer -->|optional| Chart[Chart.js]
+  Document --> Asset[(Local assets)]
+    </pre>
+    <figcaption>Viewerがdocumentと任意integrationを読み込む流れ。</figcaption>
+  </figure>
+  </section>
+
+  <section id="request-sequence">
+  <h2>Request sequence</h2>
+  <p>navigationから文書を選択したときの読み込み順序を示します。</p>
+  <figure>
+    <pre class="mermaid">
+sequenceDiagram
+  actor User as 利用者
+  participant Shell as Viewer Shell
+  participant Server as Local Server
+  participant Frame as Document Frame
+  User->>Shell: 文書を選択
+  Shell->>Server: GET /document.html
+  Server-->>Shell: HTML fragment
+  Shell->>Frame: srcdocを構築
+  Frame->>Server: CSSとintegrationを取得
+  Server-->>Frame: runtime assets
+  Frame-->>User: 文書と図表を表示
+    </pre>
+    <figcaption>文書選択からiframe内の描画完了まで。</figcaption>
+  </figure>
+  </section>
+
+  <section id="document-state">
+  <h2>Document state</h2>
+  <p>Viewer内で文書が遷移する代表的な状態です。</p>
+  <figure>
+    <pre class="mermaid">
+stateDiagram-v2
+  [*] --> Loading
+  Loading --> Ready: 読み込み成功
+  Loading --> Error: 取得または描画に失敗
+  Ready --> Loading: 別の文書を選択
+  Error --> Loading: 再試行
+  Ready --> [*]: Viewerを閉じる
+    </pre>
+    <figcaption>読み込み、表示、error、再試行の状態遷移。</figcaption>
+  </figure>
+  </section>
+
+  <section id="content-model">
+  <h2>Content model</h2>
+  <p>content directoryを構成する主なentityと関係を表します。</p>
+  <figure>
+    <pre class="mermaid">
+erDiagram
+  CONTENT_DIRECTORY ||--|| NAVIGATION : contains
+  CONTENT_DIRECTORY ||--o{ DOCUMENT : contains
+  CONTENT_DIRECTORY ||--o{ ASSET : contains
+  NAVIGATION ||--|{ DOCUMENT : links
+  DOCUMENT }o--o{ ASSET : references
+  DOCUMENT {
+    string path PK
+    string title
+    string fragment
+  }
+  ASSET {
+    string path PK
+    string mediaType
+  }
+    </pre>
+    <figcaption>Navigation、document、assetの配置と参照関係。</figcaption>
+  </figure>
+  </section>
+</article>

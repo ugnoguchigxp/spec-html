@@ -9,7 +9,7 @@ export function mountNavigation(
   const parsedDocument = new DOMParser().parseFromString(html, "text/html");
   const navigation = parsedDocument.querySelector("nav");
   if (navigation === null) {
-    throw new Error("nav.htmlにnav要素がありません");
+    throw new Error("Navigationにnav要素がありません");
   }
 
   container.replaceChildren(navigation);
@@ -18,13 +18,13 @@ export function mountNavigation(
   for (const anchor of navigation.querySelectorAll<HTMLAnchorElement>("a[href]")) {
     const href = anchor.getAttribute("href")?.trim();
     if (href === undefined || href.length === 0) {
-      console.warn("HTML Docs: nav.html内の空のhrefを無視しました");
+      console.warn("Spec HTML: Navigation内の空のhrefを無視しました");
       continue;
     }
     if (href.toLowerCase().startsWith("javascript:")) {
-      anchor.dataset.htmlDocsBlocked = "javascript";
+      anchor.dataset.specHtmlBlocked = "javascript";
       anchor.removeAttribute("href");
-      console.warn("HTML Docs: nav.html内のjavascript: URLを無効化しました");
+      console.warn("Spec HTML: Navigation内のjavascript: URLを無効化しました");
       continue;
     }
 
@@ -32,7 +32,7 @@ export function mountNavigation(
     try {
       url = new URL(href, contentBaseUrl);
     } catch {
-      console.warn(`HTML Docs: nav.html内のURLを解釈できません: ${href}`);
+      console.warn(`Spec HTML: Navigation内のURLを解釈できません: ${href}`);
       continue;
     }
 

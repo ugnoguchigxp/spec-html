@@ -1,3 +1,5 @@
+import type { ThemePreference } from "./theme.js";
+
 export interface RouteState {
   doc: string | null;
   hash: string;
@@ -11,8 +13,9 @@ export type RouteParseResult =
 export interface ViewerElements {
   root: HTMLDivElement;
   menuButton: HTMLButtonElement;
-  title: HTMLSpanElement;
+  themeButtons: Record<ThemePreference, HTMLButtonElement>;
   sidebar: HTMLElement;
+  navigation: HTMLDivElement;
   status: HTMLDivElement;
   frame: HTMLIFrameElement;
 }

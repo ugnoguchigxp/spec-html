@@ -1,5 +1,7 @@
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
+import type { LiveReload } from "./live-reload.js";
 import type { StartServerOptions } from "./types.js";
+import { createNavigationHtml } from "./navigation.js";
 import { createShellHtml } from "./shell.js";
 import {
   InvalidRequestPathError,
@@ -8,13 +10,20 @@ import {
 } from "./static-file.js";
 
 const CONTENT_PREFIX = "/_content/";
-const RUNTIME_PREFIX = "/_html-docs/";
-const CHART_PATH = "/_html-docs/integrations/chart.js";
-const MERMAID_PREFIX = "/_html-docs/integrations/mermaid/";
+const RUNTIME_PREFIX = "/_spec-html/";
+const NAVIGATION_PATH = "/_spec-html/navigation";
+const LIVE_RELOAD_PATH = "/_spec-html/live-reload";
+const CHART_PATH = "/_spec-html/integrations/chart.js";
+const MERMAID_PREFIX = "/_spec-html/integrations/mermaid/";
 const RUNTIME_CACHE_CONTROL = "private, max-age=300";
 
+type RequestHandlerOptions = Pick<
+  StartServerOptions,
+  "contentRoot" | "runtimeRoot" | "integrations"
+> & { liveReload: LiveReload };
+
 export function createRequestHandler(
-  options: Pick<StartServerOptions, "contentRoot" | "runtimeRoot" | "integrations">,
+  options: RequestHandlerOptions,
 ): RequestListener {
   return (request, response) => {
     void handleRequest(request, response, options).catch((error: unknown) => {
@@ -47,7 +56,7 @@ export function isClientDisconnectError(error: unknown): boolean {
 async function handleRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  options: Pick<StartServerOptions, "contentRoot" | "runtimeRoot" | "integrations">,
+  options: RequestHandlerOptions,
 ): Promise<void> {
   if (request.method !== "GET" && request.method !== "HEAD") {
     response.writeHead(405, { Allow: "GET, HEAD" });
@@ -86,6 +95,16 @@ async function handleRequest(
       options.integrations.chartFile,
       RUNTIME_CACHE_CONTROL,
     );
+    return;
+  }
+
+  if (url.pathname === NAVIGATION_PATH) {
+    sendHtml(request, response, await createNavigationHtml(options.contentRoot));
+    return;
+  }
+
+  if (url.pathname === LIVE_RELOAD_PATH) {
+    options.liveReload.connect(request, response);
     return;
   }
 

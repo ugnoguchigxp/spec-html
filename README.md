@@ -1,12 +1,20 @@
-# HTML Docs
+# Spec HTML
 
-HTML fragmentで書いた設計書を、ローカルで閲覧するための軽量Viewerです。設計書側のbuildや`index.html`は不要で、navigation、文書間リンク、画像、Chart.js、Mermaidをそのまま扱えます。
+LLMが通常Markdownで生成する設計書や仕様書を、構造的なHTMLへ置き換えてローカルで読みやすく閲覧するためのViewerです。標準のsemantic HTMLを使うことで、Markdown以上の表現力を持つ文書を簡単に作成し、navigation、文書間リンク、画像、Chart.js、Mermaidを活用できます。
+
+## Purpose and scope
+
+Spec HTMLの目的は、LLMにWeb application一式を実装させることではありません。LLMに構造的なHTML fragmentを直接生成させ、見出し、table、code、callout、details、画像、図表など、Markdownだけでは表現しにくい情報を読みやすい設計書・仕様書として活用できるようにすることです。共通Viewerが表示とnavigationを整えるため、文書ごとにCSSやメニューを作る必要はありません。
+
+このprojectと生成した文書は、手元の信頼済み環境で利用します。公開npm package、公開Web service、第三者向けhostingを目的としておらず、npm registryへのpublishや公開用GitHub Releaseを行いません。npmは開発dependencyの管理、ローカルbuild、ローカルpackage検証のためだけに使用します。
 
 ## Features
 
-- `nav.html`とHTML fragmentだけで設計書Viewerを構成
+- content directory内のHTML fragmentからnavigationを自動構成
+- content directory内の変更を検知してbrowserを自動reload
 - 文書間の相対リンク、画像、browser historyに対応
 - mobile向けnavigationとkeyboard操作に対応
+- OS設定へ追従するlight／dark表示と文書印刷に対応
 - content directory外へのpath traversalとsymbolic link escapeを拒否
 - Chart.jsとMermaidはoptional dependency
 - Mermaidは実行時に公式ES moduleを読み込むため、仕様変更時のSVG変換は不要
@@ -16,42 +24,38 @@ HTML fragmentで書いた設計書を、ローカルで閲覧するための軽�
 - Node.js 24以上
 - ローカルの信頼済みHTML
 
-## Install
+## Local setup
 
-基本Viewerだけを使う場合:
-
-```bash
-npm install --save-dev html-docs
-```
-
-Chart.jsとMermaidも使う場合は、一緒にインストールすることを推奨します。
+このrepositoryをローカルへcheckoutし、dependencyとViewerを準備します。
 
 ```bash
-npm install --save-dev html-docs chart.js mermaid
+npm ci
+npm run build
 ```
 
-Chart.jsとMermaidはどちらか一方だけでも導入できます。未導入のintegrationは読み込まれず、通常のHTML、CSS、画像、navigationには影響しません。
+別のローカルprojectから使用する場合は、npm registryではなく、このrepositoryのpathを指定します。
+
+```bash
+npm install --save-dev /absolute/path/to/spec-html
+```
+
+Chart.jsとMermaidも使う場合は、利用projectへ追加します。どちらか一方だけでも導入でき、未導入のintegrationは通常のHTML、CSS、画像、navigationへ影響しません。
+
+```bash
+npm install --save-dev chart.js mermaid
+```
 
 ## Quick start
 
 ```text
 specs/
-├─ nav.html
 ├─ overview.html
 ├─ architecture.html
 └─ assets/
    └─ diagram.svg
 ```
 
-`nav.html`に設計書へのリンクを書きます。
-
-```html
-<nav aria-label="設計書">
-  <h2>Overview</h2>
-  <a href="./overview.html">Overview</a>
-  <a href="./architecture.html">Architecture</a>
-</nav>
-```
+Viewerはdirectory内の`.html`を再帰的に読み取り、最初の`h1`を表示名とするnavigationを実行時に構成します。メニュー用fileを作成したりrepositoryで管理したりする必要はありません。起動中は指定directory配下だけを監視し、文書や画像を変更・追加・削除するとbrowserを自動reloadします。
 
 各設計書はHTML document全体ではなく、`article`などから始まるfragmentとして保存します。
 
@@ -63,10 +67,10 @@ specs/
 </article>
 ```
 
-Viewerを起動します。
+ローカルpathからinstallしたViewerを起動します。`--no-install`により、registryから同名packageを取得しません。
 
 ```bash
-npx html-docs ./specs
+npx --no-install spec-html ./specs
 ```
 
 普段使う場合は利用プロジェクトの`package.json`へ登録します。
@@ -74,12 +78,27 @@ npx html-docs ./specs
 ```json
 {
   "scripts": {
-    "docs": "html-docs ./specs"
+    "docs": "spec-html ./specs"
   }
 }
 ```
 
-詳しい記述規約、リンク解決、integrationの使い方は[Authoring guide](./docs/authoring.md)を参照してください。
+詳しい記述規約、リンク解決、integrationの使い方は[Authoring guide](./docs/authoring.html)を参照してください。`docs/`全体はSpec HTML自身で閲覧できる構造的なHTMLになっています。
+
+## Appearance
+
+Sidebar上部の`spec-html`ラベル横にある「Light」「Auto」「Dark」から表示themeを選択できます。「Auto」はOSのlight／dark設定へ追従し、選択内容はbrowserへ保存されます。Shell、文書、Chart.js、Mermaidは同時に切り替わり、dark表示は[Tokyo Night Storm](https://github.com/folke/tokyonight.nvim)を参考にした青みのあるpaletteです。Auto選択中にOS設定が変わった場合も、現在の文書と図表を同期します。Sidebar幅を超える文書タイトルは末尾を省略表示し、hover時のtooltipで全文を確認できます。
+
+見出し、list、table、code、blockquote、details、figureなどのsemantic HTMLには既定styleが適用されます。`aside`はnote表示になり、`data-type`へ`warning`、`danger`、`success`を指定できます。
+
+```html
+<aside data-type="warning" aria-labelledby="migration-warning">
+  <strong id="migration-warning">注意</strong>
+  <p>この変更にはdatabase migrationが必要です。</p>
+</aside>
+```
+
+印刷時はSidebarとmobile menu buttonを除外し、現在の文書をlight配色で印刷します。
 
 ## Chart.js
 
@@ -114,7 +133,7 @@ sequenceDiagram
 ## CLI
 
 ```text
-html-docs [directory] [options]
+spec-html [directory] [options]
 
 --host <host>    listenするhost（既定: 127.0.0.1）
 --port <port>    listenするport（既定: 4173、0で自動割り当て）
@@ -126,21 +145,22 @@ html-docs [directory] [options]
 
 ## Security model
 
-HTML Docsはローカルの信頼済みHTMLを対象にします。設計書内のinline scriptは実行されるため、第三者から受け取ったHTMLを確認せずに開かないでください。
+Spec HTMLはローカルの信頼済みHTMLを対象にします。設計書内のinline scriptは実行されるため、第三者から受け取ったHTMLを確認せずに開かないでください。
 
 既定では`127.0.0.1`だけで待ち受けます。`--host`を変更して、信頼できないnetworkへ公開しないでください。content directory外を指すpath traversalとsymbolic linkは配信しません。
 
+package自体も外部公開を禁止しています。公開npm registryへのpublish、公開用GitHub Release、ViewerのInternet hostingは行わないでください。方針の詳細は[Local use policy](./RELEASING.md)を参照してください。
+
 ## v0.1 limitations
 
-- file watcherと自動reloadはありません。編集後にbrowserをreloadしてください。
-- 検索、theme切り替え、Markdown変換は含みません。
+- 検索、Markdown変換は含みません。
 - browser自動テストの対象はChromiumです。
 - Node.js 24未満はサポートしません。
 
 ## Development
 
-開発環境の構築、検証command、変更時のchecklistは[CONTRIBUTING.md](./CONTRIBUTING.md)を参照してください。npm公開手順は[RELEASING.md](./RELEASING.md)、変更履歴は[CHANGELOG.md](./CHANGELOG.md)にあります。
+開発環境の構築、検証command、変更時のchecklistは[CONTRIBUTING.md](./CONTRIBUTING.md)を参照してください。ローカル利用と非公開の方針は[Local use policy](./RELEASING.md)、変更履歴は[CHANGELOG.md](./CHANGELOG.md)にあります。
 
 ## License
 
-[MIT License](./LICENSE) © 2026 HTML Docs contributors
+[MIT License](./LICENSE) © 2026 Spec HTML contributors

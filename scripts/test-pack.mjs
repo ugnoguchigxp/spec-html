@@ -34,19 +34,19 @@ try {
   }
   tarballPath = resolve(projectRoot, packedFile);
 
-  temporaryRoot = await mkdtemp(join(tmpdir(), "html-docs-pack-"));
+  temporaryRoot = await mkdtemp(join(tmpdir(), "spec-html-pack-"));
   await run(npmCommand, ["init", "--yes"], temporaryRoot);
   await writeConsumerFixture(temporaryRoot);
   await run(npmCommand, ["install", "--save-dev", tarballPath], temporaryRoot);
 
   const installedPackageJson = JSON.parse(
     await readFile(
-      join(temporaryRoot, "node_modules", "html-docs", "package.json"),
+      join(temporaryRoot, "node_modules", "spec-html", "package.json"),
       "utf8",
     ),
   );
-  if (installedPackageJson.bin?.["html-docs"] !== "dist/cli.js") {
-    throw new Error("packしたpackageでhtml-docs CLIが公開されていません");
+  if (installedPackageJson.bin?.["spec-html"] !== "dist/cli.js") {
+    throw new Error("packしたpackageでspec-html CLIが公開されていません");
   }
   if (
     installedPackageJson.peerDependenciesMeta?.["chart.js"]?.optional !== true ||
@@ -56,17 +56,17 @@ try {
   }
   const versionOutput = await run(
     npmCommand,
-    ["exec", "--", "html-docs", "--version"],
+    ["exec", "--", "spec-html", "--version"],
     temporaryRoot,
   );
   if (versionOutput.stdout.trim() !== installedPackageJson.version) {
-    throw new Error("installしたhtml-docs CLIをpackage bin経由で実行できません");
+    throw new Error("installしたspec-html CLIをpackage bin経由で実行できません");
   }
 
   viewerProcess = spawn(
     process.execPath,
     [
-      join(temporaryRoot, "node_modules", "html-docs", "dist", "cli.js"),
+      join(temporaryRoot, "node_modules", "spec-html", "dist", "cli.js"),
       "./specs",
       "--port",
       "0",
@@ -81,10 +81,10 @@ try {
 
   const [shell, navigation, overview, asset, viewer] = await Promise.all([
     fetch(`${origin}/`),
-    fetch(`${origin}/_content/nav.html`),
+    fetch(`${origin}/_spec-html/navigation`),
     fetch(`${origin}/_content/overview.html`),
     fetch(`${origin}/_content/assets/pixel.svg`),
-    fetch(`${origin}/_html-docs/viewer.js`),
+    fetch(`${origin}/_spec-html/viewer.js`),
   ]);
 
   if (
@@ -97,7 +97,7 @@ try {
     throw new Error("packしたViewerのHTTP endpointを確認できません");
   }
   const shellBody = await shell.text();
-  if (!shellBody.includes('/_html-docs/viewer.js')) {
+  if (!shellBody.includes('/_spec-html/viewer.js')) {
     throw new Error("Viewer Shellがbrowser bundleを参照していません");
   }
   if (
@@ -138,10 +138,6 @@ async function writeConsumerFixture(root) {
   const specsRoot = join(root, "specs");
   await mkdir(join(specsRoot, "assets"), { recursive: true });
   await Promise.all([
-    writeFile(
-      join(specsRoot, "nav.html"),
-      '<nav><a href="./overview.html">Overview</a></nav>',
-    ),
     writeFile(
       join(specsRoot, "overview.html"),
       "<article><h1>Consumer overview</h1></article>",
@@ -187,7 +183,7 @@ function waitForViewerUrl(child) {
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
       output += chunk;
-      const match = /HTML Docs: (http:\/\/[^\s]+\/)/.exec(output);
+      const match = /Spec HTML: (http:\/\/[^\s]+\/)/.exec(output);
       if (match?.[1] !== undefined) {
         clearTimeout(timeout);
         resolvePromise(match[1].replace(/\/$/, ""));

@@ -1,6 +1,20 @@
-<article>
+<article lang="en">
   <h1>Latency</h1>
-  <canvas id="latency-chart" width="320" height="180"></canvas>
+  <figure>
+    <canvas id="latency-chart" width="320" height="180" aria-describedby="latency-chart-caption">P95 latency for versions 2.1 through 2.3.</canvas>
+    <figcaption id="latency-chart-caption">P95 latency by version.</figcaption>
+  </figure>
+  <table>
+    <caption>P95 latency source data</caption>
+    <thead>
+      <tr><th scope="col">Version</th><th scope="col">P95 latency（ms）</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row">2.1</th><td>180</td></tr>
+      <tr><th scope="row">2.2</th><td>220</td></tr>
+      <tr><th scope="row">2.3</th><td>230</td></tr>
+    </tbody>
+  </table>
   <script>
     const canvas = document.getElementById("latency-chart");
     new Chart(canvas, {

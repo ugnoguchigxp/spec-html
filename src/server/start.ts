@@ -1,14 +1,18 @@
 import { createServer } from "node:http";
+import { createLiveReload } from "./live-reload.js";
+import type { LiveReload } from "./live-reload.js";
 import { createRequestHandler } from "./routes.js";
 import type { RunningServer, StartServerOptions } from "./types.js";
 
 export function startServer(
   options: StartServerOptions,
 ): Promise<RunningServer> {
-  const server = createServer(createRequestHandler(options));
+  const liveReload = createLiveReload(options.contentRoot);
+  const server = createServer(createRequestHandler({ ...options, liveReload }));
 
   return new Promise((resolve, reject) => {
     const onError = (error: Error): void => {
+      liveReload.close();
       reject(error);
     };
 
@@ -17,6 +21,7 @@ export function startServer(
       server.off("error", onError);
       const address = server.address();
       if (address === null || typeof address === "string") {
+        liveReload.close();
         reject(new Error("Server addressを取得できません"));
         return;
       }
@@ -26,12 +31,20 @@ export function startServer(
         origin: createOrigin(options.host, address.port),
         port: address.port,
         close: (): Promise<void> => {
-          closePromise ??= closeServer(server);
+          closePromise ??= closeRunningServer(server, liveReload);
           return closePromise;
         },
       });
     });
   });
+}
+
+async function closeRunningServer(
+  server: ReturnType<typeof createServer>,
+  liveReload: LiveReload,
+): Promise<void> {
+  liveReload.close();
+  await closeServer(server);
 }
 
 function createOrigin(host: string, port: number): string {

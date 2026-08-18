@@ -246,6 +246,18 @@ pre code {
   background: transparent;
 }
 
+.mermaid[data-processed="true"] {
+  padding: 1rem 0;
+  border: 0;
+  color: var(--doc-text);
+  background: transparent;
+}
+
+.mermaid[data-processed="true"] svg {
+  display: block;
+  margin-inline: auto;
+}
+
 blockquote {
   margin-left: 0;
   padding: 0.25em 1em;
@@ -311,7 +323,8 @@ figure {
   margin-left: 0;
 }
 
-figure > :is(img, svg, canvas) {
+figure > :is(img, svg, canvas, video) {
+  display: block;
   border: 1px solid var(--doc-border);
   border-radius: 6px;
 }
@@ -327,43 +340,133 @@ figcaption {
 
 img,
 svg,
-canvas {
-  display: block;
+canvas,
+video,
+audio {
   max-width: 100%;
+}
+
+img,
+svg,
+canvas,
+video {
   height: auto;
 }
 
-canvas {
-  width: 100%;
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    --doc-background: #24283b;
+    --doc-surface: #1f2335;
+    --doc-surface-muted: #292e42;
+    --doc-text: #c0caf5;
+    --doc-muted: #a9b1d6;
+    --doc-border: #737aa2;
+    --doc-accent: #7aa2f7;
+    --doc-focus: #7dcfff;
+    --doc-code-background: #1f2335;
+    --doc-code-text: #c0caf5;
+    --doc-selection: #2e3c64;
+    --doc-target-background: #2e3c64;
+    --doc-note-background: #233745;
+    --doc-note-border: #7aa2f7;
+    --doc-warning-background: #373640;
+    --doc-warning-border: #e0af68;
+    --doc-danger-background: #52313f;
+    --doc-danger-border: #f7768e;
+    --doc-success-background: #303940;
+    --doc-success-border: #9ece6a;
+  }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --doc-background: #0d1117;
-    --doc-surface: #161b22;
-    --doc-surface-muted: #21262d;
-    --doc-text: #e6edf3;
-    --doc-muted: #8b949e;
-    --doc-border: #30363d;
-    --doc-accent: #58a6ff;
-    --doc-focus: #58a6ff;
-    --doc-code-background: #161b22;
-    --doc-code-text: #e6edf3;
-    --doc-selection: #264f78;
-    --doc-target-background: #3b2e00;
-    --doc-note-background: #0c2d48;
-    --doc-note-border: #58a6ff;
-    --doc-warning-background: #3b2e00;
-    --doc-warning-border: #d29922;
-    --doc-danger-background: #3d1117;
-    --doc-danger-border: #f85149;
-    --doc-success-background: #0f2d1f;
-    --doc-success-border: #3fb950;
-  }
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --doc-background: #24283b;
+  --doc-surface: #1f2335;
+  --doc-surface-muted: #292e42;
+  --doc-text: #c0caf5;
+  --doc-muted: #a9b1d6;
+  --doc-border: #737aa2;
+  --doc-accent: #7aa2f7;
+  --doc-focus: #7dcfff;
+  --doc-code-background: #1f2335;
+  --doc-code-text: #c0caf5;
+  --doc-selection: #2e3c64;
+  --doc-target-background: #2e3c64;
+  --doc-note-background: #233745;
+  --doc-note-border: #7aa2f7;
+  --doc-warning-background: #373640;
+  --doc-warning-border: #e0af68;
+  --doc-danger-background: #52313f;
+  --doc-danger-border: #f7768e;
+  --doc-success-background: #303940;
+  --doc-success-border: #9ece6a;
+  color-scheme: dark;
 }
 
 @media (max-width: 767px) {
   body {
     padding: 16px;
   }
+}
+
+@media print {
+  :root,
+  :root[data-theme] {
+    --doc-background: #ffffff;
+    --doc-surface: #f6f8fa;
+    --doc-surface-muted: #eff1f3;
+    --doc-text: #24292f;
+    --doc-muted: #57606a;
+    --doc-border: #8c959f;
+    --doc-accent: #0550ae;
+    --doc-code-background: #f6f8fa;
+    --doc-code-text: #24292f;
+    --doc-target-background: #fff8c5;
+    --doc-note-background: #ddf4ff;
+    --doc-note-border: #0969da;
+    --doc-warning-background: #fff8c5;
+    --doc-warning-border: #9a6700;
+    --doc-danger-background: #ffebe9;
+    --doc-danger-border: #cf222e;
+    --doc-success-background: #dafbe1;
+    --doc-success-border: #1a7f37;
+    color-scheme: light;
+  }
+
+  body {
+    max-width: none;
+    padding: 0;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    break-after: avoid;
+  }
+
+  table,
+  pre,
+  blockquote,
+  aside,
+  figure,
+  details {
+    break-inside: avoid;
+  }
+
+  pre {
+    overflow: visible;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+}
+
+@page {
+  margin: 16mm;
 }

@@ -1,6 +1,4 @@
-import { access, stat } from "node:fs/promises";
-import { constants } from "node:fs";
-import { join } from "node:path";
+import { stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { openViewer } from "./open-browser.js";
 import { CliUsageError, parseCliCommand } from "./options.js";
@@ -8,7 +6,7 @@ import { messageForCliError } from "./errors.js";
 import { startServer } from "../server/start.js";
 import { resolveOptionalIntegrations } from "../server/integrations.js";
 
-const HELP_TEXT = `使い方: html-docs [directory] [options]
+const HELP_TEXT = `使い方: spec-html [directory] [options]
 
 Options:
   --host <host>    listenするhost（既定: 127.0.0.1）
@@ -26,7 +24,7 @@ export async function main(args: readonly string[]): Promise<number> {
       return 0;
     }
     if (command.kind === "version") {
-      console.log(__HTML_DOCS_VERSION__);
+      console.log(__SPEC_HTML_VERSION__);
       return 0;
     }
 
@@ -39,13 +37,13 @@ export async function main(args: readonly string[]): Promise<number> {
       integrations,
     });
     const viewerUrl = `${runningServer.origin}/`;
-    console.log(`HTML Docs: ${viewerUrl}`);
+    console.log(`Spec HTML: ${viewerUrl}`);
 
     if (command.options.openBrowser) {
       try {
         await openViewer(viewerUrl);
       } catch (error: unknown) {
-        console.warn(`html-docs: browserを開けませんでした: ${messageOf(error)}`);
+        console.warn(`spec-html: browserを開けませんでした: ${messageOf(error)}`);
       }
     }
 
@@ -56,7 +54,7 @@ export async function main(args: readonly string[]): Promise<number> {
       }
       isClosing = true;
       void runningServer.close().catch((error: unknown) => {
-        console.error(`html-docs: server終了に失敗しました: ${messageOf(error)}`);
+        console.error(`spec-html: server終了に失敗しました: ${messageOf(error)}`);
         process.exitCode = 1;
       });
     };
@@ -64,9 +62,9 @@ export async function main(args: readonly string[]): Promise<number> {
     process.once("SIGTERM", close);
     return 0;
   } catch (error: unknown) {
-    console.error(`html-docs: ${messageForCliError(error)}`);
+    console.error(`spec-html: ${messageForCliError(error)}`);
     if (
-      process.env.HTML_DOCS_DEBUG === "1" &&
+      process.env.SPEC_HTML_DEBUG === "1" &&
       error instanceof Error &&
       !(error instanceof CliUsageError)
     ) {
@@ -90,23 +88,6 @@ async function assertContentDirectory(contentRoot: string): Promise<void> {
     );
   }
 
-  const navigationPath = join(contentRoot, "nav.html");
-  let navigationStats;
-  try {
-    navigationStats = await stat(navigationPath);
-  } catch {
-    throw new Error(`nav.htmlが見つかりません: ${navigationPath}`);
-  }
-
-  if (!navigationStats.isFile()) {
-    throw new Error(`nav.htmlが見つかりません: ${navigationPath}`);
-  }
-
-  try {
-    await access(navigationPath, constants.R_OK);
-  } catch {
-    throw new Error(`nav.htmlを読み取れません: ${navigationPath}`);
-  }
 }
 
 function messageOf(error: unknown): string {

@@ -2,8 +2,8 @@
   <h1>Overview</h1>
   <p>This fixture verifies the local HTML document viewer.</p>
 
-  <aside data-type="warning">
-    <strong>Warning</strong>
+  <aside data-type="warning" aria-labelledby="theme-warning">
+    <strong id="theme-warning">Warning</strong>
     <p>This callout verifies theme-aware semantic styles.</p>
   </aside>
 
@@ -16,10 +16,19 @@
     </tbody>
   </table>
 
-  <details open>
+  <details>
     <summary>Semantic details</summary>
     <p>Details remain readable in light and dark color schemes.</p>
   </details>
+
+  <p>
+    Inline
+    <svg id="inline-icon" width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="ready">
+      <circle cx="8" cy="8" r="7" fill="currentColor"></circle>
+    </svg>
+    media remains in the text flow.
+  </p>
+  <canvas id="small-canvas" width="120" height="40" aria-label="Small canvas"></canvas>
 
   <div style="height: 1200px" aria-hidden="true"></div>
 

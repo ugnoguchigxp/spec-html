@@ -32,7 +32,7 @@ await build({
   external: ["open"],
   banner: { js: "#!/usr/bin/env node" },
   define: {
-    __HTML_DOCS_VERSION__: JSON.stringify(packageJson.version),
+    __SPEC_HTML_VERSION__: JSON.stringify(packageJson.version),
   },
 });
 

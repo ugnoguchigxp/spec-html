@@ -1,10 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const testPort = process.env.SPEC_HTML_TEST_PORT ?? "4173";
+const testBaseUrl = `http://127.0.0.1:${testPort}`;
+
 export default defineConfig({
   testDir: "./tests/browser",
   timeout: 15_000,
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: testBaseUrl,
     ...devices["Desktop Chrome"],
   },
   projects: [
@@ -15,8 +18,8 @@ export default defineConfig({
   ],
   webServer: {
     command:
-      "node dist/cli.js ./tests/fixtures/browser --port 4173 --no-open",
-    url: "http://127.0.0.1:4173/",
+      `node dist/cli.js ./tests/fixtures/browser --port ${testPort} --no-open`,
+    url: `${testBaseUrl}/`,
     reuseExistingServer: false,
     timeout: 15_000,
   },

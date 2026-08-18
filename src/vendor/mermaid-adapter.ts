@@ -10,16 +10,43 @@ void renderMermaid().catch((error: unknown) => {
 async function renderMermaid(): Promise<void> {
   await domReady();
   const moduleUrl = new URL(
-    "/_html-docs/integrations/mermaid/mermaid.esm.min.mjs",
+    "/_spec-html/integrations/mermaid/mermaid.esm.min.mjs",
     document.baseURI,
   ).href;
   const imported: unknown = await import(moduleUrl);
   const mermaid = getMermaidApi(imported);
-  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  const selectedTheme = document.documentElement.dataset.theme;
+  const dark =
+    selectedTheme === "dark" ||
+    (selectedTheme !== "light" &&
+      matchMedia("(prefers-color-scheme: dark)").matches);
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: "loose",
-    theme: dark ? "dark" : "default",
+    theme: dark ? "base" : "default",
+    ...(dark
+      ? {
+          themeVariables: {
+            darkMode: true,
+            background: "#24283b",
+            primaryColor: "#292e42",
+            primaryTextColor: "#c0caf5",
+            primaryBorderColor: "#7aa2f7",
+            secondaryColor: "#1f2335",
+            secondaryTextColor: "#c0caf5",
+            secondaryBorderColor: "#7dcfff",
+            tertiaryColor: "#2e3c64",
+            tertiaryTextColor: "#c0caf5",
+            tertiaryBorderColor: "#bb9af7",
+            noteBkgColor: "#373640",
+            noteTextColor: "#c0caf5",
+            noteBorderColor: "#e0af68",
+            lineColor: "#a9b1d6",
+            textColor: "#c0caf5",
+            mainBkg: "#292e42",
+          },
+        }
+      : {}),
   });
   await mermaid.run({ querySelector: ".mermaid" });
 }

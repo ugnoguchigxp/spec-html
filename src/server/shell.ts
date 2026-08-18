@@ -9,12 +9,12 @@ export function createShellHtml(features: ViewerFeatures): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>HTML Docs</title>
-  <link rel="stylesheet" href="/_html-docs/shell.css">
+  <title>Spec HTML</title>
+  <link rel="stylesheet" href="/_spec-html/shell.css">
 </head>
 <body>
   <div id="app" data-chart-js="${String(features.chartJs)}" data-mermaid="${String(features.mermaid)}"></div>
-  <script type="module" src="/_html-docs/viewer.js"></script>
+  <script type="module" src="/_spec-html/viewer.js"></script>
 </body>
 </html>`;
 }

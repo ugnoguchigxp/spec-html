@@ -1,4 +1,8 @@
-import { CONTENT_PREFIX } from "./constants.js";
+import {
+  CONTENT_PREFIX,
+  LIVE_RELOAD_PATH,
+  NAVIGATION_PATH,
+} from "./constants.js";
 import { fetchDocument, DocumentHttpError } from "./document-loader.js";
 import { buildSrcdoc } from "./frame.js";
 import type { FrameIntegrations } from "./frame.js";
@@ -17,6 +21,13 @@ import {
   getFrameTitle,
   resetDocumentTitle,
 } from "./title.js";
+import {
+  applyThemePreference,
+  readThemePreference,
+  saveThemePreference,
+  THEME_PREFERENCES,
+} from "./theme.js";
+import type { ThemePreference } from "./theme.js";
 import type {
   NavigationItem,
   RouteParseResult,
@@ -27,7 +38,7 @@ import type {
 type HistoryMode = "push" | "replace" | "none";
 
 void initializeViewer().catch((error: unknown) => {
-  console.error("HTML Docsの初期化に失敗しました", error);
+  console.error("Spec HTMLの初期化に失敗しました", error);
 });
 
 async function initializeViewer(): Promise<void> {
@@ -36,18 +47,26 @@ async function initializeViewer(): Promise<void> {
     throw new Error("Viewerのmount要素が見つかりません");
   }
 
+  installLiveReload();
+
   const integrations: FrameIntegrations = {
     chartJs: app.dataset.chartJs === "true",
     mermaid: app.dataset.mermaid === "true",
   };
 
+  let themePreference = readThemePreference();
+  applyThemePreference(document.documentElement, themePreference);
   const elements = createLayout(app);
-  const contentBaseUrl = new URL(`${CONTENT_PREFIX}nav.html`, window.location.origin);
+  updateThemeButtons(elements, themePreference);
+  const contentBaseUrl = new URL(CONTENT_PREFIX, window.location.origin);
+  const navigationUrl = new URL(NAVIGATION_PATH, window.location.origin);
   let navigationItems: NavigationItem[] = [];
   let activeAbortController: AbortController | undefined;
   let currentDocument: string | null = null;
   let currentRoute: RouteState = { doc: null, hash: "" };
+  let detailsOpenedForPrint: HTMLDetailsElement[] = [];
   const mobileViewport = window.matchMedia("(max-width: 767px)");
+  const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
 
   const syncSidebarInteractivity = (): void => {
     const isHidden =
@@ -73,7 +92,6 @@ async function initializeViewer(): Promise<void> {
     activeAbortController?.abort();
     activeAbortController = undefined;
     currentDocument = null;
-    elements.title.textContent = "HTML Docs";
     elements.frame.title = "設計書";
     resetDocumentTitle();
     updateActiveNavigation(navigationItems, { doc: null, hash: "" });
@@ -158,7 +176,13 @@ async function initializeViewer(): Promise<void> {
         return;
       }
 
-      const srcdoc = buildSrcdoc(fragment, documentUrl, integrations);
+      const srcdoc = buildSrcdoc(
+        fragment,
+        documentUrl,
+        integrations,
+        themePreference,
+      );
+      elements.frame.hidden = false;
       await setFrameDocument(elements.frame, srcdoc);
       if (!isCurrentRequest(activeAbortController, abortController)) {
         return;
@@ -172,7 +196,6 @@ async function initializeViewer(): Promise<void> {
       const title = getFrameTitle(frameDocument, doc);
       activeAbortController = undefined;
       currentDocument = doc;
-      elements.title.textContent = title;
       elements.frame.title = title;
       applyDocumentTitle(title);
       updateActiveNavigation(navigationItems, route);
@@ -190,9 +213,60 @@ async function initializeViewer(): Promise<void> {
         doc,
         message: messageForDocumentError(error, doc),
       });
-      console.error("HTML Docs: 設計書を表示できません", error);
+      console.error("Spec HTML: 設計書を表示できません", error);
     }
   };
+
+  colorScheme.addEventListener("change", () => {
+    if (themePreference !== "system" || currentDocument === null) {
+      return;
+    }
+    currentDocument = null;
+    void navigate(currentRoute, "none");
+  });
+
+  for (const preference of THEME_PREFERENCES) {
+    elements.themeButtons[preference].addEventListener("click", () => {
+      if (themePreference === preference) {
+        return;
+      }
+      themePreference = preference;
+      applyThemePreference(document.documentElement, themePreference);
+      saveThemePreference(themePreference);
+      updateThemeButtons(elements, themePreference);
+      if (currentDocument !== null) {
+        currentDocument = null;
+        void navigate(currentRoute, "none");
+      }
+    });
+  }
+
+  window.addEventListener("beforeprint", () => {
+    const frameDocument = elements.frame.contentDocument;
+    if (frameDocument === null) {
+      return;
+    }
+    if (detailsOpenedForPrint.length === 0) {
+      detailsOpenedForPrint = Array.from(
+        frameDocument.querySelectorAll<HTMLDetailsElement>("details:not([open])"),
+      );
+      for (const details of detailsOpenedForPrint) {
+        details.open = true;
+      }
+    }
+    const printHeight = Math.max(
+      frameDocument.documentElement.scrollHeight,
+      frameDocument.body.scrollHeight,
+    );
+    elements.frame.style.height = `${String(printHeight)}px`;
+  });
+  window.addEventListener("afterprint", () => {
+    for (const details of detailsOpenedForPrint) {
+      details.open = false;
+    }
+    detailsOpenedForPrint = [];
+    elements.frame.style.removeProperty("height");
+  });
 
   elements.menuButton.addEventListener("click", () => {
     setSidebarOpen(elements.root.dataset.sidebarOpen !== "true");
@@ -235,28 +309,41 @@ async function initializeViewer(): Promise<void> {
   });
 
   try {
-    renderLoadState(elements, { kind: "loading", doc: "nav.html" });
-    const navigationResponse = await fetch(contentBaseUrl);
+    renderLoadState(elements, { kind: "loading", doc: "Navigation" });
+    const navigationResponse = await fetch(navigationUrl);
     if (!navigationResponse.ok) {
-      throw new Error(`nav.htmlの取得に失敗しました: HTTP ${navigationResponse.status}`);
+      throw new Error(
+        `Navigationの取得に失敗しました: HTTP ${navigationResponse.status}`,
+      );
     }
     navigationItems = mountNavigation(
-      elements.sidebar,
+      elements.navigation,
       await navigationResponse.text(),
       contentBaseUrl,
     );
   } catch (error: unknown) {
-    elements.sidebar.textContent = "Navigationを読み込めません";
+    elements.navigation.textContent = "Navigationを読み込めません";
     renderLoadState(elements, {
       kind: "error",
       doc: null,
-      message: "nav.htmlを読み込めません",
+      message: "Navigationを読み込めません",
     });
-    console.error("HTML Docs: nav.htmlを読み込めません", error);
+    console.error("Spec HTML: Navigationを読み込めません", error);
     return;
   }
 
   await showInitialRoute(parseRoute(new URL(window.location.href)), navigationItems, navigate, elements);
+}
+
+function installLiveReload(): void {
+  const events = new EventSource(LIVE_RELOAD_PATH);
+  events.addEventListener("message", (event) => {
+    if (event.data !== "reload") {
+      return;
+    }
+    events.close();
+    window.location.reload();
+  });
 }
 
 async function showInitialRoute(
@@ -307,7 +394,7 @@ function installSidebarLinkHandler(
     if (anchor === null) {
       return;
     }
-    if (anchor.dataset.htmlDocsBlocked === "javascript") {
+    if (anchor.dataset.specHtmlBlocked === "javascript") {
       event.preventDefault();
       return;
     }
@@ -409,4 +496,16 @@ function messageForDocumentError(error: unknown, doc: string): string {
     return `設計書を取得できません: HTTP ${error.status}。ページを再読み込みしてください`;
   }
   return "設計書を表示できません";
+}
+
+function updateThemeButtons(
+  elements: ViewerElements,
+  preference: ThemePreference,
+): void {
+  for (const value of THEME_PREFERENCES) {
+    elements.themeButtons[value].setAttribute(
+      "aria-pressed",
+      String(value === preference),
+    );
+  }
 }

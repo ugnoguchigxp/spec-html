@@ -5,8 +5,6 @@
   --shell-text: #24292f;
   --shell-muted: #57606a;
   --shell-border: #d0d7de;
-  --shell-header-background: #24292f;
-  --shell-header-text: #f6f8fa;
   --shell-button-border: #768390;
   --shell-accent: #0969da;
   --shell-accent-text: #ffffff;
@@ -38,7 +36,7 @@ body,
 
 .viewer {
   display: grid;
-  grid-template-rows: 48px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   grid-template-columns: 280px minmax(0, 1fr);
   width: 100%;
   height: 100%;
@@ -46,32 +44,43 @@ body,
   background: var(--shell-background);
 }
 
-.viewer-header {
-  display: flex;
-  grid-column: 1 / -1;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  padding: 0 16px;
-  color: var(--shell-header-text);
-  background: var(--shell-header-background);
+.theme-switcher {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--shell-button-border);
+  border-radius: 7px;
 }
 
-.viewer-title {
-  overflow: hidden;
-  font-size: 15px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.theme-button {
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 4px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.theme-button:hover {
+  background: var(--shell-surface-hover);
+}
+
+.theme-button[aria-pressed="true"] {
+  color: var(--shell-accent-text);
+  background: var(--shell-accent);
 }
 
 .menu-button {
   display: none;
+  min-width: 36px;
   min-height: 32px;
   border: 1px solid var(--shell-button-border);
   border-radius: 6px;
   color: inherit;
-  background: transparent;
+  background: var(--shell-surface);
   font: inherit;
   cursor: pointer;
 }
@@ -79,9 +88,34 @@ body,
 .viewer-sidebar {
   min-width: 0;
   padding: 20px 12px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border-right: 1px solid var(--shell-border);
   background: var(--shell-surface);
+}
+
+.viewer-sidebar-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 8px 12px;
+}
+
+.viewer-brand {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--shell-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-navigation,
+.viewer-sidebar nav {
+  min-width: 0;
 }
 
 .viewer-sidebar nav {
@@ -90,11 +124,14 @@ body,
 }
 
 .viewer-sidebar h2 {
+  overflow: hidden;
   margin: 20px 8px 6px;
   color: var(--shell-muted);
   font-size: 12px;
   letter-spacing: 0.04em;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .viewer-sidebar h2:first-child {
@@ -103,10 +140,14 @@ body,
 
 .viewer-sidebar a {
   display: block;
+  max-width: 100%;
+  overflow: hidden;
   padding: 7px 8px;
   border-radius: 6px;
   color: var(--shell-text);
   text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .viewer-sidebar a:hover {
@@ -119,7 +160,8 @@ body,
 }
 
 .viewer-sidebar a:focus-visible,
-.menu-button:focus-visible {
+.menu-button:focus-visible,
+.theme-button:focus-visible {
   outline: 2px solid var(--shell-focus);
   outline-offset: 2px;
 }
@@ -139,6 +181,10 @@ body,
   border: 0;
 }
 
+.viewer[data-state="loading"] .viewer-document {
+  visibility: hidden;
+}
+
 .viewer-status {
   display: grid;
   place-items: center;
@@ -156,20 +202,26 @@ body,
 @media (max-width: 767px) {
   .viewer {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 48px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .menu-button {
+    position: fixed;
+    z-index: 20;
+    top: 12px;
+    right: 12px;
     display: inline-block;
+    box-shadow: 0 2px 8px var(--shell-sidebar-shadow);
   }
 
   .viewer-sidebar {
     position: fixed;
     z-index: 10;
-    top: 48px;
+    top: 0;
     bottom: 0;
     left: 0;
     width: min(280px, 88vw);
+    padding-top: 64px;
     box-shadow: 4px 0 16px var(--shell-sidebar-shadow);
     transform: translateX(-105%);
     transition: transform 160ms ease;
@@ -181,26 +233,83 @@ body,
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --shell-background: #0d1117;
-    --shell-surface: #161b22;
-    --shell-surface-hover: #21262d;
-    --shell-text: #e6edf3;
-    --shell-muted: #8b949e;
-    --shell-border: #30363d;
-    --shell-header-background: #010409;
-    --shell-header-text: #e6edf3;
-    --shell-button-border: #6e7681;
-    --shell-accent: #1f6feb;
-    --shell-accent-text: #ffffff;
-    --shell-focus: #58a6ff;
-    --shell-error: #ff7b72;
-    --shell-sidebar-shadow: rgb(1 4 9 / 48%);
+  :root:where(:not([data-theme="light"])) {
+    --shell-background: #24283b;
+    --shell-surface: #1f2335;
+    --shell-surface-hover: #292e42;
+    --shell-text: #c0caf5;
+    --shell-muted: #a9b1d6;
+    --shell-border: #737aa2;
+    --shell-button-border: #737aa2;
+    --shell-accent: #7aa2f7;
+    --shell-accent-text: #1f2335;
+    --shell-focus: #7dcfff;
+    --shell-error: #f7768e;
+    --shell-sidebar-shadow: rgb(27 30 45 / 58%);
   }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --shell-background: #24283b;
+  --shell-surface: #1f2335;
+  --shell-surface-hover: #292e42;
+  --shell-text: #c0caf5;
+  --shell-muted: #a9b1d6;
+  --shell-border: #737aa2;
+  --shell-button-border: #737aa2;
+  --shell-accent: #7aa2f7;
+  --shell-accent-text: #1f2335;
+  --shell-focus: #7dcfff;
+  --shell-error: #f7768e;
+  --shell-sidebar-shadow: rgb(27 30 45 / 58%);
+  color-scheme: dark;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .viewer-sidebar {
     transition: none;
   }
+}
+
+@media print {
+  :root,
+  :root[data-theme] {
+    --shell-background: #ffffff;
+    --shell-surface: #ffffff;
+    --shell-text: #24292f;
+    color-scheme: light;
+  }
+
+  html,
+  body,
+  #app,
+  .viewer,
+  .viewer-main {
+    width: auto;
+    height: auto;
+    overflow: visible;
+  }
+
+  .viewer {
+    display: block;
+  }
+
+  .menu-button,
+  .viewer-sidebar,
+  .viewer-status {
+    display: none !important;
+  }
+
+  .viewer-document {
+    width: 100%;
+    min-height: 0;
+  }
+}
+
+@page {
+  margin: 16mm;
 }

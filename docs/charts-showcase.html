@@ -1,0 +1,263 @@
+<article lang="ja">
+  <header>
+    <h1>Chart.js showcase</h1>
+    <p>設計書の指標や比較を可視化するChart.jsの表示例です。各chartはsemanticな<code>figure</code>と<code>canvas</code>で構成し、Viewerのthemeに合わせた色を使用します。</p>
+  </header>
+
+  <aside aria-labelledby="charts-note">
+    <strong id="charts-note">このページについて</strong>
+    <p>Chart.jsを導入したprojectでは、HTML fragmentのinline scriptからglobalの<code>Chart</code>を直接利用できます。</p>
+  </aside>
+
+  <section id="trend">
+  <h2>Latency trend</h2>
+  <p>複数系列の時系列変化を比較する折れ線chartです。</p>
+  <figure>
+    <canvas id="latency-trend-chart" width="760" height="340" role="img" aria-label="直近6週間のP50とP95 latencyの推移">直近6週間のP50とP95 latencyの推移。</canvas>
+    <figcaption>直近6週間のAPI latency。単位はms。</figcaption>
+  </figure>
+  <details>
+    <summary>Source data</summary>
+    <table>
+      <caption>週別API latency（ms）</caption>
+      <thead>
+        <tr><th scope="col">週</th><th scope="col">P50</th><th scope="col">P95</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">W1</th><td>82</td><td>220</td></tr>
+        <tr><th scope="row">W2</th><td>78</td><td>205</td></tr>
+        <tr><th scope="row">W3</th><td>74</td><td>198</td></tr>
+        <tr><th scope="row">W4</th><td>71</td><td>176</td></tr>
+        <tr><th scope="row">W5</th><td>68</td><td>169</td></tr>
+        <tr><th scope="row">W6</th><td>64</td><td>151</td></tr>
+      </tbody>
+    </table>
+  </details>
+  </section>
+
+  <section id="comparison">
+  <h2>Requests by endpoint</h2>
+  <p>categoryごとの量と内訳を比較する積み上げ棒chartです。</p>
+  <figure>
+    <canvas id="request-volume-chart" width="760" height="340" role="img" aria-label="endpoint別の成功requestとerror requestの件数">endpoint別の成功requestとerror requestの件数。</canvas>
+    <figcaption>1時間あたりのrequest数をendpointと結果別に比較。</figcaption>
+  </figure>
+  <details>
+    <summary>Source data</summary>
+    <table>
+      <caption>endpoint別の1時間あたりrequest数</caption>
+      <thead>
+        <tr><th scope="col">Endpoint</th><th scope="col">成功</th><th scope="col">Error</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row"><code>GET /docs</code></th><td>1240</td><td>24</td></tr>
+        <tr><th scope="row"><code>GET /assets</code></th><td>940</td><td>18</td></tr>
+        <tr><th scope="row"><code>GET /nav</code></th><td>430</td><td>7</td></tr>
+        <tr><th scope="row"><code>GET /runtime</code></th><td>380</td><td>3</td></tr>
+      </tbody>
+    </table>
+  </details>
+  </section>
+
+  <section id="composition">
+  <h2>Traffic sources</h2>
+  <p>全体に占める割合を示すドーナツchartです。</p>
+  <figure>
+    <canvas id="traffic-source-chart" width="760" height="340" role="img" aria-label="client種別ごとのtraffic構成比">client種別ごとのtraffic構成比。</canvas>
+    <figcaption>client種別ごとのtraffic構成比。</figcaption>
+  </figure>
+  <details>
+    <summary>Source data</summary>
+    <table>
+      <caption>client種別ごとのtraffic構成比</caption>
+      <thead>
+        <tr><th scope="col">Client</th><th scope="col">構成比（%）</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">Desktop</th><td>48</td></tr>
+        <tr><th scope="row">Mobile</th><td>31</td></tr>
+        <tr><th scope="row">Automation</th><td>16</td></tr>
+        <tr><th scope="row">Other</th><td>5</td></tr>
+      </tbody>
+    </table>
+  </details>
+  </section>
+
+  <section id="profile">
+  <h2>Quality profile</h2>
+  <p>複数の評価軸をまとめて比較するレーダーchartです。</p>
+  <figure>
+    <canvas id="quality-profile-chart" width="760" height="340" role="img" aria-label="現行releaseと次期releaseの品質指標比較">現行releaseと次期releaseの品質指標比較。</canvas>
+    <figcaption>現行releaseと次期releaseの品質指標。値が大きいほど良好。</figcaption>
+  </figure>
+  <details>
+    <summary>Source data</summary>
+    <table>
+      <caption>release別の品質指標</caption>
+      <thead>
+        <tr><th scope="col">指標</th><th scope="col">現行release</th><th scope="col">次期release</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">速度</th><td>68</td><td>84</td></tr>
+        <tr><th scope="row">安定性</th><td>78</td><td>90</td></tr>
+        <tr><th scope="row">可用性</th><td>74</td><td>82</td></tr>
+        <tr><th scope="row">保守性</th><td>65</td><td>88</td></tr>
+        <tr><th scope="row">accessibility</th><td>72</td><td>91</td></tr>
+      </tbody>
+    </table>
+  </details>
+  </section>
+
+  <script>
+    const chartStyle = getComputedStyle(document.documentElement);
+    const chartText = chartStyle.getPropertyValue("--doc-text").trim();
+    const chartMuted = chartStyle.getPropertyValue("--doc-muted").trim();
+    const chartBorder = chartStyle.getPropertyValue("--doc-border").trim();
+    const chartSurface = chartStyle.getPropertyValue("--doc-surface").trim();
+    const blue = chartStyle.getPropertyValue("--doc-accent").trim();
+    const green = chartStyle.getPropertyValue("--doc-success-border").trim();
+    const orange = chartStyle.getPropertyValue("--doc-warning-border").trim();
+    const purple = chartStyle.getPropertyValue("--doc-danger-border").trim();
+    const blueFill = withAlpha(blue, 0.22);
+    const greenFill = withAlpha(green, 0.22);
+    const orangeFill = withAlpha(orange, 0.22);
+    const purpleFill = withAlpha(purple, 0.22);
+    const mutedFill = withAlpha(chartMuted, 0.22);
+
+    function withAlpha(hexColor, alpha) {
+      const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hexColor);
+      if (match === null) {
+        return hexColor;
+      }
+      const red = Number.parseInt(match[1], 16);
+      const green = Number.parseInt(match[2], 16);
+      const blue = Number.parseInt(match[3], 16);
+      return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+    }
+
+    const cartesianOptions = {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: chartText } }
+      },
+      scales: {
+        x: { ticks: { color: chartMuted }, grid: { color: chartBorder } },
+        y: { beginAtZero: true, ticks: { color: chartMuted }, grid: { color: chartBorder } }
+      }
+    };
+
+    new Chart(document.getElementById("latency-trend-chart"), {
+      type: "line",
+      data: {
+        labels: ["W1", "W2", "W3", "W4", "W5", "W6"],
+        datasets: [
+          {
+            label: "P50",
+            data: [82, 78, 74, 71, 68, 64],
+            borderColor: green,
+            backgroundColor: greenFill,
+            fill: true,
+            tension: 0.3
+          },
+          {
+            label: "P95",
+            data: [220, 205, 198, 176, 169, 151],
+            borderColor: blue,
+            backgroundColor: blueFill,
+            fill: true,
+            tension: 0.3
+          }
+        ]
+      },
+      options: cartesianOptions
+    });
+
+    new Chart(document.getElementById("request-volume-chart"), {
+      type: "bar",
+      data: {
+        labels: ["GET /docs", "GET /assets", "GET /nav", "GET /runtime"],
+        datasets: [
+          {
+            label: "成功",
+            data: [1240, 940, 430, 380],
+            backgroundColor: greenFill,
+            borderColor: green,
+            borderWidth: 1
+          },
+          {
+            label: "error",
+            data: [24, 18, 7, 3],
+            backgroundColor: orangeFill,
+            borderColor: orange,
+            borderWidth: 1
+          }
+        ]
+      },
+      options: {
+        ...cartesianOptions,
+        scales: {
+          x: { stacked: true, ticks: { color: chartMuted }, grid: { color: chartBorder } },
+          y: { stacked: true, beginAtZero: true, ticks: { color: chartMuted }, grid: { color: chartBorder } }
+        }
+      }
+    });
+
+    new Chart(document.getElementById("traffic-source-chart"), {
+      type: "doughnut",
+      data: {
+        labels: ["Desktop", "Mobile", "Automation", "Other"],
+        datasets: [{
+          data: [48, 31, 16, 5],
+          backgroundColor: [blueFill, greenFill, purpleFill, orangeFill],
+          borderColor: [blue, green, purple, orange],
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: "bottom", labels: { color: chartText } }
+        }
+      }
+    });
+
+    new Chart(document.getElementById("quality-profile-chart"), {
+      type: "radar",
+      data: {
+        labels: ["速度", "安定性", "可用性", "保守性", "accessibility"],
+        datasets: [
+          {
+            label: "現行release",
+            data: [68, 78, 74, 65, 72],
+            borderColor: chartMuted,
+            backgroundColor: mutedFill,
+            pointBackgroundColor: chartMuted
+          },
+          {
+            label: "次期release",
+            data: [84, 90, 82, 88, 91],
+            borderColor: purple,
+            backgroundColor: purpleFill,
+            pointBackgroundColor: purple
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { labels: { color: chartText } }
+        },
+        scales: {
+          r: {
+            beginAtZero: true,
+            max: 100,
+            angleLines: { color: chartBorder },
+            grid: { color: chartBorder },
+            pointLabels: { color: chartText },
+            ticks: { color: chartMuted, backdropColor: chartSurface }
+          }
+        }
+      }
+    });
+  </script>
+</article>

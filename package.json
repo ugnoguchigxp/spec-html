@@ -1,6 +1,7 @@
 {
-  "name": "html-docs",
+  "name": "spec-html",
   "version": "0.1.0",
+  "private": true,
   "description": "Local HTML document viewer for AI-generated specifications.",
   "keywords": [
     "documentation",
@@ -10,10 +11,10 @@
     "chart.js"
   ],
   "license": "MIT",
-  "author": "HTML Docs contributors",
+  "author": "Spec HTML contributors",
   "type": "module",
   "bin": {
-    "html-docs": "dist/cli.js"
+    "spec-html": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -21,14 +22,13 @@
     "RELEASING.md",
     "CHANGELOG.md",
     "CONTRIBUTING.md",
-    "docs/authoring.md"
+    "docs/authoring.html",
+    "docs/implementation-plan.html",
+    "docs/mermaid-showcase.html",
+    "docs/charts-showcase.html"
   ],
   "engines": {
     "node": ">=24"
-  },
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "clean": "node ./scripts/clean.mjs",
@@ -39,10 +39,8 @@
     "test:browser": "playwright test",
     "test:pack": "node ./scripts/test-pack.mjs",
     "check": "npm run typecheck && npm run lint && npm test && npm run build && npm run test:browser && npm run test:pack",
-    "release:metadata": "node ./scripts/check-release.mjs",
-    "release:check": "npm run release:metadata && npm run check && npm publish --dry-run --ignore-scripts",
     "prepack": "npm run typecheck && npm test && npm run build",
-    "prepublishOnly": "npm run release:check"
+    "prepublishOnly": "node ./scripts/refuse-publish.mjs"
   },
   "dependencies": {
     "open": "^11.0.1"

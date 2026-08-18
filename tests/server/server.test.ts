@@ -15,7 +15,7 @@ let mermaidRoot: string;
 let runningServer: RunningServer | undefined;
 
 beforeEach(async () => {
-  fixtureRoot = await mkdtemp(join(tmpdir(), "html-docs-server-"));
+  fixtureRoot = await mkdtemp(join(tmpdir(), "spec-html-server-"));
   contentRoot = join(fixtureRoot, "content");
   runtimeRoot = join(fixtureRoot, "runtime");
   chartFile = join(fixtureRoot, "chart.js");
@@ -26,8 +26,10 @@ beforeEach(async () => {
   await mkdir(join(mermaidRoot, "chunks"), { recursive: true });
 
   await Promise.all([
-    writeFile(join(contentRoot, "nav.html"), "<nav>Navigation</nav>"),
-    writeFile(join(contentRoot, "nested", "page.html"), "<article>Nested</article>"),
+    writeFile(
+      join(contentRoot, "nested", "page.html"),
+      "<article><h1>Nested</h1></article>",
+    ),
     writeFile(join(contentRoot, "assets", "pixel.svg"), "<svg></svg>"),
     writeFile(join(runtimeRoot, "viewer.js"), "export {};"),
     writeFile(join(runtimeRoot, "shell.css"), "body {}"),
@@ -56,18 +58,21 @@ describe("local content server", () => {
   it("serves the shell, runtime files, content files, and assets", async () => {
     const server = requireServer();
     const shell = await fetch(`${server.origin}/`);
-    const viewer = await fetch(`${server.origin}/_html-docs/viewer.js`);
-    const shellCss = await fetch(`${server.origin}/_html-docs/shell.css`);
-    const documentCss = await fetch(`${server.origin}/_html-docs/document.css`);
-    const mermaidLoader = await fetch(`${server.origin}/_html-docs/mermaid.js`);
-    const chart = await fetch(`${server.origin}/_html-docs/integrations/chart.js`);
+    const viewer = await fetch(`${server.origin}/_spec-html/viewer.js`);
+    const shellCss = await fetch(`${server.origin}/_spec-html/shell.css`);
+    const documentCss = await fetch(`${server.origin}/_spec-html/document.css`);
+    const mermaidLoader = await fetch(`${server.origin}/_spec-html/mermaid.js`);
+    const chart = await fetch(`${server.origin}/_spec-html/integrations/chart.js`);
     const mermaid = await fetch(
-      `${server.origin}/_html-docs/integrations/mermaid/mermaid.esm.min.mjs`,
+      `${server.origin}/_spec-html/integrations/mermaid/mermaid.esm.min.mjs`,
     );
     const mermaidChunk = await fetch(
-      `${server.origin}/_html-docs/integrations/mermaid/chunks/flow.mjs`,
+      `${server.origin}/_spec-html/integrations/mermaid/chunks/flow.mjs`,
     );
-    const navigation = await fetch(`${server.origin}/_content/nav.html`);
+    const navigation = await fetch(`${server.origin}/_spec-html/navigation`);
+    const liveReload = await fetch(`${server.origin}/_spec-html/live-reload`, {
+      method: "HEAD",
+    });
     const nested = await fetch(`${server.origin}/_content/nested/page.html`);
     const asset = await fetch(`${server.origin}/_content/assets/pixel.svg`);
 
@@ -84,9 +89,15 @@ describe("local content server", () => {
     expect(chart.status).toBe(200);
     expect(mermaid.status).toBe(200);
     expect(mermaidChunk.status).toBe(200);
-    expect(await navigation.text()).toContain("Navigation");
+    const navigationBody = await navigation.text();
+    expect(navigationBody).toContain('<h2>nested</h2>');
+    expect(navigationBody).toContain(
+      '<a href="./nested/page.html" title="Nested">Nested</a>',
+    );
     expect(await nested.text()).toContain("Nested");
     expect(asset.headers.get("content-type")).toBe("image/svg+xml");
+    expect(liveReload.status).toBe(200);
+    expect(liveReload.headers.get("content-type")).toContain("text/event-stream");
   });
 
   it("runs without optional Chart.js and Mermaid installations", async () => {
@@ -104,25 +115,47 @@ describe("local content server", () => {
     expect(body).toContain('data-chart-js="false"');
     expect(body).toContain('data-mermaid="false"');
     expect(
-      (await fetch(`${server.origin}/_html-docs/integrations/chart.js`)).status,
+      (await fetch(`${server.origin}/_spec-html/integrations/chart.js`)).status,
     ).toBe(404);
     expect(
       (
         await fetch(
-          `${server.origin}/_html-docs/integrations/mermaid/mermaid.esm.min.mjs`,
+          `${server.origin}/_spec-html/integrations/mermaid/mermaid.esm.min.mjs`,
         )
       ).status,
     ).toBe(404);
   });
 
   it("responds to HEAD without a body", async () => {
-    const response = await fetch(`${requireServer().origin}/_content/nav.html`, {
+    const origin = requireServer().origin;
+    const body = await (await fetch(`${origin}/_spec-html/navigation`)).text();
+    const response = await fetch(`${origin}/_spec-html/navigation`, {
       method: "HEAD",
     });
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("content-length")).toBe("21");
+    expect(response.headers.get("content-length")).toBe(
+      String(Buffer.byteLength(body)),
+    );
     expect(await response.text()).toBe("");
+  });
+
+  it("reflects directory changes without a nav.html file", async () => {
+    const origin = requireServer().origin;
+    expect(
+      (await fetch(`${origin}/_spec-html/navigation`)).status,
+    ).toBe(200);
+    expect((await fetch(`${origin}/_content/nav.html`)).status).toBe(404);
+
+    await writeFile(
+      join(contentRoot, "new-document.html"),
+      "<article><h1>New &amp; updated</h1></article>",
+    );
+
+    const navigation = await fetch(`${origin}/_spec-html/navigation`);
+    expect(await navigation.text()).toContain(
+      '<a href="./new-document.html" title="New &amp; updated">New &amp; updated</a>',
+    );
   });
 
   it("returns useful HTTP errors", async () => {

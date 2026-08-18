@@ -1,1 +1,1 @@
-declare const __HTML_DOCS_VERSION__: string;
+declare const __SPEC_HTML_VERSION__: string;

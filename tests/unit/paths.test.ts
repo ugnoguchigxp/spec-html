@@ -18,7 +18,7 @@ let root: string;
 let fixtureRoot: string;
 
 beforeEach(async () => {
-  fixtureRoot = await mkdtemp(join(tmpdir(), "html-docs-paths-"));
+  fixtureRoot = await mkdtemp(join(tmpdir(), "spec-html-paths-"));
   root = join(fixtureRoot, "content");
   await mkdir(join(root, "nested"), { recursive: true });
   await writeFile(join(root, "nested", "page.html"), "nested");

@@ -1,32 +1,37 @@
-<article>
-  <h1>Overview</h1>
-  <p>HTML Docs displays <strong>AI-generated specifications</strong> as regular HTML fragments.</p>
+<article lang="en">
+  <header>
+    <h1>Overview</h1>
+    <p>Spec HTML displays <strong>AI-generated specifications</strong> as regular HTML fragments.</p>
+  </header>
 
+  <section id="requirements">
   <h2>Requirements</h2>
   <ul>
     <li>Write semantic HTML.</li>
-    <li>Keep navigation in <code>nav.html</code>.</li>
+    <li>Use one <code>h1</code> as the navigation title.</li>
     <li><input type="checkbox" checked disabled> Review the document structure.</li>
   </ul>
 
-  <aside>
-    <strong>Note</strong>
+  <aside aria-labelledby="appearance-note">
+    <strong id="appearance-note">Note</strong>
     <p>The default styles follow the operating system's light or dark appearance.</p>
   </aside>
 
-  <aside data-type="warning">
-    <strong>Warning</strong>
+  <aside data-type="warning" aria-labelledby="trust-warning">
+    <strong id="trust-warning">Warning</strong>
     <p>Only open trusted HTML because inline scripts are executed.</p>
   </aside>
+  </section>
 
-  <h2 id="semantics">Semantic elements</h2>
+  <section id="semantics">
+  <h2>Semantic elements</h2>
   <p>Use <mark>meaningful elements</mark> and press <kbd>Tab</kbd> to verify focus order.</p>
 
   <dl>
     <dt>Fragment</dt>
     <dd>HTML content beginning with an element such as <code>article</code>.</dd>
     <dt>Navigation</dt>
-    <dd>Links stored in <code>nav.html</code>.</dd>
+    <dd>Links derived from the content directory.</dd>
   </dl>
 
   <blockquote>
@@ -36,7 +41,7 @@
   <table>
     <caption>Supported presentation</caption>
     <thead>
-      <tr><th>Element</th><th>Purpose</th></tr>
+      <tr><th scope="col">Element</th><th scope="col">Purpose</th></tr>
     </thead>
     <tbody>
       <tr><td><code>aside</code></td><td>Callouts</td></tr>
@@ -45,7 +50,7 @@
     </tbody>
   </table>
 
-  <pre><code>&lt;article&gt;
+  <pre><code class="language-html">&lt;article lang="en"&gt;
   &lt;h1&gt;Specification&lt;/h1&gt;
 &lt;/article&gt;</code></pre>
 
@@ -68,7 +73,10 @@
     </svg>
     <figcaption>Standard HTML remains the source of the rendered document.</figcaption>
   </figure>
+  </section>
 
   <hr>
-  <p><small>Version 0.1 semantic style sample.</small></p>
+  <footer>
+    <p><small>Version 0.1 semantic style sample.</small></p>
+  </footer>
 </article>

@@ -1,4 +1,5 @@
 import { RUNTIME_PREFIX } from "./constants.js";
+import type { ThemePreference } from "./theme.js";
 
 export interface FrameIntegrations {
   chartJs: boolean;
@@ -9,9 +10,13 @@ export function buildSrcdoc(
   fragment: string,
   documentUrl: URL,
   integrations: FrameIntegrations,
+  themePreference: ThemePreference,
 ): string {
   const frameDocument = document.implementation.createHTMLDocument("");
   frameDocument.documentElement.lang = "ja";
+  if (themePreference !== "system") {
+    frameDocument.documentElement.dataset.theme = themePreference;
+  }
   frameDocument.head.querySelector("title")?.remove();
 
   appendMeta(frameDocument, "charset", "utf-8");

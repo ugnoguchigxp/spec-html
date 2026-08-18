@@ -1,0 +1,120 @@
+<article lang="ja">
+<header>
+<h1>Authoring guide</h1>
+<p>このguideは、LLMが通常Markdownで生成する設計書や仕様書を、Markdown以上の表現力と読みやすさを持つ構造的なHTML fragmentとして生成・編集する方法を定めます。LLMには完全なWeb pageや独自componentではなく、標準のsemantic HTMLで本文を直接生成させます。Viewerと生成文書はローカルの信頼済み環境だけで利用し、公開serviceへのhostingを前提にしません。</p>
+</header>
+<section id="authoring-workflow">
+<h2>LLM authoring workflow</h2>
+<p>LLMへの依頼には、本文をMarkdownではなく構造的なHTML fragmentで出力し、後述のDocument authoring principlesへ適合させることを指定します。Navigationはcontent directoryから実行時に構成されるため、複数文書を作る場合もメニューfileの更新は不要です。</p>
+<p>Spec HTMLは既存のMarkdownを機械的にHTMLへ変換するtoolではありません。LLMが構造的なHTMLを直接生成し、共通Viewerが一貫した見栄えを与えることで、Markdownでは扱いにくい表現を使いながら文書ごとのCSS作成を減らします。</p>
+</section>
+<section id="document-authoring-principles">
+<h2>Document authoring principles</h2>
+<p>Spec HTMLは、独自の文書DSLではなく、標準HTMLをそのまま本文形式として使用します。要素ごとの許可listは設けず、<a href="https://html.spec.whatwg.org/">HTML Living Standard</a>で本文に使用できる要素を、本来の意味に従って自由に使用します。project固有の制約は次の最小限に留めます。</p>
+<ul>
+<li>各設計書fileは、文書の主言語を<code>lang</code>で示した1つの<code>article</code>をrootとするHTML fragmentにします。Viewerが生成する<code>html</code>、<code>head</code>、<code>body</code>などの文書外枠は含めません。</li>
+<li>文書には1つの<code>h1</code>を置き、見出しlevelを飛ばしません。それ以外の標準要素は、内容に合う意味を持つものを選びます。</li>
+<li>適切なsemantic elementがある場合は、<code>div</code>や<code>span</code>で代用しません。<code>p</code>は意味の薄い汎用containerではなく、文章の段落に使用します。</li>
+<li><code>specification</code>や<code>spec-document</code>のような独自要素は使用しません。標準HTMLにないdomain上の分類が必要な場合は、<code>article</code>や<code>section</code>などの標準要素へ<code>data-*</code>属性を追加し、同じ情報を本文にも表示します。</li>
+<li><code>script</code>はchartなどの表示を強化する目的に限定します。要件、数値、結論、警告などの重要な内容は、JavaScriptを実行しなくてもHTML本文から取得できるようにします。</li>
+</ul>
+<p>標準HTMLの仕様やaccessibility要件を、このguideで要素ごとに再定義しません。詳細な書き方は標準仕様に従い、このprojectでは規約の追加よりもsemantic HTMLの例と自動検証で品質を担保します。</p>
+</section>
+<section id="content-directory">
+<h2>Content directory</h2>
+<p>Viewerへ渡すdirectoryには、任意数のHTML fragmentを置きます。画像などのassetは同じdirectoryの配下へ置いてください。</p>
+<pre><code class="language-text">specs/
+├─ overview.html
+├─ api/
+│  └─ endpoints.html
+└─ assets/
+   └─ architecture.svg
+</code></pre>
+</section>
+<section id="navigation">
+<h2>Navigation</h2>
+<p>Viewerはcontent directory内の拡張子が<code>.html</code>のfileを再帰的に読み取り、directoryごとにまとめたnavigationを実行時に構成します。各linkの表示名には文書内で最初に見つかった<code>h1</code>を使用し、<code>h1</code>が空または存在しない場合はfile名を使用します。</p>
+<p>隠しdirectoryと<code>node_modules</code>は探索対象外です。Navigationはbrowserを開くたびに現在のdirectoryから構成され、repositoryへメニュー用fileを保存しません。起動中は指定directory配下の変更を監視し、文書や画像を変更・追加・削除するとbrowserを自動reloadします。表示可能なHTMLがない場合、Viewerは案内messageを表示します。</p>
+</section>
+<section id="html-fragments">
+<h2>HTML fragments</h2>
+<p>各fileはDOCTYPEや<code>html</code>、<code>head</code>、<code>body</code>を持つ完全なHTML documentではなく、本文fragmentとして記述します。最初の<code>h1</code>がViewerのdocument titleになります。</p>
+<pre><code class="language-html">&lt;article lang=&quot;en&quot;&gt;
+  &lt;header&gt;
+    &lt;h1&gt;API endpoints&lt;/h1&gt;
+    &lt;p&gt;Public endpoint definitions.&lt;/p&gt;
+  &lt;/header&gt;
+
+  &lt;section id=&quot;errors&quot;&gt;
+    &lt;h2&gt;Errors&lt;/h2&gt;
+    &lt;p&gt;Errors use the problem details format.&lt;/p&gt;
+  &lt;/section&gt;
+&lt;/article&gt;
+</code></pre>
+<p>文書間linkとasset URLは、現在表示しているHTML fileを基準に解決されます。</p>
+<pre><code class="language-html">&lt;a href=&quot;../overview.html#authentication&quot;&gt;Authentication overview&lt;/a&gt;
+&lt;img src=&quot;../assets/architecture.svg&quot; alt=&quot;System architecture&quot;&gt;
+</code></pre>
+</section>
+<section id="semantic-styles-and-callouts">
+<h2>Semantic styles and callouts</h2>
+<p>Viewerは見出し、list、table、code、blockquote、details、figureなどへ既定styleを適用します。Sidebar上部の<code>spec-html</code>ラベル横にある「Light」「Auto」「Dark」から表示themeを選択でき、「Auto」はOS設定へ追従します。選択内容はbrowserへ保存され、dark表示は<a href="https://github.com/folke/tokyonight.nvim">Tokyo Night Storm</a>を参考にした青みのあるpaletteです。Sidebar幅を超える文書タイトルは末尾を省略表示し、hover時のtooltipで全文を確認できます。画像、SVG、canvas、video、audioは文書幅を超えません。インライン画像とSVGは文章内にも配置できます。</p>
+<p>補足には<code>aside</code>を使用できます。視覚的な種類は<code>data-type</code>へ<code>warning</code>、<code>danger</code>、<code>success</code>のいずれかを指定します。属性を省略した場合はnote表示です。支援技術でも内容を識別できるよう、見出しへIDを付けて<code>aria-labelledby</code>から参照してください。</p>
+<pre><code class="language-html">&lt;aside data-type=&quot;danger&quot; aria-labelledby=&quot;delete-warning&quot;&gt;
+  &lt;h3 id=&quot;delete-warning&quot;&gt;削除に関する警告&lt;/h3&gt;
+  &lt;p&gt;この操作は取り消せません。&lt;/p&gt;
+&lt;/aside&gt;
+</code></pre>
+<p>Browserの印刷機能を使用すると、Sidebarとmobile menu buttonを除いた現在の文書をlight配色で印刷します。閉じている<code>details</code>の内容も印刷対象です。</p>
+</section>
+<section id="mermaid">
+<h2>Mermaid</h2>
+<p>利用projectへ<code>mermaid</code>をインストールし、diagram sourceを<code>.mermaid</code>要素へ直接記述します。</p>
+<pre><code class="language-html">&lt;figure&gt;
+  &lt;pre class=&quot;mermaid&quot;&gt;
+  flowchart LR
+    Browser --&gt; API
+    API --&gt; Database
+  &lt;/pre&gt;
+  &lt;figcaption&gt;Request processing flow&lt;/figcaption&gt;
+&lt;/figure&gt;
+</code></pre>
+<p>Viewerはページ表示時にdiagramを描画します。生成済みSVGをrepositoryへ保存する工程は不要なので、頻繁な仕様変更でもHTML内のdiagram sourceだけを更新できます。Mermaidが未導入の場合は描画処理を読み込みません。themeはSidebarで選択した表示へ追従し、「Auto」の場合はOS設定変更時にも現在の文書を再読み込みして描画し直します。</p>
+</section>
+<section id="chart-js">
+<h2>Chart.js</h2>
+<p>利用projectへ<code>chart.js</code>をインストールすると、fragmentのinline scriptからglobalの<code>Chart</code>を使用できます。</p>
+<pre><code class="language-html">&lt;figure&gt;
+  &lt;canvas id=&quot;request-count&quot; aria-describedby=&quot;request-count-caption&quot;&gt;&lt;/canvas&gt;
+  &lt;figcaption id=&quot;request-count-caption&quot;&gt;
+    Request count: GET 120, POST 35.
+  &lt;/figcaption&gt;
+&lt;/figure&gt;
+&lt;script&gt;
+  new Chart(document.getElementById(&quot;request-count&quot;), {
+    type: &quot;bar&quot;,
+    data: {
+      labels: [&quot;GET&quot;, &quot;POST&quot;],
+      datasets: [{ label: &quot;Requests&quot;, data: [120, 35] }]
+    }
+  });
+&lt;/script&gt;
+</code></pre>
+<p>DOM上のIDは同じfragment内で一意にしてください。Chart.jsが未導入の場合、<code>Chart</code>を参照するscriptは書かないでください。</p>
+</section>
+<section id="trust-boundary">
+<h2>Trust boundary</h2>
+<p>fragment内のinline scriptは実行されます。Spec HTMLはsanitizerではありません。内容を信頼できないHTMLや、外部入力をそのまま埋め込んだHTMLを開かないでください。</p>
+<p>content directory外のfileは配信されません。共有assetも必ずcontent directory配下へ置いてください。</p>
+</section>
+<section id="troubleshooting">
+<h2>Troubleshooting</h2>
+<ul>
+<li>navigationが空になる: content directory内に隠しdirectoryと<code>node_modules</code>以外の<code>.html</code> fileがあるか確認する。</li>
+<li>documentが404になる: link先がcontent directory内にあり、大文字・小文字を含めfile名が一致するか確認する。</li>
+<li>Mermaidがsourceのままになる: 利用projectで<code>npm install --save-dev mermaid</code>を実行し、Viewerを再起動する。</li>
+<li>Chartが表示されない: <code>chart.js</code>のinstall、canvas ID、browser consoleを確認する。</li>
+<li>変更が反映されない: Viewerが起動中か、変更したfileが起動時に指定したdirectory配下にあるかを確認する。</li>
+</ul>
+</section>
+</article>
