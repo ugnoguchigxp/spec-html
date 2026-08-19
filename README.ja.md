@@ -1,5 +1,7 @@
 # Spec HTML
 
+[![npm version](https://img.shields.io/npm/v/spec-html.svg)](https://www.npmjs.com/package/spec-html)
+
 [English](./README.md) | 日本語
 
 LLMが通常Markdownで生成する設計書や仕様書を、構造的なHTMLへ置き換えてローカルで読みやすく閲覧するためのViewerです。標準のsemantic HTMLを使うことで、Markdown以上の表現力を持つ文書を簡単に作成し、navigation、文書間リンク、画像、Chart.js、Mermaidを活用できます。

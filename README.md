@@ -1,5 +1,7 @@
 # Spec HTML
 
+[![npm version](https://img.shields.io/npm/v/spec-html.svg)](https://www.npmjs.com/package/spec-html)
+
 English | [日本語](./README.ja.md)
 
 Spec HTML is a local viewer for design documents and specifications written as structured HTML. It gives LLM-generated documents more expressive building blocks than Markdown while keeping authoring simple: use standard semantic HTML, and let the shared viewer provide navigation, cross-document links, images, Chart.js, and Mermaid.
