@@ -7,7 +7,8 @@ import {
   ARCHIVED_DIRECTORY,
   ContentDocumentNotFoundError,
   DocumentArchiveConflictError,
-  getDocumentArchived,
+  getDocumentArchiveState,
+  MigrationManagedDocumentError,
   setDocumentArchived,
 } from "../content/archive.js";
 import {
@@ -233,7 +234,6 @@ async function handleDocumentState(
   }
 
   try {
-    let archived: boolean;
     if (request.method === "PUT") {
       if (!requestOriginMatches(request, requestOrigin)) {
         sendText(request, response, 403, "Forbidden");
@@ -244,11 +244,10 @@ async function handleDocumentState(
         sendText(request, response, 400, "Invalid request body");
         return;
       }
-      archived = await setDocumentArchived(contentRoot, documentPath, update);
-    } else {
-      archived = await getDocumentArchived(contentRoot, documentPath);
+      await setDocumentArchived(contentRoot, documentPath, update);
     }
-    sendJson(request, response, { doc: documentPath, archived });
+    const state = await getDocumentArchiveState(contentRoot, documentPath);
+    sendJson(request, response, { doc: documentPath, ...state });
   } catch (error: unknown) {
     if (error instanceof ContentDocumentNotFoundError) {
       sendText(request, response, 404, "Document not found");
@@ -256,6 +255,15 @@ async function handleDocumentState(
     }
     if (error instanceof DocumentArchiveConflictError) {
       sendText(request, response, 409, "Document archive conflict");
+      return;
+    }
+    if (error instanceof MigrationManagedDocumentError) {
+      sendText(
+        request,
+        response,
+        409,
+        `Document is managed by migration ${error.migrationId}`,
+      );
       return;
     }
     throw error;

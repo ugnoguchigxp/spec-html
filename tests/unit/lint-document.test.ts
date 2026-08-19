@@ -61,6 +61,17 @@ describe("lintDocument", () => {
     await expect(rules('<article lang="en"><h1>One</h1><table><caption>Table</caption><tr><th scope="col">Value</th></tr></table></article>')).resolves.not.toContain("TBL002");
   });
 
+  it("accepts HTML5 IDs without whitespace, including numeric GitHub slugs", async () => {
+    await expect(
+      rules(
+        '<article lang="en"><h1 id="2026-plan">Plan</h1><p id="release:1.0">Ready</p></article>',
+      ),
+    ).resolves.not.toContain("HTML003");
+    await expect(
+      rules('<article lang="en"><h1 id="bad id">Plan</h1></article>'),
+    ).resolves.toContain("HTML003");
+  });
+
   it("reports directives alone and suppresses parser-derived diagnostics", async () => {
     const directive = await lintDocument(
       '<!-- html-validate-disable --><article lang="en"><h1>One</h1></article>',

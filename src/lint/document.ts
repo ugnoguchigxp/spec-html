@@ -43,6 +43,7 @@ const DIRECTIVE =
   /<!--[\s\S]*?html-validate-(?:enable|disable(?:-next|-block)?)[\s\S]*?-->/gi;
 const URL_ATTRIBUTES: ReadonlyMap<string, readonly string[]> = new Map([
   ["a", ["href"]],
+  ["area", ["href"]],
   ["link", ["href"]],
   ["img", ["src"]],
   ["script", ["src"]],
@@ -143,6 +144,7 @@ function createValidator(
       ],
       rules: {
         ...BUILTIN_RULES,
+        "valid-id": ["error", { relaxed: true }],
         "wcag/h63": ["error", { strict: true }],
         "spec-html/document-errors": "error",
         "spec-html/document-warnings": "warn",

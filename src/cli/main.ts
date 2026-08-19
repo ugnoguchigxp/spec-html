@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { formatFixCompact, formatFixJson } from "../fix/diagnostics.js";
 import { fixProject, writeFixProject } from "../fix/project.js";
@@ -30,10 +30,28 @@ import {
   type CliFixOptions,
   type CliFormatOptions,
   type CliLintOptions,
+  type CliMigrateOptions,
   type CliRunOptions,
 } from "./options.js";
 import { resolveOptionalIntegrations } from "../server/integrations.js";
 import { startServer } from "../server/start.js";
+import { normalizeDocumentPath } from "../content/document-path.js";
+import { documentFormatFromPath } from "../content/document-format.js";
+import { canonicalizeLanguageTag } from "../markdown/language.js";
+import {
+  formatMigrationLifecycleReport,
+  formatMigrationPlanReport,
+} from "../migrate/diagnostics.js";
+import {
+  createMigrationPlan,
+  migrationPlanHasBlockers,
+} from "../migrate/planner.js";
+import {
+  applyMigration,
+  finalizeMigration,
+  MigrationBlockedError,
+  rollbackMigration,
+} from "../migrate/runner.js";
 
 export const HELP_TEXT = `使い方: spec-html [directory] [options]
 
@@ -60,7 +78,10 @@ Check:
   spec-html check [directory] [--fix] [options]
 
 Convert:
-  spec-html convert <input.md> --lang <language-tag> [--output <output.html>]`;
+  spec-html convert <input.md> --lang <language-tag> [--output <output.html>]
+
+Migrate:
+  spec-html migrate [directory] --lang <language-tag> --check|--write`;
 
 export const LINT_HELP_TEXT = `使い方: spec-html lint [directory] [options]
 
@@ -109,7 +130,25 @@ Options:
   --output <output.html>   同じdirectoryへ新規HTML fileを作成（既存entryは拒否）
   --help                   このhelpを表示
 
---outputを省略するとHTMLだけをstdoutへ出力します。`;
+--outputを省略するとHTMLだけをstdoutへ出力します。
+出力後もMarkdownは残り、HTMLとは同期せずViewerでも別文書として表示されます。`;
+
+export const MIGRATE_HELP_TEXT = `使い方: spec-html migrate [directory] [options]
+
+Options:
+  --check                      一括移行を副作用なしで検証する
+  --write                      検証成功後にHTMLへ一括移行する
+  --rollback <migration-id>    migration単位で元の状態へ戻す
+  --finalize <migration-id>    現在のHTMLを採用してrollback backupを削除する
+  --lang <language-tag>        check／writeで生成するarticleの言語tag（必須）
+  --language-map <json>        Markdown pathごとの言語tagを上書きするJSON object
+  --allow-lossy                raw HTML／危険URLの除去を明示的に許可する
+  --reporter <compact|json>    report形式（既定: compact）
+  --warnings-as-errors         warningもcheck／writeのblockerにする
+  --help                       このhelpを表示
+
+4つのactionは相互排他です。write後のMarkdownはmigration管理下のArchiveへ移り、
+個別Restoreできません。戻す場合はmigration IDを指定してrollbackします。`;
 
 /** Dispatch a parsed command without an import-time process side effect. */
 export async function main(args: readonly string[]): Promise<number> {
@@ -134,6 +173,9 @@ export async function main(args: readonly string[]): Promise<number> {
       case "convert-help":
         console.log(CONVERT_HELP_TEXT);
         return 0;
+      case "migrate-help":
+        console.log(MIGRATE_HELP_TEXT);
+        return 0;
       case "version":
         console.log(__SPEC_HTML_VERSION__);
         return 0;
@@ -150,6 +192,8 @@ export async function main(args: readonly string[]): Promise<number> {
         return await runCheck(command.options);
       case "convert":
         return await runConvert(command.options);
+      case "migrate":
+        return await runMigrate(command.options);
       case "run":
         return await runViewer(command.options);
     }
@@ -166,7 +210,8 @@ export async function main(args: readonly string[]): Promise<number> {
       args[0] === "format" ||
       args[0] === "fix" ||
       args[0] === "check" ||
-      args[0] === "convert"
+      args[0] === "convert" ||
+      args[0] === "migrate"
       ? 2
       : 1;
   }
@@ -185,6 +230,7 @@ export async function runConvert(options: CliConvertOptions): Promise<number> {
   } else {
     await writeConvertedDocument(result);
     console.log(`Created: ${result.outputPath}`);
+    console.log(`Source retained (not synchronized): ${result.inputPath}`);
     console.log(formatConversionSummary(result));
     if (diagnostics.length > 0) {
       process.stderr.write(diagnostics);
@@ -192,6 +238,100 @@ export async function runConvert(options: CliConvertOptions): Promise<number> {
   }
 
   return conversionHasErrors(result) ? 1 : 0;
+}
+
+export async function runMigrate(options: CliMigrateOptions): Promise<number> {
+  const languages = "languageMapPath" in options && options.languageMapPath !== undefined
+    ? await readLanguageMap(options.languageMapPath)
+    : undefined;
+  if (options.action === "check") {
+    const plan = await createMigrationPlan({
+      contentRoot: options.contentRoot,
+      language: options.language,
+      ...(options.allowLossy === undefined
+        ? {}
+        : { allowLossy: options.allowLossy }),
+      ...(languages === undefined ? {} : { languages }),
+    });
+    console.log(
+      formatMigrationPlanReport(
+        plan,
+        "check",
+        options.reporter,
+        options.warningsAsErrors,
+      ),
+    );
+    return migrationPlanHasBlockers(plan, options.warningsAsErrors) ? 1 : 0;
+  }
+  if (options.action === "write") {
+    try {
+      const result = await applyMigration({
+        ...options,
+        ...(languages === undefined ? {} : { languages }),
+      });
+      console.log(
+        formatMigrationPlanReport(
+          result.plan,
+          "write",
+          options.reporter,
+          options.warningsAsErrors,
+          result.migrationId,
+        ),
+      );
+      return migrationPlanHasBlockers(result.plan, options.warningsAsErrors)
+        ? 1
+        : 0;
+    } catch (error: unknown) {
+      if (error instanceof MigrationBlockedError) {
+        console.error(`spec-html: ${error.message}`);
+        return 1;
+      }
+      throw error;
+    }
+  }
+  try {
+    if (!("migrationId" in options)) {
+      throw new Error("migration actionを解決できません");
+    }
+    const journal = options.action === "rollback"
+      ? await rollbackMigration(options.contentRoot, options.migrationId)
+      : await finalizeMigration(options.contentRoot, options.migrationId);
+    console.log(
+      formatMigrationLifecycleReport(
+        options.action,
+        journal,
+        options.reporter,
+      ),
+    );
+    return 0;
+  } catch (error: unknown) {
+    if (error instanceof MigrationBlockedError) {
+      console.error(`spec-html: ${error.message}`);
+      return 1;
+    }
+    throw error;
+  }
+}
+
+async function readLanguageMap(path: string): Promise<ReadonlyMap<string, string>> {
+  const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new CliUsageError("--language-mapはJSON objectで指定してください");
+  }
+  const languages = new Map<string, string>();
+  for (const [documentPath, value] of Object.entries(parsed)) {
+    if (
+      normalizeDocumentPath(documentPath) !== documentPath ||
+      documentFormatFromPath(documentPath) !== "markdown"
+    ) {
+      throw new CliUsageError(`--language-mapのMarkdown pathが不正です: ${documentPath}`);
+    }
+    if (typeof value !== "string") {
+      throw new CliUsageError(`--language-mapの言語tagが文字列ではありません: ${documentPath}`);
+    }
+    languages.set(documentPath, canonicalizeLanguageTag(value));
+  }
+  return languages;
 }
 
 interface CheckStageReport {

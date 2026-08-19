@@ -44,19 +44,53 @@
     <pre><code class="language-sh">spec-html ./specs --markdown-lang en
 spec-html convert ./specs/design.md --lang en
 spec-html convert ./specs/design.md --lang en --output ./specs/design.html
+spec-html migrate ./specs --lang en --check
+spec-html migrate ./specs --lang en --write
+spec-html migrate ./specs --lang en --language-map ./specs.languages.json --check
 </code></pre>
     <p>
       Omitting <code>--output</code> writes HTML only to stdout. An explicit output must be a new
       <code>.html</code> file in the input directory; it is never allowed to overwrite an existing
       file or symbolic link. Conversion does not delete, rename, archive, or synchronize the
-      Markdown source. Treat the generated HTML as an independent editable document.
+      Markdown source, and the command reports that it was retained. The viewer lists the source and
+      generated HTML separately. Treat the generated HTML as an independent editable document
+      instead of keeping both files as sources of truth.
     </p>
+    <p>
+      Conversion preserves GitHub-compatible heading IDs, including numeric prefixes, and maps GFM
+      cell alignment to viewer CSS without deprecated HTML attributes. A GFM table receives a real
+      caption copied from its nearest preceding heading; a table with no preceding heading remains a
+      lint error.
+    </p>
+    <p>
+      Use <code>migrate</code> for an all-or-nothing source-of-truth switch. Check mode does not
+      write. Write mode creates same-directory HTML files, rewrites mapped document links, verifies
+      lint and content parity, and archives the Markdown only after every preflight passes. The
+      migration ID can restore the unchanged batch with <code>--rollback</code>. Once the HTML is
+      accepted, <code>--finalize</code> keeps its current contents and removes rollback backups.
+      Migration-managed Markdown remains readable in Archive but cannot be restored individually.
+    </p>
+    <p>
+      Migration blocks lossy raw HTML or unsafe-URL removal unless <code>--allow-lossy</code> is
+      explicit. Unsupported front matter, footnotes, custom heading IDs, wiki links, GitHub alerts,
+      and math extensions receive source diagnostics. Tables and Mermaid diagrams use only a
+      preceding heading in the same block scope as their caption. A JSON language map can override
+      the fallback <code>--lang</code> for exact Markdown paths in mixed-language roots.
+    </p>
+    <aside>
+      <p>
+        The preflight rejects existing archive copies and unsafe archive directories, checks
+        capacity and portable path length, and reports non-navigation Markdown references in forms,
+        downloads, media attributes, CSS, scripts, and data attributes. Write mode also rescans all
+        documents and links immediately before commit and rolls back if active Markdown remains.
+      </p>
+    </aside>
     <aside>
       <p>
         The <code>lint</code>, <code>fix</code>, <code>format</code>, and
         <code>check</code> commands process HTML only. A successful check of a mixed directory does
-        not mean its Markdown source was linted. Generated drafts can retain semantic diagnostics,
-        such as a table that still needs an author-provided caption.
+        not mean its Markdown source was linted. Use <code>migrate --check</code> to validate the
+        complete Markdown-to-HTML plan before switching sources of truth.
       </p>
     </aside>
   </section>

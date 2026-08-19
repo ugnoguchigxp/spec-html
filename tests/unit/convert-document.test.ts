@@ -46,7 +46,7 @@ describe("convertMarkdownDocument", () => {
     await expect(access(join(root, "design.html"))).rejects.toThrow();
   });
 
-  it("creates a syntactically valid draft even when semantic lint errors remain", async () => {
+  it("creates a lint-clean table draft with a heading-derived caption", async () => {
     const input = join(root, "table.markdown");
     const output = join(root, "table.html");
     await writeFile(
@@ -59,13 +59,40 @@ describe("convertMarkdownDocument", () => {
       outputPath: output,
       language: "en",
     });
-    expect(result.diagnostics.map(({ rule }) => rule)).toContain("TBL001");
+    expect(result.diagnostics).toEqual([]);
 
     await writeConvertedDocument(result);
 
     await expect(readFile(output, "utf8")).resolves.toContain(
       '<th scope="col">Key</th>',
     );
+    await expect(readFile(output, "utf8")).resolves.toMatch(
+      /<caption>\s*Data\s*<\/caption>/,
+    );
+  });
+
+  it("does not report converter-generated heading IDs or table alignment as HTML errors", async () => {
+    const input = join(root, "aligned-table.md");
+    await writeFile(
+      input,
+      [
+        "# 2026 data",
+        "",
+        "| Key | Value |",
+        "| :--- | ---: |",
+        "| A | 1 |",
+      ].join("\n"),
+    );
+
+    const result = await convertMarkdownDocument({
+      inputPath: input,
+      language: "en",
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.output).toContain('id="2026-data"');
+    expect(result.output).toContain('class="markdown-align-right"');
+    expect(result.output).not.toContain(" align=");
   });
 
   it("reports raw HTML and unsafe URL notices", async () => {

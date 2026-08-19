@@ -360,7 +360,7 @@ describe("convert CLI execution", () => {
     await expect(access(join(root, "design.html"))).rejects.toThrow();
   });
 
-  it("creates an explicit draft and returns one for semantic lint errors", async () => {
+  it("creates an explicit lint-clean table draft", async () => {
     const root = await mkdtemp(join(tmpdir(), "spec-html-cli-convert-"));
     roots.push(root);
     const input = join(root, "table.md");
@@ -376,15 +376,18 @@ describe("convert CLI execution", () => {
 
     await expect(
       runConvert({ inputPath: input, outputPath: output, language: "en" }),
-    ).resolves.toBe(1);
+    ).resolves.toBe(0);
 
     expect(logs).toHaveBeenCalledWith(
       `Created: ${join(await realpath(root), "table.html")}`,
     );
     expect(logs).toHaveBeenCalledWith(
-      "summary lint-errors=1 lint-warnings=0 markdown-notices=0",
+      `Source retained (not synchronized): ${join(await realpath(root), "table.md")}`,
     );
-    expect(stderr).toHaveBeenCalledWith(expect.stringContaining("TBL001"));
+    expect(logs).toHaveBeenCalledWith(
+      "summary lint-errors=0 lint-warnings=0 markdown-notices=0",
+    );
+    expect(stderr).not.toHaveBeenCalled();
     await expect(readFile(output, "utf8")).resolves.toContain("<table>");
   });
 
@@ -397,6 +400,57 @@ describe("convert CLI execution", () => {
     await expect(
       main(["convert", join(tmpdir(), "missing-spec-html.md"), "--lang", "en"]),
     ).resolves.toBe(2);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("spec-html:"));
+  });
+});
+
+describe("migrate CLI execution", () => {
+  it("checks a Markdown migration without creating output or state files", async () => {
+    const root = await mkdtemp(join(tmpdir(), "spec-html-cli-migrate-"));
+    roots.push(root);
+    await writeFile(join(root, "guide.md"), "# Guide\n");
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(
+      main(["migrate", root, "--lang", "en", "--check"]),
+    ).resolves.toBe(0);
+    expect(output).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "summary markdown=1 creates=1 captions=0 html-rewrites=0 archives=1 parity=1/1 errors=0 warnings=0 ready=true",
+      ),
+    );
+    await expect(access(join(root, "guide.html"))).rejects.toThrow();
+    await expect(access(join(root, ".spec-html"))).rejects.toThrow();
+  });
+
+  it("applies an exact-path language map during migration checks", async () => {
+    const root = await mkdtemp(join(tmpdir(), "spec-html-cli-language-map-"));
+    roots.push(root);
+    await writeFile(join(root, "guide.md"), "# Guide\n");
+    const languageMap = join(root, "languages.json");
+    await writeFile(languageMap, '{"guide.md":"ja-jp"}\n');
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(
+      main([
+        "migrate",
+        root,
+        "--lang",
+        "en",
+        "--language-map",
+        languageMap,
+        "--reporter",
+        "json",
+        "--check",
+      ]),
+    ).resolves.toBe(0);
+    expect(output).toHaveBeenCalledWith(expect.stringContaining('"language": "ja-JP"'));
+  });
+
+  it("returns exit code 2 for migrate usage errors", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await expect(main(["migrate"])).resolves.toBe(2);
     expect(error).toHaveBeenCalledWith(expect.stringContaining("spec-html:"));
   });
 });

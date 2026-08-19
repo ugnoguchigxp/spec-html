@@ -21,8 +21,16 @@ export function createLiveReload(contentRoot: string): LiveReload {
     }
   };
 
-  const scheduleReload = (): void => {
+  const scheduleReload = (
+    _eventType: string,
+    filename: string | Buffer | null,
+  ): void => {
     if (closed) {
+      return;
+    }
+    const changedPath =
+      typeof filename === "string" ? filename : filename?.toString("utf8");
+    if (changedPath?.split(/[\\/]/, 1)[0] === ".spec-html") {
       return;
     }
     if (reloadTimer !== undefined) {

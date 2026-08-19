@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { access, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import {
+  applyMigration,
+  rollbackMigration,
+} from "../../src/migrate/runner.js";
 
 test("reloads only when the content directory changes", async ({
   page,
@@ -152,6 +156,9 @@ test("@smoke archives and restores the current document from the actions menu", 
       "Show documents",
     );
 
+    // Let the Archive filesystem events finish their live-reload debounce before
+    // starting an explicit navigation, especially on WebKit.
+    await page.waitForTimeout(100);
     await page.reload();
     await expect(frame.locator("h1")).toHaveText("Overview");
     await actionsButton.click();
@@ -200,6 +207,54 @@ test("switches between Documents and an empty Archive from the sidebar", async (
   ).toHaveText("Overview");
   await expect(page).toHaveURL(/\?doc=overview\.html$/);
   await expect(navigationViewButton).toHaveText("Archived");
+});
+
+test("disables individual Restore for migration-managed Markdown", async ({
+  page,
+}) => {
+  const contentRoot = resolve("tests/fixtures/browser");
+  const migrationId = "20260819T150000000Z-ccddee";
+  let applied = false;
+  try {
+    const result = await applyMigration({
+      contentRoot,
+      language: "en",
+      warningsAsErrors: false,
+      allowLossy: true,
+      createId: () => migrationId,
+    });
+    applied = result.migrationId === migrationId;
+    expect(applied).toBe(true);
+
+    await page.goto("/?doc=markdown.md&view=archive");
+    await expect(
+      page.frameLocator("iframe.viewer-document").locator("h1"),
+    ).toHaveText("Markdown design");
+    const actionsButton = page.getByRole("button", {
+      name: "Document actions",
+    });
+    await actionsButton.click();
+    await expect(page.getByRole("menuitem", { name: "Restore" })).toBeDisabled();
+    await expect(page.locator(".document-action-status")).toContainText(
+      migrationId,
+    );
+    await expect(page.locator(".document-action-status")).toContainText(
+      `migrate --rollback ${migrationId}`,
+    );
+  } finally {
+    if (applied) {
+      await rollbackMigration(contentRoot, migrationId);
+    }
+    await rm(
+      resolve(
+        contentRoot,
+        ".spec-html",
+        "migrations",
+        migrationId,
+      ),
+      { recursive: true, force: true },
+    );
+  }
 });
 
 function activeOverviewPath(): string {
@@ -383,6 +438,16 @@ test("@smoke previews Markdown safely, shows its source, and routes across forma
     )
     .toBeGreaterThan(0);
   await expect(frame.locator(".mermaid svg")).toBeVisible();
+  await expect(frame.locator('h2[id="2026-results"]')).toHaveText(
+    "2026 results",
+  );
+  await expect(
+    frame
+      .locator("tbody td")
+      .last()
+      .evaluate((cell) => getComputedStyle(cell).textAlign),
+  ).resolves.toBe("right");
+  await expect(frame.locator("table [align]")).toHaveCount(0);
   await frame.locator(".mermaid .node", { hasText: "HTML" }).click();
   await expect(
     frame

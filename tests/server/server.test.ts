@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isClientDisconnectError } from "../../src/server/routes.js";
 import { startServer } from "../../src/server/start.js";
 import type { RunningServer } from "../../src/server/types.js";
+import { applyMigration } from "../../src/migrate/runner.js";
 
 let fixtureRoot: string;
 let contentRoot: string;
@@ -204,6 +205,9 @@ describe("local content server", () => {
     await expect((await fetch(stateUrl)).json()).resolves.toEqual({
       doc: "nested/page.html",
       archived: false,
+      restoreAllowed: true,
+      migrationId: null,
+      migrationOutputPath: null,
     });
 
     const archived = await fetch(stateUrl, {
@@ -215,6 +219,9 @@ describe("local content server", () => {
     await expect(archived.json()).resolves.toEqual({
       doc: "nested/page.html",
       archived: true,
+      restoreAllowed: true,
+      migrationId: null,
+      migrationOutputPath: null,
     });
 
     const documents = await (
@@ -253,6 +260,9 @@ describe("local content server", () => {
     await expect((await fetch(stateUrl)).json()).resolves.toEqual({
       doc: "nested/page.html",
       archived: false,
+      restoreAllowed: true,
+      migrationId: null,
+      migrationOutputPath: null,
     });
     await expect(
       readFile(join(contentRoot, "nested", "page.html"), "utf8"),
@@ -285,6 +295,36 @@ describe("local content server", () => {
     expect(
       (await fetch(`${origin}/_content/.archived/design.md`)).status,
     ).toBe(404);
+  });
+
+  it("rejects individual Restore for migration-managed Markdown", async () => {
+    const migrationId = "20260819T140000000Z-aabbcc";
+    await applyMigration({
+      contentRoot,
+      language: "en",
+      warningsAsErrors: false,
+      createId: () => migrationId,
+    });
+    const origin = requireServer().origin;
+    const stateUrl = `${origin}/_spec-html/document-state?doc=design.md`;
+
+    await expect((await fetch(stateUrl)).json()).resolves.toEqual({
+      doc: "design.md",
+      archived: true,
+      restoreAllowed: false,
+      migrationId,
+      migrationOutputPath: "design.html",
+    });
+    const restore = await fetch(stateUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived: false }),
+    });
+    expect(restore.status).toBe(409);
+    expect(await restore.text()).toContain(migrationId);
+    expect(await (await fetch(`${origin}/_content/design.md`)).text()).toBe(
+      "# Markdown Design\n",
+    );
   });
 
   it("validates document state requests and navigation views", async () => {

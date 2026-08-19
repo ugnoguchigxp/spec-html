@@ -1,0 +1,164 @@
+<article lang="ja">
+  <h1>Markdown対応の再評価と改善方針（0.1.1）</h1>
+
+  <aside data-type="danger">
+    <p>
+      <strong>更新後の結論:</strong>
+      Viewerと副作用のない<code>migrate --check</code
+      >は採用する。一括write機能は実装済みだが、追加監査でArchive
+      symlink／既存copyとcase違いlinkにP0を確認したため、修正までは本番利用を見送る。詳細は<a
+        href="./markdown-to-html-migration-risk-assessment-2026-08-19.html"
+        >MarkdownからHTMLへの移行リスク再評価</a
+      >を参照する。機能設計は<a href="./markdown-batch-migration-implementation-plan.html"
+        >Markdown一括移行機能 実装計画</a
+      >に定めている。
+    </p>
+  </aside>
+
+  <section id="evidence">
+    <h2>再評価結果</h2>
+    <p>
+      npm最新版<code>0.1.1</code>を既存の<code>spec/</code>へ適用した外部評価を基準とする。このrepositoryには評価対象のMarkdown
+      37件がないため、件数は提供された結果を記録し、代表入力による回帰検証は本repository内で行う。
+    </p>
+    <ul>
+      <li>
+        active Markdown 17件と<code>.archived</code>内のMarkdown
+        20件をViewerがnavigationへ表示した。
+      </li>
+      <li>MD badge、相対link、GFM table、Mermaid、MarkdownとHTML間のlinkが機能した。</li>
+      <li>raw HTMLのliteral化、危険URL schemeの除去、Markdown Mermaidのstrict化を確認した。</li>
+      <li>
+        変換先の上書きとsymbolic linkを拒否し、<code>spec/README.md</code>のstdout変換はlint error
+        0件だった。
+      </li>
+    </ul>
+    <table>
+      <caption>
+        active Markdown 17件の一括変換評価
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">結果</th>
+          <th scope="col">件数</th>
+          <th scope="col">意味</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">clean変換</th>
+          <td>6</td>
+          <td>lint errorなしでHTMLを生成できた。</td>
+        </tr>
+        <tr>
+          <th scope="row">draft生成、終了code 1</th>
+          <td>11</td>
+          <td>HTMLは生成できたが、見出しID、table caption、table alignmentの診断が残った。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="implemented-improvements">
+    <h2>今回反映した改善</h2>
+    <table>
+      <caption>
+        診断原因ごとの対応
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">原因</th>
+          <th scope="col">対応</th>
+          <th scope="col">変換後の扱い</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">数字から始まる見出しID</th>
+          <td>
+            HTML5で有効な空白なしIDをLinterが受理するようにし、GitHub互換のfragmentを変更しない。記号だけの見出しには一意な<code
+              >section</code
+            >
+            fallbackを割り当てる。
+          </td>
+          <td>converter起因の<code>HTML003</code>を解消する。</td>
+        </tr>
+        <tr>
+          <th scope="row">GFM tableの<code>align</code>属性</th>
+          <td>
+            Markdown
+            compilerが<code>markdown-align-left</code>、<code>markdown-align-center</code>、<code>markdown-align-right</code>のclassを生成し、Viewer
+            CSSで揃える。
+          </td>
+          <td>表示を維持しながらdeprecated属性を出力しない。</td>
+        </tr>
+        <tr>
+          <th scope="row">MarkdownとHTMLの二重管理</th>
+          <td>
+            単発file変換では元Markdownを保持することを明示し、一括移行では成功後に元Markdownをmigration管理下のArchiveへ移す。管理下sourceの個別Restoreは拒否する。
+          </td>
+          <td><code>convert</code>と<code>migrate</code>のcommand contractを分離する。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="remaining-gap">
+    <h2>一括移行で解消した課題</h2>
+    <aside data-type="success">
+      <p>
+        GFM
+        tableにはcaption文言がないが、直前の見出しtextはsourceに存在する。<code>migrate</code>では最も近い見出しのplain
+        textを実際の<code>caption</code>として複製し、意味を新規生成せずに既存<code>TBL001</code>を満たす。
+      </p>
+    </aside>
+    <p>
+      Linterの非空caption必須条件は変更しない。これにより<code>TBL001</code>を無効化せず、table診断を構造的に解消する。一括移行ではさらに、Markdown間linkと既存HTMLからMarkdownへのlinkを移行mappingに従って更新し、変換前後のvisible
+      text、見出し、table値、code、Mermaid、画像をcontent parity検査する。
+    </p>
+  </section>
+
+  <section id="operating-model">
+    <h2>移行前後の運用</h2>
+    <ol>
+      <li>
+        移行前は<code>spec-html ./spec --markdown-lang ja</code>で既存Markdownを直接表示できる。
+      </li>
+      <li><code>spec-html migrate ./spec --lang ja --check</code>で全件を副作用なしに検証する。</li>
+      <li>blocker 0件を確認して<code>--write</code>し、生成HTMLをactiveな正本へ切り替える。</li>
+      <li>
+        元Markdownはmigration管理下のArchiveへ保持し、個別Restoreは行わない。rollback期間終了後にmigration
+        backupをfinalizeする。
+      </li>
+    </ol>
+    <p>
+      Markdown対応だけを理由に既存文書を<code>spec/docs/</code>へ移す必要はない。directory再編はownership、公開範囲、navigation構造など別の要件がある場合に限る。
+    </p>
+  </section>
+
+  <section id="verification">
+    <h2>回帰検証と残る外部gate</h2>
+    <ul>
+      <li>数字始まりの見出しIDがGitHub互換のままlint errorにならない。</li>
+      <li>記号だけの見出しIDが空にならず、重複しても一意になる。</li>
+      <li>left、center、right指定のGFM tableが<code>align</code>属性を出力しない。</li>
+      <li>
+        数字見出し、alignment、見出し由来captionを含む代表変換でconverter起因lint errorが0件になる。
+      </li>
+      <li>file変換後に、保持されたsourceが同期されないことをCLIが表示する。</li>
+      <li>
+        repository fixtureでcheck、write、途中失敗からのautomatic
+        rollback、明示rollback、編集後finalize、個別Restore拒否を検証した。
+      </li>
+      <li>
+        localの<code>npm run check</code>でunit／server 387 tests、Chromium全件とFirefox／WebKit
+        smoke 32 tests、build、文書検査、packed consumerのcheck／write／rollbackが成功した。
+      </li>
+      <li>
+        次のrelease gateは、評価対象のactive Markdown 17件を<code>migrate --check</code>でerror
+        0件にし、write後のactive Markdown 0件、生成HTML 17件、content parity 17件一致、local
+        reference error 0件、個別Restore拒否17件を確認することである。
+      </li>
+    </ul>
+  </section>
+</article>

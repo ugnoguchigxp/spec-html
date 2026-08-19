@@ -1,8 +1,13 @@
-import { lstat, mkdir, readdir, rename, rmdir } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { link, lstat, mkdir, readdir, realpath, rmdir, unlink } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { findViewerDocuments, type ContentDocument } from "./documents.js";
 import { normalizeDocumentPath } from "./document-path.js";
 import { documentFormatFromPath } from "./document-format.js";
+import {
+  acquireMigrationLock,
+  findMigrationOwnership,
+  type MigrationOwnership,
+} from "../migrate/storage.js";
 
 export const ARCHIVED_DIRECTORY = ".archived";
 
@@ -14,11 +19,45 @@ export class DocumentArchiveConflictError extends Error {
   override name = "DocumentArchiveConflictError";
 }
 
+export class DocumentArchiveUnsafeError extends Error {
+  override name = "DocumentArchiveUnsafeError";
+}
+
+export interface DocumentArchiveDestination {
+  readonly archiveDirectory: string;
+  readonly archivedPath: string;
+}
+
+export class MigrationManagedDocumentError extends Error {
+  override name = "MigrationManagedDocumentError";
+
+  constructor(
+    readonly documentPath: string,
+    readonly migrationId: string,
+  ) {
+    super(
+      `migration管理下の文書は個別Restoreできません: ${documentPath} (${migrationId})`,
+    );
+  }
+}
+
 const operationQueues = new Map<string, Promise<void>>();
 
 export interface DocumentArchiveSnapshot {
   readonly active: readonly ContentDocument[];
   readonly archived: readonly ContentDocument[];
+}
+
+export interface DocumentArchiveState {
+  readonly archived: boolean;
+  readonly restoreAllowed: boolean;
+  readonly migrationId: string | null;
+  readonly migrationOutputPath: string | null;
+}
+
+export interface SetDocumentArchivedOptions {
+  /** The migration runner already owns the cross-process mutation lock. */
+  readonly migrationOperation?: boolean;
 }
 
 export async function findArchivedDocuments(
@@ -52,10 +91,21 @@ export async function getDocumentArchived(
   contentRoot: string,
   documentPath: string,
 ): Promise<boolean> {
+  return (await getDocumentArchiveState(contentRoot, documentPath)).archived;
+}
+
+export async function getDocumentArchiveState(
+  contentRoot: string,
+  documentPath: string,
+): Promise<DocumentArchiveState> {
   assertDocumentPath(documentPath);
-  return enqueueArchiveOperation(contentRoot, () =>
-    getDocumentArchivedUnlocked(contentRoot, documentPath),
-  );
+  return enqueueArchiveOperation(contentRoot, async () => {
+    const archived = await getDocumentArchivedUnlocked(contentRoot, documentPath);
+    const ownership = archived
+      ? await findMigrationOwnership(contentRoot, documentPath)
+      : null;
+    return archiveState(archived, ownership);
+  });
 }
 
 async function getDocumentArchivedUnlocked(
@@ -82,41 +132,187 @@ export async function setDocumentArchived(
   contentRoot: string,
   documentPath: string,
   archived: boolean,
+  options: SetDocumentArchivedOptions = {},
 ): Promise<boolean> {
   assertDocumentPath(documentPath);
   return enqueueArchiveOperation(contentRoot, async () => {
-    const currentArchived = await getDocumentArchivedUnlocked(
-      contentRoot,
-      documentPath,
-    );
-    if (currentArchived === archived) {
-      return archived;
-    }
+    const lock = options.migrationOperation === true
+      ? null
+      : await acquireMigrationLock(contentRoot);
+    try {
+      const currentArchived = await getDocumentArchivedUnlocked(
+        contentRoot,
+        documentPath,
+      );
+      if (currentArchived === archived) {
+        return archived;
+      }
+      if (!archived && options.migrationOperation !== true) {
+        const ownership = await findMigrationOwnership(contentRoot, documentPath);
+        if (ownership !== null) {
+          throw new MigrationManagedDocumentError(
+            documentPath,
+            ownership.migrationId,
+          );
+        }
+      }
 
-    const activePath = join(contentRoot, ...documentPath.split("/"));
-    const archiveDirectory = join(
-      contentRoot,
-      ...dirname(documentPath)
-        .split("/")
-        .filter((segment) => segment !== "."),
-      ARCHIVED_DIRECTORY,
-    );
-    const archivedPath = join(archiveDirectory, basename(documentPath));
-    const sourcePath = archived ? activePath : archivedPath;
-    const targetPath = archived ? archivedPath : activePath;
-    if (await pathExists(targetPath)) {
+      const activePath = join(contentRoot, ...documentPath.split("/"));
+      const { archiveDirectory, archivedPath } = archiveDestination(
+        contentRoot,
+        documentPath,
+      );
+      const sourcePath = archived ? activePath : archivedPath;
+      const targetPath = archived ? archivedPath : activePath;
+
+      if (archived) {
+        await validateDocumentArchiveDestination(contentRoot, documentPath);
+        await mkdir(archiveDirectory, { recursive: true });
+        await validateDocumentArchiveDestination(contentRoot, documentPath);
+      } else {
+        await validateDocumentArchiveSource(contentRoot, documentPath);
+      }
+      await moveWithoutOverwrite(sourcePath, targetPath, documentPath);
+      if (!archived) {
+        await removeEmptyArchiveDirectory(archiveDirectory);
+      }
+      return archived;
+    } finally {
+      await lock?.release();
+    }
+  });
+}
+
+async function moveWithoutOverwrite(
+  sourcePath: string,
+  targetPath: string,
+  documentPath: string,
+): Promise<void> {
+  try {
+    await link(sourcePath, targetPath);
+  } catch (error: unknown) {
+    if (isNodeError(error, "EEXIST")) {
       throw new DocumentArchiveConflictError(documentPath);
     }
+    throw error;
+  }
+  try {
+    await unlink(sourcePath);
+  } catch (error: unknown) {
+    try {
+      await unlink(targetPath);
+    } catch {
+      // Preserve the original failure; a duplicate hardlink is detectable as a conflict.
+    }
+    throw error;
+  }
+}
 
-    if (archived) {
-      await mkdir(archiveDirectory, { recursive: true });
+/**
+ * Validates the complete archive destination before a Markdown source is moved.
+ * A symlinked `.archived` directory or any pre-existing destination entry is a
+ * hard conflict: following either would move content outside the content root or
+ * make rollback ownership ambiguous.
+ */
+export async function validateDocumentArchiveDestination(
+  contentRoot: string,
+  documentPath: string,
+): Promise<DocumentArchiveDestination> {
+  assertDocumentPath(documentPath);
+  const destination = archiveDestination(contentRoot, documentPath);
+  await validateArchiveDirectory(contentRoot, documentPath, destination, true);
+  if (await pathExists(destination.archivedPath)) {
+    throw new DocumentArchiveConflictError(documentPath);
+  }
+  return destination;
+}
+
+async function validateDocumentArchiveSource(
+  contentRoot: string,
+  documentPath: string,
+): Promise<DocumentArchiveDestination> {
+  const destination = archiveDestination(contentRoot, documentPath);
+  await validateArchiveDirectory(contentRoot, documentPath, destination, false);
+  const sourceStats = await lstat(destination.archivedPath);
+  if (!sourceStats.isFile() || sourceStats.isSymbolicLink()) {
+    throw new DocumentArchiveUnsafeError(
+      `Archived documentが通常fileではありません: ${documentPath}`,
+    );
+  }
+  const activePath = join(contentRoot, ...documentPath.split("/"));
+  if (await pathExists(activePath)) {
+    throw new DocumentArchiveConflictError(documentPath);
+  }
+  return destination;
+}
+
+async function validateArchiveDirectory(
+  contentRoot: string,
+  documentPath: string,
+  destination: DocumentArchiveDestination,
+  allowMissing: boolean,
+): Promise<void> {
+  const canonicalRoot = await realpath(contentRoot);
+  const canonicalParent = await realpath(dirname(destination.archiveDirectory));
+  if (!isWithin(canonicalRoot, canonicalParent)) {
+    throw new DocumentArchiveUnsafeError(
+      `Archive parentがcontent root外を参照しています: ${documentPath}`,
+    );
+  }
+  let archiveStats;
+  try {
+    archiveStats = await lstat(destination.archiveDirectory);
+  } catch (error: unknown) {
+    if (allowMissing && isNotFoundError(error)) {
+      return;
     }
-    await rename(sourcePath, targetPath);
-    if (!archived) {
-      await removeEmptyArchiveDirectory(archiveDirectory);
+    throw error;
+  }
+  if (archiveStats.isSymbolicLink() || !archiveStats.isDirectory()) {
+    throw new DocumentArchiveUnsafeError(
+      `.archivedが通常directoryではありません: ${documentPath}`,
+    );
+  }
+  const canonicalArchive = await realpath(destination.archiveDirectory);
+  if (!isWithin(canonicalRoot, canonicalArchive)) {
+    throw new DocumentArchiveUnsafeError(
+      `.archivedがcontent root外を参照しています: ${documentPath}`,
+    );
+  }
+  if (allowMissing) {
+    const targetKey = canonicalArchiveName(basename(documentPath));
+    const archiveEntries = await readdir(destination.archiveDirectory);
+    if (archiveEntries.some((entry) => canonicalArchiveName(entry) === targetKey)) {
+      throw new DocumentArchiveConflictError(documentPath);
     }
-    return archived;
-  });
+  }
+}
+
+function canonicalArchiveName(value: string): string {
+  return value.normalize("NFC").toLocaleLowerCase("en-US");
+}
+
+function archiveDestination(
+  contentRoot: string,
+  documentPath: string,
+): DocumentArchiveDestination {
+  const archiveDirectory = join(
+    contentRoot,
+    ...dirname(documentPath)
+      .split("/")
+      .filter((segment) => segment !== "."),
+    ARCHIVED_DIRECTORY,
+  );
+  return {
+    archiveDirectory,
+    archivedPath: join(archiveDirectory, basename(documentPath)),
+  };
+}
+
+function isWithin(parent: string, child: string): boolean {
+  const path = relative(parent, child);
+  return path === "" ||
+    (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
 
 async function findDocumentArchiveSnapshotUnlocked(
@@ -248,4 +444,20 @@ function isNotFoundError(error: unknown): boolean {
     "code" in error &&
     (error.code === "ENOENT" || error.code === "ENOTDIR")
   );
+}
+
+function isNodeError(error: unknown, code: string): boolean {
+  return error instanceof Error && "code" in error && error.code === code;
+}
+
+function archiveState(
+  archived: boolean,
+  ownership: MigrationOwnership | null,
+): DocumentArchiveState {
+  return {
+    archived,
+    restoreAllowed: !archived || ownership === null,
+    migrationId: ownership?.migrationId ?? null,
+    migrationOutputPath: ownership?.outputPath ?? null,
+  };
 }

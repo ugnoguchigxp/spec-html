@@ -205,6 +205,82 @@ describe("parseCliCommand", () => {
     });
   });
 
+  it("parses migrate check, write, rollback, and finalize commands", () => {
+    expect(
+      parseCliCommand(
+        [
+          "migrate",
+          "docs",
+          "--lang",
+          "ja-jp",
+          "--check",
+          "--reporter",
+          "json",
+          "--warnings-as-errors",
+        ],
+        CWD,
+      ),
+    ).toEqual({
+      kind: "migrate",
+      options: {
+        contentRoot: resolve(CWD, "docs"),
+        action: "check",
+        language: "ja-JP",
+        reporter: "json",
+        warningsAsErrors: true,
+      },
+    });
+    expect(
+      parseCliCommand(["migrate", "--lang", "en", "--write"], CWD),
+    ).toMatchObject({
+      kind: "migrate",
+      options: { action: "write", contentRoot: resolve(CWD, "specs") },
+    });
+    expect(
+      parseCliCommand(
+        [
+          "migrate",
+          "docs",
+          "--lang",
+          "en",
+          "--language-map",
+          "languages.json",
+          "--allow-lossy",
+          "--check",
+        ],
+        CWD,
+      ),
+    ).toMatchObject({
+      kind: "migrate",
+      options: {
+        action: "check",
+        allowLossy: true,
+        languageMapPath: resolve(CWD, "languages.json"),
+      },
+    });
+    expect(
+      parseCliCommand(["migrate", "docs", "--rollback", "migration-id"], CWD),
+    ).toEqual({
+      kind: "migrate",
+      options: {
+        contentRoot: resolve(CWD, "docs"),
+        action: "rollback",
+        migrationId: "migration-id",
+        reporter: "compact",
+      },
+    });
+    expect(
+      parseCliCommand(["migrate", "--finalize", "migration-id"], CWD),
+    ).toMatchObject({ kind: "migrate", options: { action: "finalize" } });
+    expect(parseCliCommand(["migrate", "--help"], CWD)).toEqual({
+      kind: "migrate-help",
+    });
+    expect(parseCliCommand(["./migrate", "--no-open"], CWD)).toMatchObject({
+      kind: "run",
+      options: { contentRoot: resolve(CWD, "migrate") },
+    });
+  });
+
   it("parses selected check stages and fix mode", () => {
     expect(
       parseCliCommand(
@@ -298,6 +374,13 @@ describe("parseCliCommand", () => {
     ["convert", "design.md", "extra.md", "--lang", "en"],
     ["convert", "design.md", "--lang", "en", "--output", "design.txt"],
     ["convert", "design.md", "--lang", "en", "--help"],
+    ["migrate"],
+    ["migrate", "--check"],
+    ["migrate", "--lang", "en", "--check", "--write"],
+    ["migrate", "--rollback", "id", "--lang", "en"],
+    ["migrate", "--finalize", "id", "--warnings-as-errors"],
+    ["migrate", "--check", "--lang", "en", "--reporter", "other"],
+    ["migrate", "docs", "--help"],
   ])("rejects invalid arguments: %j", (...args: string[]) => {
     expect(() => parseCliCommand(args, CWD)).toThrow(CliUsageError);
   });

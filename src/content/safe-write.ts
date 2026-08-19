@@ -38,7 +38,7 @@ export function createFileSnapshot(
   absolutePath: string,
   source: string,
 ): FileSnapshot {
-  return { absolutePath, digest: digest(source) };
+  return { absolutePath, digest: digestText(source) };
 }
 
 export async function fileMatchesSnapshot(
@@ -46,9 +46,12 @@ export async function fileMatchesSnapshot(
   displayPath: string,
   snapshot: FileSnapshot,
 ): Promise<boolean> {
+  const stats = await lstat(absolutePath);
   return (
     absolutePath === snapshot.absolutePath &&
-    digest(await readUtf8File(absolutePath, displayPath)) === snapshot.digest
+    stats.isFile() &&
+    !stats.isSymbolicLink() &&
+    digestText(await readUtf8File(absolutePath, displayPath)) === snapshot.digest
   );
 }
 
@@ -155,7 +158,23 @@ export async function atomicCreate(
   throw new Error(`一時file名を確保できません: ${targetPath}`);
 }
 
-function digest(value: string): string {
+export async function safeRemove(
+  absolutePath: string,
+  displayPath: string,
+  expectedDigest: string,
+): Promise<void> {
+  const stats = await lstat(absolutePath);
+  if (!stats.isFile() || stats.isSymbolicLink()) {
+    throw new Error(`削除対象が通常fileではありません: ${displayPath}`);
+  }
+  const source = await readUtf8File(absolutePath, displayPath);
+  if (digestText(source) !== expectedDigest) {
+    throw new Error(`削除対象の内容が変更されています: ${displayPath}`);
+  }
+  await rm(absolutePath);
+}
+
+export function digestText(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 

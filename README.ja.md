@@ -19,6 +19,7 @@ Viewerと生成した文書は、手元の信頼済み環境で利用します�
 - content directory内のHTML fragmentからnavigationを自動構成
 - `.md`と`.markdown`を直接表示し、navigationへ`MD` badgeを表示
 - 既存fileを上書きせず、1つのMarkdownを整形済みの編集可能なSpec HTML fragmentへ変換
+- active Markdown全件をlink書換え、検証、Archive切替、rollback付きでHTMLへ一括移行
 - content directory内の変更を検知してbrowserを自動reload
 - 文書間の相対リンク、画像、browser historyに対応
 - mobile向けnavigationとkeyboard操作に対応
@@ -134,7 +135,36 @@ npx spec-html convert ./specs/design.md --lang ja
 npx spec-html convert ./specs/design.md --lang ja --output ./specs/design.html
 ```
 
-`--output`を省略するとstdoutにはHTMLだけを出力し、filesystemを変更しません。指定時は出力先が未作成である必要があり、通常fileもsymbolic linkも上書きしません。元Markdownの削除、rename、archive、同期は行わず、生成したHTMLは独立して編集する文書になります。table captionなどMarkdownから推測できないsemantic lint errorが残る場合は、指定したdraftを作成したうえで終了code `1`を返します。
+`--output`を省略するとstdoutにはHTMLだけを出力し、filesystemを変更しません。指定時は出力先が未作成である必要があり、通常fileもsymbolic linkも上書きしません。commandは元Markdownを残したことを明示します。元Markdownの削除、rename、archive、同期は行わず、Viewerでも生成HTMLとは別文書として表示します。両方を正本として維持せず、生成したHTMLは独立して編集する文書として扱ってください。
+
+変換は数字から始まるIDを含むGitHub互換の見出しIDを維持し、GFM tableのcell揃えにはdeprecatedなHTML属性ではなくViewer CSSを使います。tableには直前の見出しtextを実際のcaptionとして複製します。tableより前に見出しがない場合はsemantic lint errorとして、指定したdraftを作成したうえで終了code `1`を返します。
+
+content root全体の正本をMarkdownからHTMLへ切り替える場合は`migrate`を使います。
+
+```bash
+npx spec-html migrate ./specs --lang ja --check
+npx spec-html migrate ./specs --lang ja --write
+npx spec-html migrate ./specs --lang ja --language-map ./specs.languages.json --check
+npx spec-html migrate ./specs --rollback <migration-id>
+npx spec-html migrate ./specs --finalize <migration-id>
+```
+
+`--check`はcontent rootを変更せず、移行plan全体を検証します。`--write`は同じpreflightを再実行し、active Markdownごとに同じdirectoryのHTMLを新規作成し、生成HTMLと既存HTMLの対象linkを書き換え、構造を含むcontent parityを確認してから、元Markdownを同階層の`.archived`へ移します。大文字小文字とUnicode正規化の差は全OSで同じcanonical出力へ解決します。既存target、既存Archive copy、安全でない`.archived` directory、symbolic linkは上書きしません。reportにはmigration ID、byte見積り、空き容量、portable pathの最大長が含まれます。memory上のplanを有限に保つため、1文書の入力上限は64 MiB、探索した文書集合全体は256 MiBです。
+
+raw HTMLのliteral化と危険URLの除去はlossy operationなので、既定ではmigrationをblockします。診断を確認して許可する場合だけ`--allow-lossy`を指定してください。front matter、footnote、custom heading ID、wiki link／embed、GitHub alert、数式、MDX、directive拡張は、誤って別構文に解釈せず非対応blockerとして位置付きで報告します。fence、inline、indented code内の拡張構文例は通常のcodeとして扱います。既存HTMLのbaseline warningは通常のlint workflowで扱い、migration固有のblockerにはしません。tableとMermaid diagramは同じblock scopeにある先行見出しだけをcaptionに使い、captionを確定できなければmigrationをblockします。
+
+`--lang`は全生成articleのfallback言語です。複数言語のrootでは、`--language-map <json>`でMarkdownのexact pathごとに上書きできます。
+
+```json
+{
+  "guide.md": "ja-JP",
+  "en/overview.md": "en"
+}
+```
+
+既存HTMLの通常navigation linkは自動書換えします。download、form、media/source属性、`srcset`、meta refresh、CSS、script、`srcdoc`、event handler、SVG link、`data-*`属性のように意味が異なる参照は、elementとattributeを示してplanをblockし、手動確認を求めます。entity encode、root-relative、壊れたlocal URLも移行対象Markdownを指す場合は推測で書き換えずblockします。commit直前には文書集合全体を再走査し、active Markdownが0件であることとproject lint全体を再確認し、途中で状態が変わっていれば移行全体をrollbackします。
+
+committed migrationまたは復旧可能な未完了migrationが管理するArchive sourceは閲覧できますが個別Restoreできず、MarkdownとHTMLが同時にactiveな正本になることを防ぎます。移行全体を戻す場合は、HTMLが変更されていない間に`--rollback`します。HTMLを編集した場合も、採用確定後に`--finalize`すれば現在のHTMLを保持してrollback backupだけを削除します。finalized migrationはrollbackできません。
 
 `lint`、`fix`、`format`、`check`は引き続きHTMLだけを処理します。mixed directoryで成功してもMarkdown sourceを検査した意味にはなりません。HTML draftへ変換した後は、そのHTMLへ`check`を実行してください。
 
@@ -255,6 +285,9 @@ spec-html format [path] --check|--write [options]
 spec-html fix [path] --check|--write [options]
 spec-html check [directory] [--fix] [options]
 spec-html convert <input.md> --lang <language-tag> [--output <output.html>]
+spec-html migrate [directory] --lang <language-tag> --check|--write
+spec-html migrate [directory] --rollback <migration-id>
+spec-html migrate [directory] --finalize <migration-id>
 ```
 
 ## Security model
@@ -269,7 +302,8 @@ content directory外を指すpath traversalとsymbolic linkは配信しません
 
 ## v0.1 limitations
 
-- 検索、front matter、文書単位のMarkdown言語metadataは含みません。
+- 検索とfront matterの解釈は含まず、migrationではfront matterを非対応として診断します。
+- Viewerは文書単位のMarkdown言語metadataを推測しません。一括移行では明示的なlanguage mapを指定できます。
 - HTML向けlint／fix／format／checkはMarkdown source自体を検査しません。
 - Formatterはsemantic tag、alt、caption、見出しなど意味判断が必要な内容を自動修正しません。
 - Fixerは文章やJavaScriptを修正せず、HTMLの修正候補が複数ある場合は推測しません。

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -200,6 +200,71 @@ try {
   ) {
     throw new Error("Converterが元Markdownを変更しました");
   }
+  await run(
+    npmCommand,
+    [
+      "exec",
+      "--",
+      "spec-html",
+      "migrate",
+      "./migration",
+      "--lang",
+      "en",
+      "--check",
+    ],
+    temporaryRoot,
+  );
+  await assertMissing(join(temporaryRoot, "migration", "guide.html"));
+  await assertMissing(join(temporaryRoot, "migration", ".spec-html"));
+  const migrated = await run(
+    npmCommand,
+    [
+      "exec",
+      "--",
+      "spec-html",
+      "migrate",
+      "./migration",
+      "--lang",
+      "en",
+      "--write",
+      "--reporter",
+      "json",
+    ],
+    temporaryRoot,
+  );
+  const migrationReport = JSON.parse(migrated.stdout);
+  const migrationId = migrationReport.migrationId;
+  if (typeof migrationId !== "string") {
+    throw new Error("packしたMigrateがmigration IDを報告していません");
+  }
+  if (
+    !(await readFile(join(temporaryRoot, "migration", "guide.html"), "utf8"))
+      .includes("<caption>") ||
+    !(await readFile(join(temporaryRoot, "migration", "index.html"), "utf8"))
+      .includes("./guide.html")
+  ) {
+    throw new Error("packしたMigrateがHTMLとlinkを一括移行していません");
+  }
+  await assertMissing(join(temporaryRoot, "migration", "guide.md"));
+  await run(
+    npmCommand,
+    [
+      "exec",
+      "--",
+      "spec-html",
+      "migrate",
+      "./migration",
+      "--rollback",
+      migrationId,
+    ],
+    temporaryRoot,
+  );
+  if (
+    !(await readFile(join(temporaryRoot, "migration", "guide.md"), "utf8"))
+      .includes("# Migration guide")
+  ) {
+    throw new Error("packしたMigrateがmigration全体をrollbackしていません");
+  }
   await expectExitCode(
     npmCommand,
     ["exec", "--", "spec-html", "fix", "./fixable", "--check"],
@@ -392,6 +457,7 @@ async function writeConsumerFixture(root) {
   await mkdir(join(root, "full"), { recursive: true });
   await mkdir(join(root, "blocked"), { recursive: true });
   await mkdir(join(root, "fixable"), { recursive: true });
+  await mkdir(join(root, "migration"), { recursive: true });
   await Promise.all([
     writeFile(
       join(specsRoot, "overview.html"),
@@ -418,7 +484,27 @@ async function writeConsumerFixture(root) {
       join(root, "fixable", "document.html"),
       '<article lang="en"><h1>Fixable</h1><button onclik="if (teh) run()">Run</button><scritp>const teh = "<div>";</scritp></article>',
     ),
+    writeFile(
+      join(root, "migration", "guide.md"),
+      "# Migration guide\n\n## Status\n\n| Item | Value |\n| --- | ---: |\n| Ready | 1 |\n",
+    ),
+    writeFile(
+      join(root, "migration", "index.html"),
+      '<article lang="en"><h1>Migration index</h1><p><a href="./guide.md">Guide</a></p></article>',
+    ),
   ]);
+}
+
+async function assertMissing(path) {
+  try {
+    await access(path);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
+  throw new Error(`存在しないはずのpathがあります: ${path}`);
 }
 
 function run(command, args, cwd) {

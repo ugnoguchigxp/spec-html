@@ -51,6 +51,63 @@ describe("compileMarkdown", () => {
     expect(second).toEqual(first);
   });
 
+  it("keeps numeric GitHub IDs and gives punctuation-only headings valid fallbacks", () => {
+    const result = compileMarkdown(
+      ["# 2026 plan", "## !!!", "## section", "## !!!"].join("\n\n"),
+      { language: "en" },
+    );
+
+    expect(result.headings).toEqual([
+      { depth: 1, id: "2026-plan", text: "2026 plan" },
+      { depth: 2, id: "section", text: "!!!" },
+      { depth: 2, id: "section-1", text: "section" },
+      { depth: 2, id: "section-2", text: "!!!" },
+    ]);
+  });
+
+  it("uses CSS classes instead of deprecated table alignment attributes", () => {
+    const result = compileMarkdown(
+      [
+        "# Data",
+        "",
+        "| Left | Center | Right |",
+        "| :--- | :---: | ---: |",
+        "| A | B | C |",
+      ].join("\n"),
+      { language: "en" },
+    );
+
+    expect(result.fragment).toContain(
+      '<th scope="col" class="markdown-align-center">Center</th>',
+    );
+    expect(result.fragment).toContain(
+      '<td class="markdown-align-right">C</td>',
+    );
+    expect(result.fragment).toContain("<caption>Data</caption>");
+    expect(result.tableCaptions).toEqual([
+      { index: 0, caption: "Data", headingId: "data" },
+    ]);
+    expect(result.fragment).not.toContain(" align=");
+  });
+
+  it("uses an optional migration link resolver without changing other URLs", () => {
+    const result = compileMarkdown(
+      "# Links\n\n[local](./next.md#part) [external](https://example.com/a.md)",
+      {
+        language: "en",
+        linkResolver: (url) =>
+          url.startsWith("./next.md")
+            ? url.replace("./next.md", "./next.html")
+            : url,
+      },
+    );
+
+    expect(result.fragment).toContain('<a href="./next.html#part">local</a>');
+    expect(result.fragment).toContain(
+      '<a href="https://example.com/a.md">external</a>',
+    );
+  });
+
   it("ignores a UTF-8 BOM and treats an empty h1 as a missing title", () => {
     const withBom = compileMarkdown("\uFEFF# BOM title\n", {
       language: "en",

@@ -4,6 +4,30 @@ Notable changes to Spec HTML are recorded here. The project follows [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- `spec-html migrate` now provides side-effect-free batch checks, journaled Markdown-to-HTML writes, project link rewriting, content-parity validation, whole-migration rollback, and explicit finalization
+- Viewer Archive state now identifies migration-managed Markdown and directs users to whole-migration rollback instead of individual Restore
+- Batch migration now supports explicit per-document language maps and reports storage/path-size preflight data
+
+### Fixed
+
+- Markdown conversion now keeps numeric GitHub-compatible heading IDs without treating valid HTML5 IDs as lint errors and gives punctuation-only headings deterministic fallback IDs
+- GFM table alignment now uses viewer CSS classes instead of deprecated HTML `align` attributes
+- GFM tables now receive real captions copied from their nearest preceding Markdown heading
+- File conversion now states that the retained Markdown source is not synchronized with the generated HTML
+- Live reload now ignores internal `.spec-html` journal and lock changes
+- Migration now canonicalizes case and Unicode path variants, validates the virtual post-retirement filesystem, and performs a final full document/link rescan before commit
+- Content parity now covers linked-image labels, link/image titles, code languages, paragraphs, blockquotes, ordered-list starts and nesting, inline semantics, rules, and hard breaks
+- Table captions are block-scoped, Markdown Mermaid diagrams receive semantic figure captions, and unsupported Markdown extensions receive explicit diagnostics
+- Existing HTML migration scans form actions, downloads, media attributes, `srcset`, meta refresh, CSS, scripts, `srcdoc`, event handlers, SVG links, and `data-*` references instead of silently leaving Markdown dependencies
+- Final verification now compares all project diagnostics with multiplicity, and Markdown extension scanning ignores examples inside code while parity includes GFM table-cell semantics
+
+### Security
+
+- Batch migration rejects existing targets, canonical archive-name collisions, unsafe or symlinked `.archived` directories, symbolic links, invalid portable names, and inconsistent journals; uses no-overwrite archive moves; probes atomic-create support; shares a cross-process content-mutation lock with Viewer Archive actions; verifies digests before rollback; cleans failed preparation storage; and refuses individual Restore for committed, finalized, or recoverable incomplete migration sources
+- Lossy Markdown transformations block migration by default and require an explicit `--allow-lossy` acknowledgement
+
 ## 0.1.1 - 2026-08-19
 
 ### Added

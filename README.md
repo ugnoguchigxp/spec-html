@@ -19,6 +19,7 @@ The viewer and its documents are intended for trusted local environments. The np
 - Builds navigation automatically from HTML fragments in a content directory
 - Previews `.md` and `.markdown` files directly, with visible `MD` badges
 - Converts one Markdown file to a formatted, editable Spec HTML fragment without overwriting files
+- Migrates every active Markdown document to HTML with link rewriting, validation, Archive handoff, and rollback
 - Reloads the browser when content in that directory changes
 - Supports relative links, images, and browser history
 - Provides mobile navigation and keyboard controls
@@ -141,7 +142,36 @@ npx spec-html convert ./specs/design.md --lang en
 npx spec-html convert ./specs/design.md --lang en --output ./specs/design.html
 ```
 
-Without `--output`, stdout contains HTML only and the filesystem is unchanged. With `--output`, the target must not already exist; files and symbolic links are never overwritten. The Markdown source is not deleted, renamed, archived, or kept in sync. The generated HTML becomes an independent editable document. Semantic lint errors that cannot be inferred from Markdown, such as a missing table caption, still create the requested draft but return exit code `1`.
+Without `--output`, stdout contains HTML only and the filesystem is unchanged. With `--output`, the target must not already exist; files and symbolic links are never overwritten. The command explicitly reports that the Markdown source was retained. It is not deleted, renamed, archived, or kept in sync, and the viewer lists the source and generated HTML as separate documents. Treat the generated HTML as an independent editable document rather than maintaining both files as sources of truth.
+
+Conversion preserves GitHub-compatible heading IDs, including IDs that begin with a number, renders GFM cell alignment through viewer CSS instead of deprecated HTML attributes, and copies the nearest preceding heading text into a real table caption. A table before any heading remains a semantic lint error and returns exit code `1` after creating the requested draft.
+
+Use `migrate` when the whole content root must switch from Markdown to HTML as one operation:
+
+```bash
+npx spec-html migrate ./specs --lang en --check
+npx spec-html migrate ./specs --lang en --write
+npx spec-html migrate ./specs --lang en --language-map ./specs.languages.json --check
+npx spec-html migrate ./specs --rollback <migration-id>
+npx spec-html migrate ./specs --finalize <migration-id>
+```
+
+`--check` builds the complete plan without changing the content root. `--write` repeats that preflight, creates one same-directory HTML file per active Markdown source, rewrites mapped document links in generated and existing HTML, verifies structural content parity, then moves the Markdown sources into their sibling `.archived` directories. Case and Unicode-normalization variants are resolved to one canonical output on every OS. Existing targets, archive copies, unsafe `.archived` directories, and symbolic links are never overwritten. The report includes the migration ID, byte estimates, available capacity, and maximum portable path length. To keep the in-memory plan bounded, one input document is limited to 64 MiB and the discovered document set to 256 MiB.
+
+Raw HTML and omitted unsafe URLs are lossy operations and block migration by default; use `--allow-lossy` only after reviewing their diagnostics. Front matter, footnotes, custom heading IDs, wiki links/embeds, GitHub alerts, math, MDX, and directive extensions are reported as unsupported blockers instead of being silently reinterpreted. Extension-like text inside fenced, inline, or indented code remains ordinary code. Existing baseline warnings are reported by the normal lint workflow and do not become migration-only blockers. Tables and Mermaid diagrams obtain captions only from a preceding heading in the same block scope; an uncaptioned table or diagram blocks migration.
+
+`--lang` is the fallback language for every generated article. Mixed-language roots can override exact Markdown paths with `--language-map <json>`:
+
+```json
+{
+  "guide.md": "en",
+  "ja/overview.md": "ja-JP"
+}
+```
+
+Existing HTML navigation links are rewritten automatically. References with different semantics—such as downloads, forms, media/source attributes, `srcset`, meta refresh, CSS, scripts, `srcdoc`, event handlers, SVG links, and `data-*` attributes—block the plan and identify the element and attribute for manual review. Entity-encoded, root-relative, and malformed local URLs that still target migrated Markdown are also blocked rather than guessed. Immediately before commit, migration rescans the complete document set, requires zero active Markdown files, reruns the full project lint, and rolls the operation back if either condition changed.
+
+Archived sources managed by a committed or recoverable incomplete migration remain viewable but cannot be restored individually, which prevents Markdown and HTML from becoming active sources of truth at the same time. Use `--rollback` to restore the whole unchanged migration. After accepting the HTML—even after editing it—use `--finalize` to keep the current HTML and delete rollback backups; finalized migrations cannot be rolled back.
 
 `lint`, `fix`, `format`, and `check` continue to process HTML only. They do not imply that Markdown source has been linted; use `convert` to produce an HTML draft and then run `check` on it.
 
@@ -262,6 +292,9 @@ spec-html format [path] --check|--write [options]
 spec-html fix [path] --check|--write [options]
 spec-html check [directory] [--fix] [options]
 spec-html convert <input.md> --lang <language-tag> [--output <output.html>]
+spec-html migrate [directory] --lang <language-tag> --check|--write
+spec-html migrate [directory] --rollback <migration-id>
+spec-html migrate [directory] --finalize <migration-id>
 ```
 
 ## Security model
@@ -276,7 +309,8 @@ Requests that traverse outside the content directory, including symbolic-link es
 
 ## v0.1 limitations
 
-- Search, front matter, and per-document Markdown language metadata are not included.
+- Search and front matter interpretation are not included; migration diagnoses front matter as unsupported.
+- The Viewer does not infer per-document Markdown language metadata; batch migration accepts an explicit language map.
 - HTML lint/fix/format/check commands do not inspect Markdown source directly.
 - The formatter does not invent semantic choices such as alt text, captions, or headings.
 - The fixer does not correct prose or JavaScript and does not guess when multiple HTML repairs are possible.

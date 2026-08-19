@@ -50,6 +50,9 @@ type HistoryMode = "push" | "replace" | "none";
 interface DocumentStateResponse {
   doc: string;
   archived: boolean;
+  restoreAllowed: boolean;
+  migrationId: string | null;
+  migrationOutputPath: string | null;
 }
 
 void initializeViewer().catch((error: unknown) => {
@@ -90,6 +93,8 @@ async function initializeViewer(): Promise<void> {
   let currentDocument: string | null = null;
   let currentDocumentSource: string | null = null;
   let currentDocumentArchived: boolean | null = null;
+  let currentDocumentRestoreAllowed = true;
+  let currentDocumentMigrationId: string | null = null;
   let currentRoute: RouteState = { doc: null, hash: "", view: navigationView };
   let detailsOpenedForPrint: HTMLDetailsElement[] = [];
   const mobileViewport = window.matchMedia("(max-width: 767px)");
@@ -141,6 +146,8 @@ async function initializeViewer(): Promise<void> {
     currentDocument = null;
     currentDocumentSource = null;
     currentDocumentArchived = null;
+    currentDocumentRestoreAllowed = true;
+    currentDocumentMigrationId = null;
     closeSourceDialog();
     closeDocumentActionsMenu();
     clearDocumentActionStatus();
@@ -268,7 +275,8 @@ async function initializeViewer(): Promise<void> {
     try {
       const documentUrl = createContentUrl(doc, new URL(window.location.href));
       const source = await fetchDocument(documentUrl, abortController.signal);
-      const archived = await fetchDocumentArchived(doc, abortController.signal);
+      const documentState = await fetchDocumentState(doc, abortController.signal);
+      const archived = documentState.archived;
       if (!isCurrentRequest(activeAbortController, abortController)) {
         return;
       }
@@ -318,6 +326,8 @@ async function initializeViewer(): Promise<void> {
       currentDocument = doc;
       currentDocumentSource = source;
       currentDocumentArchived = archived;
+      currentDocumentRestoreAllowed = documentState.restoreAllowed;
+      currentDocumentMigrationId = documentState.migrationId;
       elements.frame.title = title;
       updateSourceLabels(elements, format);
       applyDocumentTitle(title);
@@ -327,7 +337,7 @@ async function initializeViewer(): Promise<void> {
         throw new Error("iframe document is unavailable");
       }
       installFrameLinkHandler(frameDocument, navigate, () => navigationView);
-      updateDocumentArchiveButton(elements, archived);
+      updateDocumentArchiveButton(elements, documentState);
       renderLoadState(elements, { kind: "ready", doc, title });
       scrollToHash(route.hash);
     } catch (error: unknown) {
@@ -363,6 +373,16 @@ async function initializeViewer(): Promise<void> {
 
   elements.documentActionsButton.addEventListener("click", () => {
     clearDocumentActionStatus();
+    if (
+      currentDocumentArchived === true &&
+      !currentDocumentRestoreAllowed &&
+      currentDocumentMigrationId !== null
+    ) {
+      elements.documentActionStatus.textContent =
+        `Managed by migration ${currentDocumentMigrationId}. ` +
+        `Use spec-html migrate --rollback ${currentDocumentMigrationId}.`;
+      elements.documentActionStatus.hidden = false;
+    }
     const willOpen = elements.documentActionsMenu.hidden;
     elements.documentActionsMenu.hidden = !willOpen;
     elements.documentActionsButton.setAttribute(
@@ -386,16 +406,18 @@ async function initializeViewer(): Promise<void> {
 
     void (async () => {
       try {
-        const updatedArchived = await updateDocumentArchived(
+        const updatedState = await updateDocumentArchived(
           documentPath,
           archived,
         );
         if (currentDocument !== documentPath) {
           return;
         }
-        currentDocumentArchived = updatedArchived;
-        const view = viewForArchived(updatedArchived);
-        updateDocumentArchiveButton(elements, updatedArchived);
+        currentDocumentArchived = updatedState.archived;
+        currentDocumentRestoreAllowed = updatedState.restoreAllowed;
+        currentDocumentMigrationId = updatedState.migrationId;
+        const view = viewForArchived(updatedState.archived);
+        updateDocumentArchiveButton(elements, updatedState);
         await loadNavigation(view);
         currentRoute = { ...currentRoute, view };
         updateHistory(currentRoute, "replace");
@@ -409,7 +431,8 @@ async function initializeViewer(): Promise<void> {
         );
         elements.documentActionStatus.hidden = false;
       } finally {
-        elements.documentArchiveButton.disabled = false;
+        elements.documentArchiveButton.disabled =
+          currentDocumentArchived === true && !currentDocumentRestoreAllowed;
         elements.documentArchiveButton.removeAttribute("aria-busy");
       }
     })();
@@ -629,24 +652,22 @@ function viewForArchived(archived: boolean): NavigationView {
   return archived ? "archive" : "documents";
 }
 
-async function fetchDocumentArchived(
+async function fetchDocumentState(
   documentPath: string,
   signal: AbortSignal,
-): Promise<boolean> {
-  const state = await requestDocumentState(documentPath, { signal });
-  return state.archived;
+): Promise<DocumentStateResponse> {
+  return requestDocumentState(documentPath, { signal });
 }
 
 async function updateDocumentArchived(
   documentPath: string,
   archived: boolean,
-): Promise<boolean> {
-  const state = await requestDocumentState(documentPath, {
+): Promise<DocumentStateResponse> {
+  return requestDocumentState(documentPath, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ archived }),
   });
-  return state.archived;
 }
 
 async function requestDocumentState(
@@ -666,18 +687,42 @@ async function requestDocumentState(
     !("doc" in value) ||
     value.doc !== documentPath ||
     !("archived" in value) ||
-    typeof value.archived !== "boolean"
+    typeof value.archived !== "boolean" ||
+    !("restoreAllowed" in value) ||
+    typeof value.restoreAllowed !== "boolean" ||
+    !("migrationId" in value) ||
+    (value.migrationId !== null && typeof value.migrationId !== "string") ||
+    !("migrationOutputPath" in value) ||
+    (value.migrationOutputPath !== null &&
+      typeof value.migrationOutputPath !== "string")
   ) {
     throw new Error("Document state response is invalid");
   }
-  return { doc: value.doc, archived: value.archived };
+  return {
+    doc: value.doc,
+    archived: value.archived,
+    restoreAllowed: value.restoreAllowed,
+    migrationId: value.migrationId,
+    migrationOutputPath: value.migrationOutputPath,
+  };
 }
 
 function updateDocumentArchiveButton(
   elements: ViewerElements,
-  archived: boolean,
+  state: Pick<
+    DocumentStateResponse,
+    "archived" | "restoreAllowed" | "migrationId"
+  >,
 ): void {
-  elements.documentArchiveButton.textContent = archived ? "Restore" : "Archive";
+  elements.documentArchiveButton.textContent = state.archived
+    ? "Restore"
+    : "Archive";
+  elements.documentArchiveButton.disabled =
+    state.archived && !state.restoreAllowed;
+  elements.documentArchiveButton.title =
+    state.archived && !state.restoreAllowed && state.migrationId !== null
+      ? `Use migrate --rollback ${state.migrationId}`
+      : "";
 }
 
 function updateSourceLabels(

@@ -1,0 +1,430 @@
+<article lang="ja">
+  <h1>MarkdownからHTMLへの移行リスク再評価（2026-08-19）</h1>
+
+  <aside data-type="success" aria-labelledby="risk-conclusion">
+    <strong id="risk-conclusion"
+      >結論: 再現済みP0〜P2は実装で対処し、migrate --writeのcode-level見送り条件を解除する</strong
+    >
+    <p>
+      追加監査で再現したArchive destinationのsymlink／既存copy、case／Unicode違いのMarkdown
+      link、retire前filesystemへの誤fallbackを修正した。lossy
+      policy、構造parity、拡張構文診断、caption
+      scope、既存HTML参照、最終再走査、文書別言語、filesystem
+      preflightも追加した。外部評価対象17件と3 OSのrelease
+      gateは、対象datasetとCI環境で別途実行する。
+    </p>
+  </aside>
+
+  <section id="scope">
+    <h2>評価範囲と方法</h2>
+    <p>
+      Markdown compiler、migration planner、link rewrite、virtual project
+      lint、Archive、journal、rollback、ViewerのArchive配信をcode
+      reviewした。repositoryの既存fileは変更せず、OSの一時directoryに作成した最小fixtureで候補障害を再現し、fixtureは検証後に削除した。
+    </p>
+    <ul>
+      <li>active／archived sourceの配置とsymlink境界</li>
+      <li>case、Unicode、query、fragmentを含むlocal link解決</li>
+      <li>raw HTML、unsafe URL、Markdown拡張構文のlossy変換</li>
+      <li>content parityのfalse positiveとfalse negative</li>
+      <li>table／Mermaid caption、文書言語、既存HTML参照</li>
+      <li>途中停止、automatic rollback、再実行、cross-platform CI</li>
+    </ul>
+  </section>
+
+  <section id="implementation-result">
+    <h2>実装結果</h2>
+    <table>
+      <caption>
+        監査項目への対処
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">対象</th>
+          <th scope="col">実装した対処</th>
+          <th scope="col">検証</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Archive安全性</th>
+          <td>
+            <code>.archived</code
+            >を<code>lstat</code>／<code>realpath</code>し、symlink、通常directory以外、既存同名entryをplanとmutationの双方で拒否する。Archive移動はhard
+            linkによるno-overwrite publish後にsourceをunlinkする。
+          </td>
+          <td>
+            symlink先への移動と既存copy競合を、content mutation 0件でblockする回帰testを追加した。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">link post-state</th>
+          <td>
+            pathをNFC＋case-foldしたindexで解決し、virtual lintではretire対象Markdownをfilesystem
+            fallbackから除外する。commit直前にも全documentとreferenceを再走査する。
+          </td>
+          <td>case／Unicode variant、途中追加Markdown、rollbackをtestした。</td>
+        </tr>
+        <tr>
+          <th scope="row">意味保持</th>
+          <td>
+            raw HTMLとunsafe
+            URL除去は既定blockerとし、<code>--allow-lossy</code>だけで許可する。parity
+            factへblock構造、list start／nesting、inline
+            semantics、code言語、title、linked-imageのaccessible labelを追加した。
+          </td>
+          <td>linked imageと構造fixtureでfalse error／silent lossを検査する。</td>
+        </tr>
+        <tr>
+          <th scope="row">Markdown拡張とcaption</th>
+          <td>
+            front matter、footnote、custom ID、wiki link／embed、GitHub
+            alert、数式を位置付きでblockする。tableとMermaidのcaptionを同一block
+            scopeへ限定し、Mermaidは<code>figure</code>／<code>figcaption</code>へ変換する。
+          </td>
+          <td>blockquote見出しの漏出とcaptionなしMermaidを回帰testした。</td>
+        </tr>
+        <tr>
+          <th scope="row">既存HTMLと運用条件</th>
+          <td>
+            form、download、media、<code>srcset</code>、meta
+            refresh、CSS、script、<code>data-*</code>のMarkdown参照をmanual-review
+            blockerにする。文書別language map、byte／空き容量／portable path report、atomic
+            create能力probeを追加した。
+          </td>
+          <td>各attribute分類、language override、capacity summaryをunit testへ含めた。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="review-hardening">
+    <h2>最終code reviewで追加したhardening</h2>
+    <p>
+      初回実装後にmigration全経路を再度通読し、正常系testだけでは見えなかった診断の相殺、構文の誤検出、journal改変耐性を修正した。以下はすべて回帰testを追加済みである。
+    </p>
+    <table>
+      <caption>
+        最終reviewで解消した追加問題
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">領域</th>
+          <th scope="col">発見した問題</th>
+          <th scope="col">対処</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">commit前診断</th>
+          <td>
+            reference診断だけを集合比較していたため、同一診断の追加と非referenceのlint回帰を見逃し得た。
+          </td>
+          <td>
+            virtual
+            post-stateの全診断をmultisetとして保持し、実filesystemの全診断と件数込みで照合する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Markdown判定とparity</th>
+          <td>
+            fence／inline／indented code内の拡張構文例を誤ってblockし、GFM table
+            cell内の強調とcode言語の大文字小文字を誤ってparity不一致にした。
+          </td>
+          <td>
+            containerとfence状態を追跡するscannerへ変更し、table cell
+            tokenを再帰走査してcode言語を正規化する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">既存HTML参照</th>
+          <td>
+            HTML character reference、空白を含むscript path、<code>srcdoc</code>、event属性、SVG
+            <code>xlink:href</code
+            >、root-relative／壊れたqueryが移行対象Markdownを参照しても残り得た。
+          </td>
+          <td>
+            曖昧な表現は自動編集せず<code>MIG006</code>でblockし、quoted
+            pathの部分一致と重複診断を除去する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">journalとfilesystem</th>
+          <td>
+            journal内path／flagの相互関係、lock初期化失敗、準備中storage、atomic一時fileのpath長が十分に検証されていなかった。
+          </td>
+          <td>
+            source／create／replacement／backupの形式・一意性・非交差・state整合を検証し、失敗時cleanupと実際の一時file名を含むpath
+            preflightを追加する。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="confirmed-blockers">
+    <h2>監査時に再現し解消したblocker</h2>
+    <p>
+      この節と次節は修正前の再現結果と、実装要件として採用した対処を追跡するclosed findingである。
+    </p>
+    <table>
+      <caption>
+        修正前のblockerと採用した対処
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">優先度</th>
+          <th scope="col">問題</th>
+          <th scope="col">再現結果</th>
+          <th scope="col">採用した対処</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">P0</th>
+          <td><code>.archived</code> symlinkをArchive先として追跡する</td>
+          <td>
+            <code>guide.md</code>がcontent
+            root外へ移動し、<code>guide.html</code>がactiveに残った。verificationとautomatic
+            rollbackの両方が失敗した。
+          </td>
+          <td>
+            plannerとArchive
+            mutationの双方で、各sourceと同階層の<code>.archived</code>を<code>lstat</code>し、symlinkと通常directory以外をmutation前に拒否する。destinationのcanonical
+            pathがroot内であることも確認する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P0</th>
+          <td>active sourceと同名の既存Archive copyをcheckが検出しない</td>
+          <td>
+            <code>--check</code>は<code>ready=true</code>だったが、writeはArchive
+            conflictで失敗した。rollbackもsource配置を特定できず、生成HTMLが残った。
+          </td>
+          <td>
+            全sourceのArchive destination不在をpure
+            planへ含める。journalにはmutation前のactive／Archive配置を記録し、rollbackが推測に依存しないようにする。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P0</th>
+          <td>case違いのMarkdown linkがcase-insensitive filesystemで残る</td>
+          <td>
+            <code>other.md</code>に対する<code>./OTHER.MD</code>はmacOSでerror
+            0のまま生成HTMLへ残った。virtual
+            lintは移行前の物理Markdownを解決できるため見逃すが、write後はsourceがArchiveへ移りlinkが切れる。
+          </td>
+          <td>
+            link targetをfilesystem上のcanonical documentへ解決してmappingする。post-state
+            lintではretire予定のactive
+            Markdownを存在しないものとして扱い、case／Unicode正規化aliasをmacOS、Windows、Linuxで検証する。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <figure>
+      <pre class="mermaid">
+flowchart LR
+  A[check ready] --> B[HTML作成]
+  B --> C[既存HTML link書換え]
+  C --> D{Archive先は安全か}
+  D -- symlinkまたは同名copy --> E[Archive失敗]
+  E --> F[rollback preflight失敗]
+  F --> G[HTMLとsource配置が部分状態で残る]
+  D -- 通常directoryかつtarget不在 --> H[commit]
+      </pre>
+      <figcaption>
+        修正前に存在した部分状態への経路。現在はArchive
+        destinationをplanとmutationの双方で検証し、途中失敗はjournal単位でrollbackする。
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="conversion-risks">
+    <h2>監査時riskと実装済み対処</h2>
+    <table>
+      <caption>
+        修正前のriskと採用した対処
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">優先度</th>
+          <th scope="col">risk</th>
+          <th scope="col">影響</th>
+          <th scope="col">採用した対処</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">P1</th>
+          <td>lossy変換が既定で<code>ready=true</code></td>
+          <td>
+            raw HTMLはliteral textになり、unsafe
+            URLは除去されるが、どちらもwarningである。既定のwriteはwarningを許可し、parityもsanitized後の表現を正解として扱う。repository
+            fixtureでもraw HTMLとunsafe linkを含みながら<code>ready=true</code>を確認した。
+          </td>
+          <td>
+            source変換noticeを既定blockerにし、明示的な<code>--allow-lossy</code>だけで許可する。既存HTMLのbaseline
+            warningとはpolicyを分離する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>linked imageをparity不一致と誤判定する</td>
+          <td>
+            <code>[![Badge](badge.svg)](other.md)</code>は正しくHTML化されるが、Markdown側はlink
+            labelを<code>Badge</code>、HTML側はanchorの<code>textContent</code>を空として比較し、<code>MIG004</code>で停止した。tableやheading内の画像にも同型の誤判定があり得る。
+          </td>
+          <td>
+            HTML側のaccessible textへdescendant画像の<code>alt</code>を含める。link、heading、table
+            cellごとのfixtureを追加する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>parityが文書構造の一部を比較しない</td>
+          <td>
+            visible
+            text、見出し、code、Mermaid、task、画像、link、table値は比較するが、paragraph境界、blockquote、ordered／unordered
+            listと開始番号、nest、強調、取消線、code言語、link／画像title、改行、horizontal
+            ruleは比較対象外である。構造が変わっても一致と判定し得る。
+          </td>
+          <td>構造factを追加し、compiler tokenごとのsemantic回帰testと役割を分ける。</td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>拡張Markdown構文の扱いが不統一</td>
+          <td>
+            front matterは既知の非対応であり、見出しとして誤parseされる。footnote、custom heading
+            ID、wiki link、Obsidian
+            embed、MDX、admonition、mathにも専用contractがない。lintで止まる構文と、plain
+            text化して静かに通る構文が混在する。
+          </td>
+          <td>
+            preflight feature
+            scannerと対応matrixを用意し、非対応構文を固有codeでblockまたは明示noticeにする。footnoteとcustom
+            IDはlocal fragment互換性を含めて対応方針を決める。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>caption推論が構造scopeを見ない</td>
+          <td>
+            blockquote内の見出しを、その後のblockquote外tableのcaptionとして採用することを確認した。複数tableでは同じcaptionを反復する。Mermaidはfigure／figcaptionへ変換されず、strictなwarning運用と両立しない。
+          </td>
+          <td>
+            同じblock
+            scopeにある直前見出しだけを候補にする。曖昧な場合は推測せずblockし、table／Mermaid用の明示caption記法を用意する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>既存HTMLの参照検出範囲が限定的</td>
+          <td>
+            <code>a[href]</code
+            >と<code>area[href]</code>だけをrewriteし、既知の画像・script系URL属性はblockする。一方、<code>form[action]</code>、<code>button[formaction]</code>、<code>srcset</code>、<code
+              >meta</code
+            >
+            refresh、CSS、inline
+            script、独自<code>data-*</code>は検出しない。<code>download</code>付きanchorも通常navigationとしてHTMLへ書き換わる。
+          </td>
+          <td>
+            標準URL属性を網羅し、download／type付きanchorは自動rewriteせずblockする。scriptやdata属性は非対応範囲をreportへ明示する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>mutation中に追加されたdocumentを最終確認しない</td>
+          <td>
+            spec-html同士の操作はlockされるが、editorや別processが追加したMarkdown／HTMLは対象集合へ入らない。最終verificationは管理fileのdigestだけを確認するため、active
+            Markdown 0件と未処理link 0件を実filesystemで再確認していない。
+          </td>
+          <td>
+            commit直前にdocument集合を再探索し、post-state lintとactive Markdown 0件を確認する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>content root全体へ単一言語を適用する</td>
+          <td>
+            <code>--lang</code>は全生成articleへ同じ値を設定する。front matterと文書単位language
+            metadataは非対応なので、mixed-language directoryではアクセシビリティmetadataが誤る。
+          </td>
+          <td>
+            移行manifestでpathごとの言語を指定できるようにするか、初期releaseでは単一言語rootだけを明示的な前提にする。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>filesystem能力と規模のpreflightがない</td>
+          <td>
+            atomic createはhard linkへ依存し、backup pathは元pathより長くなる。network
+            filesystem、Windows path
+            length、非常に大きい文書集合では、check成功後のwriteだけが失敗または高memoryになる可能性がある。
+          </td>
+          <td>
+            同一filesystem内の能力probe、path長検査、件数／byte数report、規模上限またはstreaming方針を追加する。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="confirmed-strengths">
+    <h2>今回の監査でも維持できた点</h2>
+    <ul>
+      <li>invalid UTF-8、input／output symlink、既存HTML targetの上書きを拒否する。</li>
+      <li>同じdirectoryへHTMLを作るため、通常の相対asset位置は変わらない。</li>
+      <li>exact-caseのMarkdown document linkはqueryとfragmentを保持してHTMLへ書き換える。</li>
+      <li>生成HTML全件と既存HTMLの差分をvirtual projectとしてLintする。</li>
+      <li>
+        通常のcreate、replace、Archive、journal更新失敗はautomatic rollback testを通過している。
+      </li>
+      <li>適用後に編集されたHTMLをrollbackで上書きせず、finalizeで現在値を保持する。</li>
+      <li>
+        Archive sourceはstableなlogical URLで配信するため、通常assetは元directory基準で解決される。
+      </li>
+    </ul>
+  </section>
+
+  <section id="acceptance-gates">
+    <h2>write解禁の受入gate</h2>
+    <ol>
+      <li>
+        root直下とnested directoryの<code>.archived</code>
+        symlink、通常file、同名copyを<code>--check</code>でerrorにし、fileを1件も変更しない。
+      </li>
+      <li>上記状態で<code>--write</code>を直接実行してもmutation前に停止する。</li>
+      <li>
+        case違いとUnicode正規化違いのlinkをmacOS、Windows、Linuxでcanonical
+        HTMLへrewriteするかblockする。
+      </li>
+      <li>
+        post-state lintがretire対象Markdownを解決候補にせず、write後のlocal reference
+        errorを0件にする。
+      </li>
+      <li>linked image、heading内画像、table内画像がfalse parity errorにならない。</li>
+      <li>raw HTMLとunsafe URLは明示許可なしのwriteをblockする。</li>
+      <li>
+        front matter、footnote、custom ID、wiki link、MDXを固有診断で分類し、silent
+        degradationをなくす。
+      </li>
+      <li>commit直前の再探索でactive Markdown 0件と実filesystemのpost-state lintを確認する。</li>
+      <li>
+        外部評価対象17件と既存Archive 20件で、check error 0、write成功17、parity 17、active Markdown
+        0、reference error 0、Archive 37件、rollback後digest一致を確認する。
+      </li>
+      <li>full checkとpacked migrationをUbuntu、macOS、Windowsで成功させる。</li>
+    </ol>
+  </section>
+
+  <section id="recommendation">
+    <h2>残るrelease検証順序</h2>
+    <ol>
+      <li>外部評価対象17件と既存Archive 20件を取得し、受入gateのdigestまで記録する。</li>
+      <li>Ubuntu、macOS、Windowsのpacked migration testをCIで通す。</li>
+      <li>release gate成功後に<code>0.2.0</code>候補としてversioningする。</li>
+    </ol>
+  </section>
+</article>

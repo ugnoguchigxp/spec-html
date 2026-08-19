@@ -53,6 +53,23 @@ export interface CliConvertOptions {
   language: string;
 }
 
+export type CliMigrateOptions =
+  | {
+      contentRoot: string;
+      action: "check" | "write";
+      language: string;
+      reporter: "compact" | "json";
+      warningsAsErrors: boolean;
+      allowLossy?: boolean;
+      languageMapPath?: string;
+    }
+  | {
+      contentRoot: string;
+      action: "rollback" | "finalize";
+      migrationId: string;
+      reporter: "compact" | "json";
+    };
+
 export type CliCommand =
   | { kind: "run"; options: CliRunOptions }
   | { kind: "lint"; options: CliLintOptions }
@@ -60,6 +77,7 @@ export type CliCommand =
   | { kind: "fix"; options: CliFixOptions }
   | { kind: "check"; options: CliCheckOptions }
   | { kind: "convert"; options: CliConvertOptions }
+  | { kind: "migrate"; options: CliMigrateOptions }
   | { kind: "explain"; rule: RuleId }
   | { kind: "help" }
   | { kind: "lint-help" }
@@ -67,6 +85,7 @@ export type CliCommand =
   | { kind: "fix-help" }
   | { kind: "check-help" }
   | { kind: "convert-help" }
+  | { kind: "migrate-help" }
   | { kind: "version" };
 
 export class CliUsageError extends Error {
@@ -92,8 +111,102 @@ export function parseCliCommand(
   if (args[0] === "convert") {
     return parseConvertCommand(args.slice(1), cwd);
   }
+  if (args[0] === "migrate") {
+    return parseMigrateCommand(args.slice(1), cwd);
+  }
 
   return parseRunCommand(args, cwd);
+}
+
+function parseMigrateCommand(args: readonly string[], cwd: string): CliCommand {
+  let parsed: ReturnType<typeof parseMigrateArgs>;
+  try {
+    parsed = parseMigrateArgs([...args]);
+  } catch (error: unknown) {
+    throw new CliUsageError(messageForParseArgsError(error));
+  }
+  if (parsed.positionals.length > 1) {
+    throw new CliUsageError("directoryは1つだけ指定してください");
+  }
+  const hasOptions =
+    parsed.values.check === true ||
+    parsed.values.write === true ||
+    parsed.values.rollback !== undefined ||
+    parsed.values.finalize !== undefined ||
+    parsed.values.lang !== undefined ||
+    parsed.values["language-map"] !== undefined ||
+    parsed.values.reporter !== undefined ||
+    parsed.values["warnings-as-errors"] === true ||
+    parsed.values["allow-lossy"] === true;
+  if (parsed.values.help === true) {
+    if (parsed.positionals.length > 0 || hasOptions) {
+      throw new CliUsageError(
+        "--helpはdirectoryやmigrate optionと同時に指定できません",
+      );
+    }
+    return { kind: "migrate-help" };
+  }
+
+  const actions = [
+    parsed.values.check === true ? "check" : null,
+    parsed.values.write === true ? "write" : null,
+    parsed.values.rollback === undefined ? null : "rollback",
+    parsed.values.finalize === undefined ? null : "finalize",
+  ].filter((action): action is "check" | "write" | "rollback" | "finalize" =>
+    action !== null
+  );
+  if (actions.length !== 1) {
+    throw new CliUsageError(
+      "--check、--write、--rollback、--finalizeのどれか1つを指定してください",
+    );
+  }
+  const action = actions[0]!;
+  const reporter = parsed.values.reporter ?? "compact";
+  if (reporter !== "compact" && reporter !== "json") {
+    throw new CliUsageError("reporterはcompactまたはjsonで指定してください");
+  }
+  const contentRoot = resolve(cwd, parsed.positionals[0] ?? "./specs");
+  if (action === "check" || action === "write") {
+    if (parsed.values.lang === undefined) {
+      throw new CliUsageError("--langを指定してください");
+    }
+    return {
+      kind: "migrate",
+      options: {
+        contentRoot,
+        action,
+        language: parseLanguageTag(parsed.values.lang, "lang"),
+        reporter,
+        warningsAsErrors: parsed.values["warnings-as-errors"] === true,
+        ...(parsed.values["allow-lossy"] === true
+          ? { allowLossy: true }
+          : {}),
+        ...(parsed.values["language-map"] === undefined
+          ? {}
+          : { languageMapPath: resolve(cwd, parsed.values["language-map"]) }),
+      },
+    };
+  }
+  if (
+    parsed.values.lang !== undefined ||
+    parsed.values["language-map"] !== undefined ||
+    parsed.values["warnings-as-errors"] === true ||
+    parsed.values["allow-lossy"] === true
+  ) {
+    throw new CliUsageError(
+      "--lang、--language-map、--allow-lossy、--warnings-as-errorsはcheckまたはwriteで指定してください",
+    );
+  }
+  const migrationId = action === "rollback"
+    ? parsed.values.rollback
+    : parsed.values.finalize;
+  if (migrationId === undefined || migrationId.trim().length === 0) {
+    throw new CliUsageError("migration IDを指定してください");
+  }
+  return {
+    kind: "migrate",
+    options: { contentRoot, action, migrationId, reporter },
+  };
 }
 
 function parseConvertCommand(args: readonly string[], cwd: string): CliCommand {
@@ -549,6 +662,26 @@ function parseConvertArgs(args: string[]) {
     options: {
       lang: { type: "string" },
       output: { type: "string" },
+      help: { type: "boolean" },
+    },
+  });
+}
+
+function parseMigrateArgs(args: string[]) {
+  return parseArgs({
+    args,
+    allowPositionals: true,
+    strict: true,
+    options: {
+      check: { type: "boolean" },
+      write: { type: "boolean" },
+      rollback: { type: "string" },
+      finalize: { type: "string" },
+      lang: { type: "string" },
+      "language-map": { type: "string" },
+      reporter: { type: "string" },
+      "warnings-as-errors": { type: "boolean" },
+      "allow-lossy": { type: "boolean" },
       help: { type: "boolean" },
     },
   });

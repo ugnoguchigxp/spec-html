@@ -1,5 +1,5 @@
-import GithubSlugger from "github-slugger";
-import { Marked, Renderer, type Token, type Tokens } from "marked";
+import GithubSlugger, { slug as githubSlug } from "github-slugger";
+import { Lexer, Marked, Renderer, type Token, type Tokens } from "marked";
 
 import { decodeHtmlCharacterReferences } from "../content/html-character-references.js";
 import { canonicalizeLanguageTag } from "./language.js";
@@ -10,12 +10,25 @@ import {
 
 export interface MarkdownCompileOptions {
   language: string;
+  linkResolver?: (url: string) => string;
 }
 
 export interface MarkdownHeading {
   depth: number;
   id: string;
   text: string;
+}
+
+export interface MarkdownTableCaption {
+  index: number;
+  caption: string | null;
+  headingId: string | null;
+}
+
+export interface MarkdownMermaidCaption {
+  index: number;
+  caption: string | null;
+  headingId: string | null;
 }
 
 export type MarkdownNoticeCode =
@@ -31,6 +44,8 @@ export interface MarkdownCompileResult {
   fragment: string;
   title: string | null;
   headings: readonly MarkdownHeading[];
+  tableCaptions: readonly MarkdownTableCaption[];
+  mermaidCaptions: readonly MarkdownMermaidCaption[];
   notices: readonly MarkdownNotice[];
 }
 
@@ -39,6 +54,11 @@ interface CompileState {
   notices: MarkdownNotice[];
   noticeKeys: Set<string>;
   slugger: GithubSlugger;
+  tableCaptions: MarkdownTableCaption[];
+  tableCaptionCandidates: Array<MarkdownHeading | null>;
+  mermaidCaptions: MarkdownMermaidCaption[];
+  mermaidCaptionCandidates: Array<MarkdownHeading | null>;
+  linkResolver: ((url: string) => string) | undefined;
 }
 
 const markdownParser = new Marked({ async: false, breaks: false, gfm: true });
@@ -51,11 +71,17 @@ export function compileMarkdown(
   const normalizedSource = source.startsWith("\ufeff")
     ? source.slice(1)
     : source;
+  const candidates = collectCaptionCandidates(normalizedSource);
   const state: CompileState = {
     headings: [],
     notices: [],
     noticeKeys: new Set(),
     slugger: new GithubSlugger(),
+    tableCaptions: [],
+    tableCaptionCandidates: [...candidates.tables],
+    mermaidCaptions: [],
+    mermaidCaptionCandidates: [...candidates.mermaid],
+    linkResolver: options.linkResolver,
   };
   const renderer = new MarkdownRenderer(state);
   const body = markdownParser.parse(normalizedSource, {
@@ -74,6 +100,8 @@ export function compileMarkdown(
         ? null
         : firstHeading.text,
     headings: state.headings,
+    tableCaptions: state.tableCaptions,
+    mermaidCaptions: state.mermaidCaptions,
     notices: state.notices,
   };
 }
@@ -85,9 +113,28 @@ class MarkdownRenderer extends Renderer {
 
   override heading({ tokens, depth }: Tokens.Heading): string {
     const text = plainText(tokens).trim();
-    const id = this.state.slugger.slug(text || "section");
-    this.state.headings.push({ depth, id, text });
+    const slugSource = githubSlug(text).length === 0 ? "section" : text;
+    const id = this.state.slugger.slug(slugSource);
+    const heading = { depth, id, text };
+    this.state.headings.push(heading);
     return `<h${depth} id="${escapeHtml(id)}">${this.parser.parseInline(tokens)}</h${depth}>\n`;
+  }
+
+  override table(token: Tokens.Table): string {
+    const output = super.table(token);
+    const heading = this.state.tableCaptionCandidates.shift() ?? null;
+    this.state.tableCaptions.push({
+      index: this.state.tableCaptions.length,
+      caption: heading?.text ?? null,
+      headingId: heading?.id ?? null,
+    });
+    if (heading === null || heading.text.length === 0) {
+      return output;
+    }
+    return output.replace(
+      /^<table>\n/,
+      `<table>\n<caption>${escapeHtml(heading.text)}</caption>\n`,
+    );
   }
 
   override html({ text }: Tokens.HTML | Tokens.Tag): string {
@@ -98,16 +145,26 @@ class MarkdownRenderer extends Renderer {
   override code(token: Tokens.Code): string {
     const language = token.lang?.trim().split(/\s+/, 1)[0]?.toLowerCase();
     if (language === "mermaid") {
-      return `<pre class="mermaid" data-spec-html-source="markdown">${escapeHtml(token.text)}\n</pre>\n`;
+      const heading = this.state.mermaidCaptionCandidates.shift() ?? null;
+      this.state.mermaidCaptions.push({
+        index: this.state.mermaidCaptions.length,
+        caption: heading?.text ?? null,
+        headingId: heading?.id ?? null,
+      });
+      const diagram = `<pre class="mermaid" data-spec-html-source="markdown">${escapeHtml(token.text)}\n</pre>`;
+      return heading === null || heading.text.length === 0
+        ? `${diagram}\n`
+        : `<figure>${diagram}<figcaption>${escapeHtml(heading.text)}</figcaption></figure>\n`;
     }
     return super.code(token);
   }
 
   override tablecell(token: Tokens.TableCell): string {
-    const rendered = super.tablecell(token);
-    return token.header
-      ? rendered.replace(/^<th(?=[ >])/, '<th scope="col"')
-      : rendered;
+    const element = token.header ? "th" : "td";
+    const scope = token.header ? ' scope="col"' : "";
+    const alignment =
+      token.align === null ? "" : ` class="markdown-align-${token.align}"`;
+    return `<${element}${scope}${alignment}>${this.parser.parseInline(token.tokens)}</${element}>\n`;
   }
 
   override link({ href, title, tokens }: Tokens.Link): string {
@@ -117,7 +174,8 @@ class MarkdownRenderer extends Renderer {
       this.unsafeUrlNotice("link", href);
       return label;
     }
-    return `<a href="${escapeHtml(safeHref)}"${titleAttribute(title)}>${label}</a>`;
+    const resolvedHref = this.state.linkResolver?.(safeHref) ?? safeHref;
+    return `<a href="${escapeHtml(resolvedHref)}"${titleAttribute(title)}>${label}</a>`;
   }
 
   override image({ href, title, tokens }: Tokens.Image): string {
@@ -150,6 +208,48 @@ class MarkdownRenderer extends Renderer {
     this.state.noticeKeys.add(key);
     this.state.notices.push({ code, message, value });
   }
+}
+
+function collectCaptionCandidates(source: string): {
+  tables: Array<MarkdownHeading | null>;
+  mermaid: Array<MarkdownHeading | null>;
+} {
+  const tables: Array<MarkdownHeading | null> = [];
+  const mermaid: Array<MarkdownHeading | null> = [];
+  const slugger = new GithubSlugger();
+  const visitScope = (tokens: readonly Token[]): void => {
+    let heading: MarkdownHeading | null = null;
+    for (const token of tokens) {
+      if (token.type === "heading") {
+        const value = token as Tokens.Heading;
+        const text = plainText(value.tokens).trim();
+        const slugSource = githubSlug(text).length === 0 ? "section" : text;
+        heading = { depth: value.depth, id: slugger.slug(slugSource), text };
+        continue;
+      }
+      if (token.type === "table") {
+        tables.push(heading);
+        continue;
+      }
+      if (token.type === "code") {
+        const language = (token as Tokens.Code).lang
+          ?.trim().split(/\s+/, 1)[0]?.toLowerCase();
+        if (language === "mermaid") mermaid.push(heading);
+        continue;
+      }
+      if (token.type === "blockquote") {
+        visitScope((token as Tokens.Blockquote).tokens);
+        continue;
+      }
+      if (token.type === "list") {
+        for (const item of (token as Tokens.List).items) {
+          visitScope(item.tokens);
+        }
+      }
+    }
+  };
+  visitScope(Lexer.lex(source, { gfm: true, breaks: false }));
+  return { tables, mermaid };
 }
 
 function plainText(tokens: readonly Token[]): string {

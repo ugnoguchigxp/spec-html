@@ -18,17 +18,55 @@ interface DocumentRecord {
   facts: DocumentFacts | null;
 }
 
+export interface HtmlProjectDocument {
+  readonly path: string;
+  readonly absolutePath: string;
+  readonly source: string;
+}
+
+export interface LintProjectSourcesOptions {
+  /** Paths that will not exist in the virtual post-operation filesystem. */
+  readonly unavailablePaths?: readonly string[];
+}
+
 /** Lint every HTML document in a content root. */
 export async function lintProject(contentRoot: string): Promise<LintResult> {
   const root = await resolveContentRoot(contentRoot);
   const documents = await findHtmlDocuments(root);
+  const sources = await Promise.all(
+    documents.map(async (document) => ({
+      path: document.path,
+      absolutePath: document.absolutePath,
+      source: await readFile(document.absolutePath, "utf8"),
+    })),
+  );
+  return lintHtmlProject(root, sources);
+}
+
+/** Lint an explicit post-operation HTML view without requiring files to exist. */
+export async function lintProjectSources(
+  contentRoot: string,
+  documents: readonly HtmlProjectDocument[],
+  options: LintProjectSourcesOptions = {},
+): Promise<LintResult> {
+  const root = await resolveContentRoot(contentRoot);
+  return lintHtmlProject(root, documents, options);
+}
+
+async function lintHtmlProject(
+  root: string,
+  documents: readonly HtmlProjectDocument[],
+  options: LintProjectSourcesOptions = {},
+): Promise<LintResult> {
   const diagnostics: LintDiagnostic[] = [];
   const records = new Map<string, DocumentRecord>();
+  const unavailablePaths = new Set(
+    (options.unavailablePaths ?? []).map(canonicalPathKey),
+  );
 
   for (const document of documents) {
-    const source = await readFile(document.absolutePath, "utf8");
     const result = await lintDocument(
-      source,
+      document.source,
       document.absolutePath,
       document.path,
     );
@@ -39,7 +77,7 @@ export async function lintProject(contentRoot: string): Promise<LintResult> {
   for (const record of records.values()) {
     if (record.facts !== null) {
       diagnostics.push(
-        ...(await resolveReferences(root, records, record.facts)),
+        ...(await resolveReferences(root, records, record.facts, unavailablePaths)),
       );
     }
   }
@@ -74,10 +112,17 @@ async function resolveReferences(
   root: string,
   records: ReadonlyMap<string, DocumentRecord>,
   facts: DocumentFacts,
+  unavailablePaths: ReadonlySet<string>,
 ): Promise<LintDiagnostic[]> {
   const diagnostics: LintDiagnostic[] = [];
   for (const reference of facts.references) {
-    const resolved = await resolveReference(root, facts.file, reference);
+    const resolved = await resolveReference(
+      root,
+      records,
+      facts.file,
+      reference,
+      unavailablePaths,
+    );
     if (resolved.kind === "ignore") {
       continue;
     }
@@ -107,8 +152,10 @@ type ResolvedReference =
 
 async function resolveReference(
   root: string,
+  records: ReadonlyMap<string, DocumentRecord>,
   sourceFile: string,
   reference: LocalReference,
+  unavailablePaths: ReadonlySet<string>,
 ): Promise<ResolvedReference> {
   const value = reference.value.trim();
   const isHref = reference.attribute === "href";
@@ -180,6 +227,14 @@ async function resolveReference(
     return { kind: "invalid" };
   }
 
+  const virtualPath = toContentPath(root, candidate);
+  if (records.has(virtualPath)) {
+    return { kind: "local", path: virtualPath, fragment };
+  }
+  if (unavailablePaths.has(canonicalPathKey(virtualPath))) {
+    return { kind: "invalid" };
+  }
+
   let targetPath: string;
   let targetStats;
   try {
@@ -198,6 +253,10 @@ async function resolveReference(
     path: toContentPath(root, targetPath),
     fragment,
   };
+}
+
+function canonicalPathKey(value: string): string {
+  return value.normalize("NFC").toLocaleLowerCase("en-US");
 }
 
 function decodeLocalPath(rawPath: string): string | null {

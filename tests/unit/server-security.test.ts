@@ -102,6 +102,9 @@ describe("server request boundary", () => {
     expect(JSON.parse(response.body)).toEqual({
       doc: "document.html",
       archived: true,
+      restoreAllowed: true,
+      migrationId: null,
+      migrationOutputPath: null,
     });
     await expect(
       getDocumentArchived(contentRoot, "document.html"),
