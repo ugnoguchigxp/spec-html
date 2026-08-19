@@ -4,9 +4,15 @@ English | [日本語](./RELEASING.ja.md)
 
 This document describes the maintainer workflow for publishing Spec HTML to npm. A release must come from a reviewed, clean commit on the default branch.
 
-## Before the first public release
+## Registry preflight
 
-Confirm immediately before release that `spec-html` is still available on the npm registry. The first publication creates the package, so it must be performed interactively by an npm account owner with two-factor authentication enabled. Do not add an npm token to the repository.
+Confirm immediately before every release that the target version is not present on the npm registry:
+
+```bash
+npm view spec-html@<version> version
+```
+
+The expected result is `E404`. If the version exists, select a new version and restart the release checks. Publication must be performed interactively by an npm account owner with two-factor authentication enabled. Do not add an npm token to the repository.
 
 Keep publication as a local, deliberate maintainer action. CI verifies the package but does not publish it.
 
@@ -31,10 +37,16 @@ Keep publication as a local, deliberate maintainer action. CI verifies the packa
    ```
 
 6. Commit the version and changelog changes, obtain review, and merge them to the default branch.
+7. Check out the reviewed release commit in a clean worktree and run the release consistency gate:
+
+   ```bash
+   npm ci
+   npm run release:check
+   ```
 
 ## Publish
 
-Check out the reviewed release commit in a clean worktree and publish interactively:
+After every required GitHub Actions job passes for the release commit, publish interactively:
 
 ```bash
 npm publish

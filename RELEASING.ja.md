@@ -4,9 +4,15 @@
 
 この文書はSpec HTMLをnpmへ公開するmaintainer向け手順です。releaseはdefault branch上のreview済みかつcleanなcommitから行います。
 
-## 初回公開の前に
+## Registry事前確認
 
-release直前に、npm registryで`spec-html`が引き続き利用可能な名前であることを確認します。初回公開でpackageが作成されるため、2要素認証を有効にしたnpm account ownerが対話的に公開してください。npm tokenをrepositoryへ追加してはいけません。
+releaseのたびに、対象versionがnpm registryへ未公開であることを直前に確認します。
+
+```bash
+npm view spec-html@<version> version
+```
+
+期待する結果は`E404`です。既に存在する場合は新しいversionを選び、release checkを最初からやり直します。2要素認証を有効にしたnpm account ownerが対話的に公開してください。npm tokenをrepositoryへ追加してはいけません。
 
 公開はmaintainerがローカルから明示的に行います。CIはpackageを検証しますが、publishは行いません。
 
@@ -31,10 +37,16 @@ release直前に、npm registryで`spec-html`が引き続き利用可能な名�
    ```
 
 6. versionとchangelogの変更をcommitし、reviewを経てdefault branchへmergeする。
+7. review済みrelease commitをcleanなworktreeへcheckoutし、release整合性gateを実行する。
+
+   ```bash
+   npm ci
+   npm run release:check
+   ```
 
 ## Publish
 
-review済みのrelease commitをcleanなworktreeへcheckoutし、対話的に公開します。
+release commitに対するGitHub Actionsのrequired jobがすべて成功してから、対話的に公開します。
 
 ```bash
 npm publish
