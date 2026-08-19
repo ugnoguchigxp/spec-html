@@ -8,7 +8,9 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
-      include: ["src/{cli,content,server,lint,format,fix}/**/*.ts"],
+      include: [
+        "src/{cli,content,server,lint,format,fix,markdown,convert}/**/*.ts",
+      ],
       // DOM code is exercised by Playwright; bundled vendor runtimes are external code.
       exclude: ["src/browser/**", "src/vendor/**"],
       thresholds: {

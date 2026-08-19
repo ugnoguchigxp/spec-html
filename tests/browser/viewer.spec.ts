@@ -351,6 +351,87 @@ test("opens source HTML in a modal without replacing the document preview", asyn
   await expect(sourceDialog).toBeHidden();
 });
 
+test("@smoke previews Markdown safely, shows its source, and routes across formats", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.assign(window, {
+      markdownMermaidCallback: () => {
+        Object.assign(window, { markdownMermaidCallbackExecuted: true });
+      },
+    });
+  });
+  await page.goto("/?doc=markdown.md");
+
+  const frame = page.frameLocator("iframe.viewer-document");
+  await expect(frame.locator("h1")).toHaveText("Markdown design");
+  await expect(frame.locator("article")).toHaveAttribute("lang", "en");
+  await expect(page).toHaveTitle("Markdown design — Spec HTML");
+  const navigationLink = page.getByRole("link", { name: /Markdown design/ });
+  await expect(navigationLink.locator(".viewer-navigation-format")).toHaveText(
+    "MD",
+  );
+  await expect(
+    navigationLink.locator(".viewer-navigation-format"),
+  ).toHaveAttribute("aria-label", "Markdown");
+
+  await expect
+    .poll(() =>
+      frame
+        .locator('img[alt="Fixture pixel"]')
+        .evaluate((image) => (image as HTMLImageElement).naturalWidth),
+    )
+    .toBeGreaterThan(0);
+  await expect(frame.locator(".mermaid svg")).toBeVisible();
+  await frame.locator(".mermaid .node", { hasText: "HTML" }).click();
+  await expect(
+    frame
+      .locator("body")
+      .evaluate(() =>
+        Boolean(
+          (window as Window & { markdownMermaidCallbackExecuted?: boolean })
+            .markdownMermaidCallbackExecuted,
+        ),
+      ),
+  ).resolves.toBe(false);
+  await expect(frame.locator("article script")).toHaveCount(0);
+  await expect(frame.locator("article")).toContainText(
+    "<script>window.markdownRawScriptExecuted = true</script>",
+  );
+  await expect(frame.getByRole("link", { name: "Unsafe link" })).toHaveCount(0);
+  await expect(frame.getByText("Unsafe link", { exact: true })).toBeVisible();
+  await expect(
+    frame
+      .locator("body")
+      .evaluate(() =>
+        Boolean(
+          (window as Window & { markdownRawScriptExecuted?: boolean })
+            .markdownRawScriptExecuted,
+        ),
+      ),
+  ).resolves.toBe(false);
+
+  const sourceButton = page.getByRole("button", {
+    name: "View source Markdown",
+  });
+  await sourceButton.click();
+  const sourceDialog = page.getByRole("dialog", { name: "Source Markdown" });
+  await expect(sourceDialog.locator("pre")).toContainText("# Markdown design");
+  await expect(sourceDialog.locator("pre")).toContainText(
+    "[Unsafe link](javascript:",
+  );
+  await sourceDialog.getByRole("button", { name: "Close" }).click();
+
+  await frame.getByRole("link", { name: "relative HTML link" }).click();
+  await expect(frame.locator("h1")).toHaveText("Overview");
+  await expect(page).toHaveURL(/\?doc=overview\.html#details$/);
+  await expect(
+    page.getByRole("button", { name: "View source HTML" }),
+  ).toBeVisible();
+  await page.goBack();
+  await expect(frame.locator("h1")).toHaveText("Markdown design");
+});
+
 test("wraps long source HTML lines inside the modal", async ({ page }) => {
   await page.goto("/");
 

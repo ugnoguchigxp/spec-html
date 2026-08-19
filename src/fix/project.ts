@@ -1,7 +1,7 @@
 import { lstat, realpath, rename } from "node:fs/promises";
 import { basename, dirname, extname } from "node:path";
 import {
-  findContentDocuments,
+  findHtmlDocuments,
   type ContentDocument,
 } from "../content/documents.js";
 import {
@@ -34,7 +34,7 @@ const projectSnapshots = new WeakMap<
   ReadonlyMap<string, FileSnapshot>
 >();
 
-/** Fix an HTML file or every viewer document in a directory without writing. */
+/** Fix an HTML file or every HTML document in a directory without writing. */
 export async function fixProject(
   targetPath: string,
 ): Promise<FixProjectResult> {
@@ -202,7 +202,7 @@ async function resolveFixTargets(
   }
   if (stats.isDirectory()) {
     const root = await realpath(targetPath);
-    return { root, documents: await findContentDocuments(root) };
+    return { root, documents: await findHtmlDocuments(root) };
   }
   if (!stats.isFile()) {
     throw new Error(
@@ -218,7 +218,7 @@ async function resolveFixTargets(
   const absolutePath = await realpath(targetPath);
   return {
     root: dirname(absolutePath),
-    documents: [{ absolutePath, path: basename(absolutePath) }],
+    documents: [{ absolutePath, path: basename(absolutePath), format: "html" }],
   };
 }
 

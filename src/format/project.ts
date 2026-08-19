@@ -1,6 +1,9 @@
 import { lstat, realpath, rename } from "node:fs/promises";
 import { basename, extname } from "node:path";
-import { findContentDocuments, type ContentDocument } from "../content/documents.js";
+import {
+  findHtmlDocuments,
+  type ContentDocument,
+} from "../content/documents.js";
 import {
   atomicReplace,
   createFileSnapshot,
@@ -22,14 +25,18 @@ const projectSnapshots = new WeakMap<
   ReadonlyMap<string, FileSnapshot>
 >();
 
-/** Format an HTML file or every viewer document in a directory without writing. */
-export async function formatProject(targetPath: string): Promise<FormatProjectResult> {
+/** Format an HTML file or every HTML document in a directory without writing. */
+export async function formatProject(
+  targetPath: string,
+): Promise<FormatProjectResult> {
   const targets = await resolveFormatTargets(targetPath);
   const documents = [];
   const snapshots = new Map<string, FileSnapshot>();
   for (const target of targets) {
     const source = await readUtf8File(target.absolutePath, target.path);
-    documents.push(await formatDocument(source, target.absolutePath, target.path));
+    documents.push(
+      await formatDocument(source, target.absolutePath, target.path),
+    );
     snapshots.set(target.path, createFileSnapshot(target.absolutePath, source));
   }
   const result = createFormatProjectResult(documents);
@@ -58,8 +65,9 @@ export async function writeFormatProject(
     targetByPath.size !== result.documents.length ||
     snapshotByPath === undefined ||
     snapshotByPath.size !== result.documents.length ||
-    result.documents.some((document) =>
-      !targetByPath.has(document.file) || !snapshotByPath.has(document.file)
+    result.documents.some(
+      (document) =>
+        !targetByPath.has(document.file) || !snapshotByPath.has(document.file),
     )
   ) {
     throw new Error("整形後に対象fileの集合が変わったため書き換えませんでした");
@@ -70,13 +78,11 @@ export async function writeFormatProject(
     if (
       target === undefined ||
       snapshot === undefined ||
-      !(await fileMatchesSnapshot(
-        target.absolutePath,
-        document.file,
-        snapshot,
-      ))
+      !(await fileMatchesSnapshot(target.absolutePath, document.file, snapshot))
     ) {
-      throw new Error(`整形後に内容が変わったためfileを書き換えませんでした: ${document.file}`);
+      throw new Error(
+        `整形後に内容が変わったためfileを書き換えませんでした: ${document.file}`,
+      );
     }
   }
   const writePlan = changed.map((document) => {
@@ -92,7 +98,9 @@ export async function writeFormatProject(
       await atomicReplace(target.absolutePath, output, "spec-html", operations);
       written.push(document.file);
     } catch (error: unknown) {
-      const pending = writePlan.slice(index + 1).map((item) => item.document.file);
+      const pending = writePlan
+        .slice(index + 1)
+        .map((item) => item.document.file);
       const completed = written.length === 0 ? "なし" : written.join(",");
       const remaining = pending.length === 0 ? "なし" : pending.join(",");
       throw new Error(
@@ -103,7 +111,9 @@ export async function writeFormatProject(
   }
 }
 
-async function resolveFormatTargets(targetPath: string): Promise<ContentDocument[]> {
+async function resolveFormatTargets(
+  targetPath: string,
+): Promise<ContentDocument[]> {
   let stats;
   try {
     stats = await lstat(targetPath);
@@ -116,10 +126,12 @@ async function resolveFormatTargets(targetPath: string): Promise<ContentDocument
 
   if (stats.isDirectory()) {
     const root = await realpath(targetPath);
-    return findContentDocuments(root);
+    return findHtmlDocuments(root);
   }
   if (!stats.isFile()) {
-    throw new Error(`対象pathはHTML fileまたはdirectoryではありません: ${targetPath}`);
+    throw new Error(
+      `対象pathはHTML fileまたはdirectoryではありません: ${targetPath}`,
+    );
   }
   if (extname(targetPath).toLowerCase() !== ".html") {
     throw new Error(`対象fileは.htmlではありません: ${targetPath}`);
@@ -128,7 +140,7 @@ async function resolveFormatTargets(targetPath: string): Promise<ContentDocument
     throw new Error("nav.htmlはViewer文書ではないため整形対象にできません");
   }
   const absolutePath = await realpath(targetPath);
-  return [{ absolutePath, path: basename(absolutePath) }];
+  return [{ absolutePath, path: basename(absolutePath), format: "html" }];
 }
 
 function messageOf(error: unknown): string {

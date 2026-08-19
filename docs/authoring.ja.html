@@ -25,6 +25,34 @@
     </ol>
   </section>
 
+  <section id="markdown">
+    <h2>既存Markdownを扱う</h2>
+    <p>
+      Viewerは<code>.md</code>と<code>.markdown</code>も探索します。見出し、段落、強調、listとtask
+      list、blockquote、code、GFM table、link、画像、<code>mermaid</code>
+      fenceを表示し、相対URLはMarkdown fileの位置から解決します。raw HTMLはliteral
+      textとして表示し、危険なURL schemeを除去し、Mermaidの<code>strict</code> security
+      levelでcallback directiveを無効化します。
+    </p>
+    <pre><code class="language-sh">spec-html ./specs --markdown-lang ja
+spec-html convert ./specs/design.md --lang ja
+spec-html convert ./specs/design.md --lang ja --output ./specs/design.html
+</code></pre>
+    <p>
+      <code>--output</code
+      >を省略するとstdoutへHTMLだけを出力します。明示する場合は、入力と同じdirectoryにある未作成の<code>.html</code>を指定し、既存の通常fileやsymbolic
+      linkは上書きしません。変換時に元Markdownを削除、rename、archive、同期することもありません。生成後のHTMLは独立した編集対象として扱います。
+    </p>
+    <aside>
+      <p>
+        <code>lint</code
+        >、<code>fix</code>、<code>format</code>、<code>check</code>が処理するのはHTMLだけです。mixed
+        directoryのcheck成功はMarkdown sourceの検査を意味しません。生成draftには、作成者が補うtable
+        captionなどのsemantic診断が残ることがあります。
+      </p>
+    </aside>
+  </section>
+
   <section id="fix">
     <h2>HTMLのTypoを修正する</h2>
     <p>

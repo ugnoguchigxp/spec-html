@@ -1,16 +1,21 @@
 import { readFile, stat } from "node:fs/promises";
-import { basename, dirname, extname } from "node:path";
+import { basename, dirname } from "node:path";
 import {
   withDocumentArchiveSnapshot,
   type DocumentArchiveSnapshot,
 } from "../content/archive.js";
 import type { ContentDocument } from "../content/documents.js";
 import type { NavigationView } from "../content/document-path.js";
+import { removeDocumentExtension } from "../content/document-format.js";
+import { decodeHtmlCharacterReferences } from "../content/html-character-references.js";
+import { compileMarkdown } from "../markdown/compiler.js";
+import { canonicalizeLanguageTag } from "../markdown/language.js";
 
 interface NavigationDocument {
   path: string;
   title: string;
   updatedAt: Date;
+  format: ContentDocument["format"];
 }
 
 const MINUTE_IN_MS = 60 * 1000;
@@ -22,9 +27,11 @@ export async function createNavigationHtml(
   contentRoot: string,
   now = new Date(),
   view: NavigationView = "documents",
+  markdownLanguage = "en",
 ): Promise<string> {
+  const language = canonicalizeLanguageTag(markdownLanguage);
   return withDocumentArchiveSnapshot(contentRoot, (snapshot) =>
-    createNavigationHtmlFromSnapshot(snapshot, now, view),
+    createNavigationHtmlFromSnapshot(snapshot, now, view, language),
   );
 }
 
@@ -32,6 +39,7 @@ async function createNavigationHtmlFromSnapshot(
   snapshot: DocumentArchiveSnapshot,
   now: Date,
   view: NavigationView,
+  markdownLanguage: string,
 ): Promise<string> {
   const { active: activeDocuments, archived: archivedDocuments } = snapshot;
   const activePaths = new Set(activeDocuments.map((document) => document.path));
@@ -43,6 +51,7 @@ async function createNavigationHtmlFromSnapshot(
   }
   const documents = await findNavigationDocuments(
     view === "archive" ? archivedDocuments : activeDocuments,
+    markdownLanguage,
   );
   const groups = new Map<string, NavigationDocument[]>();
 
@@ -75,8 +84,12 @@ async function createNavigationHtmlFromSnapshot(
       const title = escapeHtml(document.title);
       const updatedAt = document.updatedAt.toISOString();
       const updatedLabel = formatUpdatedAt(document.updatedAt, now);
+      const formatBadge =
+        document.format === "markdown"
+          ? '<span class="viewer-navigation-format" aria-label="Markdown">MD</span>'
+          : "";
       lines.push(
-        `  <a href="./${encodePath(document.path)}" title="${title}"><span class="viewer-navigation-title">${title}</span><time datetime="${updatedAt}">${updatedLabel}</time></a>`,
+        `  <a href="./${encodePath(document.path)}" title="${title}"><span class="viewer-navigation-title">${title}</span>${formatBadge}<time datetime="${updatedAt}">${updatedLabel}</time></a>`,
       );
     }
   }
@@ -94,14 +107,14 @@ function compareDocuments(
 }
 
 function documentRank(path: string): number {
-  const filename = basename(path).toLowerCase();
-  if (filename === "index.html") {
+  const stem = removeDocumentExtension(basename(path)).toLowerCase();
+  if (stem === "index") {
     return 0;
   }
-  if (filename === "overview.html") {
+  if (stem === "overview") {
     return 1;
   }
-  if (filename === "readme.html") {
+  if (stem === "readme") {
     return 2;
   }
   return 3;
@@ -109,17 +122,23 @@ function documentRank(path: string): number {
 
 async function findNavigationDocuments(
   contentDocuments: readonly ContentDocument[],
+  markdownLanguage: string,
 ): Promise<NavigationDocument[]> {
   return Promise.all(
-    contentDocuments.map(async ({ absolutePath, path }) => {
-      const [html, fileStats] = await Promise.all([
+    contentDocuments.map(async ({ absolutePath, path, format }) => {
+      const [source, fileStats] = await Promise.all([
         readFile(absolutePath, "utf8"),
         stat(absolutePath),
       ]);
       return {
         path,
-        title: documentTitle(html, basename(path)),
+        title:
+          format === "markdown"
+            ? (compileMarkdown(source, { language: markdownLanguage }).title ??
+              fallbackDocumentTitle(path))
+            : documentTitle(source, basename(path)),
         updatedAt: fileStats.mtime,
+        format,
       };
     }),
   );
@@ -158,7 +177,7 @@ function documentTitle(html: string, filename: string): string {
     .replace(/<(script|style|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ");
   const heading = /<h1(?:\s[^>]*)?>([\s\S]*?)<\/h1\s*>/i.exec(visibleHtml)?.[1];
   if (heading !== undefined) {
-    const title = decodeHtmlEntities(
+    const title = decodeHtmlCharacterReferences(
       heading.replace(/<!--[\s\S]*?-->/g, " ").replace(/<[^>]*>/g, " "),
     )
       .replace(/\s+/g, " ")
@@ -168,49 +187,12 @@ function documentTitle(html: string, filename: string): string {
     }
   }
 
-  const stem = basename(filename, extname(filename));
+  return fallbackDocumentTitle(filename);
+}
+
+function fallbackDocumentTitle(filename: string): string {
+  const stem = removeDocumentExtension(basename(filename));
   return stem.replace(/[-_]+/g, " ").trim() || "Document";
-}
-
-function decodeHtmlEntities(value: string): string {
-  const namedEntities: Readonly<Record<string, string>> = {
-    amp: "&",
-    apos: "'",
-    gt: ">",
-    lt: "<",
-    nbsp: " ",
-    quot: '"',
-  };
-
-  return value.replace(
-    /&(?:#(\d+)|#x([\da-f]+)|([a-z]+));/gi,
-    (
-      entity,
-      decimal: string | undefined,
-      hexadecimal: string | undefined,
-      named: string | undefined,
-    ) => {
-      if (named !== undefined) {
-        return namedEntities[named.toLowerCase()] ?? entity;
-      }
-      const codePoint = Number.parseInt(
-        decimal ?? hexadecimal ?? "",
-        decimal === undefined ? 16 : 10,
-      );
-      return isValidCodePoint(codePoint)
-        ? String.fromCodePoint(codePoint)
-        : entity;
-    },
-  );
-}
-
-function isValidCodePoint(value: number): boolean {
-  return (
-    Number.isInteger(value) &&
-    value > 0 &&
-    value <= 0x10ffff &&
-    !(value >= 0xd800 && value <= 0xdfff)
-  );
 }
 
 function groupTitle(directory: string): string {

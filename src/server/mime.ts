@@ -9,6 +9,8 @@ const MIME_TYPES: Readonly<Record<string, string>> = {
   ".jpg": "image/jpeg",
   ".js": "text/javascript; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
+  ".md": "text/markdown; charset=utf-8",
+  ".markdown": "text/markdown; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
   ".svg": "image/svg+xml",
@@ -18,5 +20,7 @@ const MIME_TYPES: Readonly<Record<string, string>> = {
 };
 
 export function getContentType(filePath: string): string {
-  return MIME_TYPES[extname(filePath).toLowerCase()] ?? "application/octet-stream";
+  return (
+    MIME_TYPES[extname(filePath).toLowerCase()] ?? "application/octet-stream"
+  );
 }

@@ -14,6 +14,7 @@ describe("parseCliCommand", () => {
         allowedHosts: [],
         port: 4173,
         openBrowser: true,
+        markdownLanguage: "en",
       },
     });
   });
@@ -32,6 +33,8 @@ describe("parseCliCommand", () => {
           "--port",
           "0",
           "--no-open",
+          "--markdown-lang",
+          "ja-jp",
         ],
         CWD,
       ),
@@ -43,6 +46,7 @@ describe("parseCliCommand", () => {
         allowedHosts: ["viewer.local", "127.0.0.1"],
         port: 0,
         openBrowser: false,
+        markdownLanguage: "ja-JP",
       },
     });
   });
@@ -162,6 +166,45 @@ describe("parseCliCommand", () => {
     });
   });
 
+  it("parses convert commands without changing a viewer directory named convert", () => {
+    expect(
+      parseCliCommand(
+        [
+          "convert",
+          "docs/design.md",
+          "--lang",
+          "ja-jp",
+          "--output",
+          "docs/design.html",
+        ],
+        CWD,
+      ),
+    ).toEqual({
+      kind: "convert",
+      options: {
+        inputPath: resolve(CWD, "docs/design.md"),
+        outputPath: resolve(CWD, "docs/design.html"),
+        language: "ja-JP",
+      },
+    });
+    expect(
+      parseCliCommand(["convert", "docs/design.markdown", "--lang", "en"], CWD),
+    ).toEqual({
+      kind: "convert",
+      options: {
+        inputPath: resolve(CWD, "docs/design.markdown"),
+        language: "en",
+      },
+    });
+    expect(parseCliCommand(["convert", "--help"], CWD)).toEqual({
+      kind: "convert-help",
+    });
+    expect(parseCliCommand(["./convert", "--no-open"], CWD)).toMatchObject({
+      kind: "run",
+      options: { contentRoot: resolve(CWD, "convert") },
+    });
+  });
+
   it("parses selected check stages and fix mode", () => {
     expect(
       parseCliCommand(
@@ -227,6 +270,7 @@ describe("parseCliCommand", () => {
     ["--open", "--no-open"],
     ["--help", "--version"],
     ["--host", "   "],
+    ["--markdown-lang", "invalid_tag"],
     ["--unknown"],
     ["lint", "--format", "other"],
     ["lint", "--max-issues", "1e2"],
@@ -247,6 +291,13 @@ describe("parseCliCommand", () => {
     ["check", "--reporter", "other"],
     ["check", "--max-issues", "1e2"],
     ["check", "docs", "--help"],
+    ["convert"],
+    ["convert", "design.md"],
+    ["convert", "design.txt", "--lang", "en"],
+    ["convert", "design.md", "--lang", "invalid_tag"],
+    ["convert", "design.md", "extra.md", "--lang", "en"],
+    ["convert", "design.md", "--lang", "en", "--output", "design.txt"],
+    ["convert", "design.md", "--lang", "en", "--help"],
   ])("rejects invalid arguments: %j", (...args: string[]) => {
     expect(() => parseCliCommand(args, CWD)).toThrow(CliUsageError);
   });

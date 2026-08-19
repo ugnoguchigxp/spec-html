@@ -14,6 +14,8 @@ describe("normalizeDocumentPath", () => {
     ["overview.html", "overview.html"],
     ["nested/page.html", "nested/page.html"],
     ["space file.HTML", "space file.HTML"],
+    ["plan.md", "plan.md"],
+    ["nested/design.Markdown", "nested/design.Markdown"],
     ["日本語.html", "日本語.html"],
     ["", null],
     ["/absolute.html", null],

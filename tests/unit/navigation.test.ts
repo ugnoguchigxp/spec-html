@@ -99,6 +99,58 @@ describe("createNavigationHtml", () => {
     );
   });
 
+  it("validates the Markdown language even when no Markdown file exists", async () => {
+    await expect(
+      createNavigationHtml(root, new Date(), "documents", "invalid_tag"),
+    ).rejects.toThrow("Invalid language tag");
+  });
+
+  it("uses Markdown h1 titles, format badges, and extension-independent ranks", async () => {
+    const now = new Date("2026-08-18T12:00:00.000Z");
+    await Promise.all([
+      writeFile(join(root, "readme.md"), "# 導入 **ガイド**\n"),
+      writeFile(join(root, "notes.markdown"), "本文だけです。\n"),
+      writeFile(join(root, "notes.html"), "<h1>HTML Notes</h1>"),
+    ]);
+    await Promise.all([
+      utimes(join(root, "readme.md"), now, now),
+      utimes(join(root, "notes.markdown"), now, now),
+      utimes(join(root, "notes.html"), now, now),
+    ]);
+
+    const navigation = await createNavigationHtml(root, now, "documents", "ja");
+    expect(navigation.indexOf("導入 ガイド")).toBeLessThan(
+      navigation.indexOf("HTML Notes"),
+    );
+    expect(navigation).toContain(
+      '<a href="./readme.md" title="導入 ガイド"><span class="viewer-navigation-title">導入 ガイド</span><span class="viewer-navigation-format" aria-label="Markdown">MD</span>',
+    );
+    expect(navigation).toContain(
+      '<a href="./notes.markdown" title="notes"><span class="viewer-navigation-title">notes</span><span class="viewer-navigation-format" aria-label="Markdown">MD</span>',
+    );
+    expect(navigation).toContain('<a href="./notes.html" title="HTML Notes">');
+  });
+
+  it("falls back for an empty Markdown h1 and decodes title character references", async () => {
+    const now = new Date("2026-08-18T12:00:00.000Z");
+    await Promise.all([
+      writeFile(join(root, "empty-heading.md"), "#\n\nBody\n"),
+      writeFile(join(root, "entities.md"), "\uFEFF# Design &amp; delivery\n"),
+    ]);
+    await Promise.all([
+      utimes(join(root, "empty-heading.md"), now, now),
+      utimes(join(root, "entities.md"), now, now),
+    ]);
+
+    const navigation = await createNavigationHtml(root, now);
+    expect(navigation).toContain(
+      '<a href="./empty-heading.md" title="empty heading"><span class="viewer-navigation-title">empty heading</span>',
+    );
+    expect(navigation).toContain(
+      '<a href="./entities.md" title="Design &amp; delivery"><span class="viewer-navigation-title">Design &amp; delivery</span>',
+    );
+  });
+
   it("separates current and physically archived documents", async () => {
     await Promise.all([
       writeFile(join(root, "current.html"), "<h1>Current</h1>"),

@@ -22,6 +22,7 @@ export interface ViewerElements {
   documentActionStatus: HTMLDivElement;
   documentModeButton: HTMLButtonElement;
   sourceDialog: HTMLDialogElement;
+  sourceDialogTitle: HTMLHeadingElement;
   sourceDialogCode: HTMLPreElement;
   sourceDialogCloseButton: HTMLButtonElement;
   sortButtons: Record<SortPreference, HTMLButtonElement>;

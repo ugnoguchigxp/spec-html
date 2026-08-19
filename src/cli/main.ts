@@ -10,6 +10,15 @@ import { formatProject, writeFormatProject } from "../format/project.js";
 import { formatCompact, formatJson } from "../lint/diagnostics.js";
 import { lintProject } from "../lint/project.js";
 import { getRule } from "../lint/rules.js";
+import {
+  convertMarkdownDocument,
+  writeConvertedDocument,
+} from "../convert/document.js";
+import {
+  conversionHasErrors,
+  formatConversionDiagnostics,
+  formatConversionSummary,
+} from "../convert/diagnostics.js";
 import { messageForCliError } from "./errors.js";
 import { openViewer } from "./open-browser.js";
 import {
@@ -17,6 +26,7 @@ import {
   parseCliCommand,
   type CliCheckOptions,
   type CliCheckStage,
+  type CliConvertOptions,
   type CliFixOptions,
   type CliFormatOptions,
   type CliLintOptions,
@@ -31,6 +41,7 @@ Options:
   --host <host>                  listenするhost（既定: 127.0.0.1）
   --allowed-host <hostname>      非loopbackで許可するHost（repeat可、wildcardでは必須）
   --port <port>                  listenするport（既定: 4173、0で自動割り当て）
+  --markdown-lang <language-tag> Markdown文書の言語（既定: en）
   --open                         起動後にbrowserを開く（既定）
   --no-open                      browserを開かない
   --help                         このhelpを表示
@@ -46,7 +57,10 @@ Fix:
   spec-html fix [path] --check|--write [options]
 
 Check:
-  spec-html check [directory] [--fix] [options]`;
+  spec-html check [directory] [--fix] [options]
+
+Convert:
+  spec-html convert <input.md> --lang <language-tag> [--output <output.html>]`;
 
 export const LINT_HELP_TEXT = `使い方: spec-html lint [directory] [options]
 
@@ -88,6 +102,15 @@ Options:
   --max-issues <number>        lintの最大表示件数（既定: 50、0で全件）
   --help                       このhelpを表示`;
 
+export const CONVERT_HELP_TEXT = `使い方: spec-html convert <input.md> --lang <language-tag> [options]
+
+Options:
+  --lang <language-tag>    生成するarticleのBCP 47言語tag（必須）
+  --output <output.html>   同じdirectoryへ新規HTML fileを作成（既存entryは拒否）
+  --help                   このhelpを表示
+
+--outputを省略するとHTMLだけをstdoutへ出力します。`;
+
 /** Dispatch a parsed command without an import-time process side effect. */
 export async function main(args: readonly string[]): Promise<number> {
   try {
@@ -108,6 +131,9 @@ export async function main(args: readonly string[]): Promise<number> {
       case "check-help":
         console.log(CHECK_HELP_TEXT);
         return 0;
+      case "convert-help":
+        console.log(CONVERT_HELP_TEXT);
+        return 0;
       case "version":
         console.log(__SPEC_HTML_VERSION__);
         return 0;
@@ -122,6 +148,8 @@ export async function main(args: readonly string[]): Promise<number> {
         return await runFix(command.options);
       case "check":
         return await runCheck(command.options);
+      case "convert":
+        return await runConvert(command.options);
       case "run":
         return await runViewer(command.options);
     }
@@ -137,10 +165,33 @@ export async function main(args: readonly string[]): Promise<number> {
     return args[0] === "lint" ||
       args[0] === "format" ||
       args[0] === "fix" ||
-      args[0] === "check"
+      args[0] === "check" ||
+      args[0] === "convert"
       ? 2
       : 1;
   }
+}
+
+export async function runConvert(options: CliConvertOptions): Promise<number> {
+  const result = await convertMarkdownDocument(options);
+  const diagnostics = formatConversionDiagnostics(result);
+
+  if (result.outputPath === null) {
+    process.stdout.write(result.output);
+    if (diagnostics.length > 0) {
+      process.stderr.write(diagnostics);
+    }
+    process.stderr.write(`${formatConversionSummary(result)}\n`);
+  } else {
+    await writeConvertedDocument(result);
+    console.log(`Created: ${result.outputPath}`);
+    console.log(formatConversionSummary(result));
+    if (diagnostics.length > 0) {
+      process.stderr.write(diagnostics);
+    }
+  }
+
+  return conversionHasErrors(result) ? 1 : 0;
 }
 
 interface CheckStageReport {

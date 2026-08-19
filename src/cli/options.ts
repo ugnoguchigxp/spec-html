@@ -2,6 +2,11 @@ import { parseArgs } from "node:util";
 import { resolve } from "node:path";
 import { RULE_BY_ID } from "../lint/rules.js";
 import type { RuleId } from "../lint/diagnostics.js";
+import { canonicalizeLanguageTag } from "../markdown/language.js";
+import {
+  documentFormatFromPath,
+  isHtmlDocumentPath,
+} from "../content/document-format.js";
 
 export interface CliRunOptions {
   contentRoot: string;
@@ -9,6 +14,7 @@ export interface CliRunOptions {
   allowedHosts: readonly string[];
   port: number;
   openBrowser: boolean;
+  markdownLanguage: string;
 }
 
 export interface CliLintOptions {
@@ -41,18 +47,26 @@ export interface CliCheckOptions {
   maxIssues: number;
 }
 
+export interface CliConvertOptions {
+  inputPath: string;
+  outputPath?: string;
+  language: string;
+}
+
 export type CliCommand =
   | { kind: "run"; options: CliRunOptions }
   | { kind: "lint"; options: CliLintOptions }
   | { kind: "format"; options: CliFormatOptions }
   | { kind: "fix"; options: CliFixOptions }
   | { kind: "check"; options: CliCheckOptions }
+  | { kind: "convert"; options: CliConvertOptions }
   | { kind: "explain"; rule: RuleId }
   | { kind: "help" }
   | { kind: "lint-help" }
   | { kind: "format-help" }
   | { kind: "fix-help" }
   | { kind: "check-help" }
+  | { kind: "convert-help" }
   | { kind: "version" };
 
 export class CliUsageError extends Error {
@@ -75,8 +89,54 @@ export function parseCliCommand(
   if (args[0] === "check") {
     return parseCheckCommand(args.slice(1), cwd);
   }
+  if (args[0] === "convert") {
+    return parseConvertCommand(args.slice(1), cwd);
+  }
 
   return parseRunCommand(args, cwd);
+}
+
+function parseConvertCommand(args: readonly string[], cwd: string): CliCommand {
+  let parsed: ReturnType<typeof parseConvertArgs>;
+  try {
+    parsed = parseConvertArgs([...args]);
+  } catch (error: unknown) {
+    throw new CliUsageError(messageForParseArgsError(error));
+  }
+
+  const hasOptions =
+    parsed.values.lang !== undefined || parsed.values.output !== undefined;
+  if (parsed.values.help === true) {
+    if (parsed.positionals.length > 0 || hasOptions) {
+      throw new CliUsageError(
+        "--helpはinputやconvert optionと同時に指定できません",
+      );
+    }
+    return { kind: "convert-help" };
+  }
+  if (parsed.positionals.length !== 1) {
+    throw new CliUsageError("Markdown inputを1つ指定してください");
+  }
+  const input = parsed.positionals[0]!;
+  if (documentFormatFromPath(input) !== "markdown") {
+    throw new CliUsageError("inputは.mdまたは.markdownで指定してください");
+  }
+  if (parsed.values.lang === undefined) {
+    throw new CliUsageError("--langを指定してください");
+  }
+  const output = parsed.values.output;
+  if (output !== undefined && !isHtmlDocumentPath(output)) {
+    throw new CliUsageError("--outputは.htmlで指定してください");
+  }
+
+  return {
+    kind: "convert",
+    options: {
+      inputPath: resolve(cwd, input),
+      ...(output === undefined ? {} : { outputPath: resolve(cwd, output) }),
+      language: parseLanguageTag(parsed.values.lang, "lang"),
+    },
+  };
 }
 
 function parseCheckCommand(args: readonly string[], cwd: string): CliCommand {
@@ -295,8 +355,20 @@ function parseRunCommand(args: readonly string[], cwd: string): CliCommand {
       allowedHosts,
       port,
       openBrowser: parsed.values["no-open"] !== true,
+      markdownLanguage: parseLanguageTag(
+        parsed.values["markdown-lang"] ?? "en",
+        "markdown-lang",
+      ),
     },
   };
+}
+
+function parseLanguageTag(value: string, option: string): string {
+  try {
+    return canonicalizeLanguageTag(value);
+  } catch {
+    throw new CliUsageError(`${option}は有効なBCP 47言語tagで指定してください`);
+  }
 }
 
 function parseLintCommand(args: readonly string[], cwd: string): CliCommand {
@@ -401,6 +473,7 @@ function parseCommandArgs(args: string[]) {
       port: { type: "string" },
       open: { type: "boolean" },
       "no-open": { type: "boolean" },
+      "markdown-lang": { type: "string" },
       help: { type: "boolean" },
       version: { type: "boolean" },
     },
@@ -463,6 +536,19 @@ function parseCheckArgs(args: string[]) {
       reporter: { type: "string" },
       "warnings-as-errors": { type: "boolean" },
       "max-issues": { type: "string" },
+      help: { type: "boolean" },
+    },
+  });
+}
+
+function parseConvertArgs(args: string[]) {
+  return parseArgs({
+    args,
+    allowPositionals: true,
+    strict: true,
+    options: {
+      lang: { type: "string" },
+      output: { type: "string" },
       help: { type: "boolean" },
     },
   });

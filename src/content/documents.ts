@@ -1,25 +1,47 @@
 import { readdir } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { join } from "node:path";
+
+import {
+  documentFormatFromPath,
+  type DocumentFormat,
+} from "./document-format.js";
 
 export interface ContentDocument {
   absolutePath: string;
   /** Content-root relative, always using POSIX separators. */
   path: string;
+  format: DocumentFormat;
 }
 
 const IGNORED_DIRECTORIES = new Set(["node_modules"]);
 
 /**
- * Find the HTML documents that Spec HTML can serve.
+ * Find the HTML and Markdown documents that Spec HTML can serve.
  *
  * The viewer deliberately does not follow symlinks: a content root is the
- * complete trust boundary for both navigation and linting.
+ * complete trust boundary for document discovery.
  */
-export async function findContentDocuments(
+export async function findViewerDocuments(
   contentRoot: string,
 ): Promise<ContentDocument[]> {
+  return findDocuments(
+    contentRoot,
+    new Set<DocumentFormat>(["html", "markdown"]),
+  );
+}
+
+export async function findHtmlDocuments(
+  contentRoot: string,
+): Promise<ContentDocument[]> {
+  return findDocuments(contentRoot, new Set<DocumentFormat>(["html"]));
+}
+
+async function findDocuments(
+  contentRoot: string,
+  formats: ReadonlySet<DocumentFormat>,
+): Promise<ContentDocument[]> {
   const documents: ContentDocument[] = [];
-  await visit(contentRoot, "", documents);
+  await visit(contentRoot, "", formats, documents);
   return documents.sort((left, right) =>
     left.path.localeCompare(right.path, "en"),
   );
@@ -28,6 +50,7 @@ export async function findContentDocuments(
 async function visit(
   directory: string,
   relativeDirectory: string,
+  formats: ReadonlySet<DocumentFormat>,
   documents: ContentDocument[],
 ): Promise<void> {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -45,17 +68,18 @@ async function visit(
 
     if (entry.isDirectory()) {
       if (!IGNORED_DIRECTORIES.has(entry.name)) {
-        await visit(absolutePath, path, documents);
+        await visit(absolutePath, path, formats, documents);
       }
       continue;
     }
 
+    const format = entry.isFile() ? documentFormatFromPath(entry.name) : null;
     if (
-      entry.isFile() &&
-      extname(entry.name).toLowerCase() === ".html" &&
-      entry.name.toLowerCase() !== "nav.html"
+      format !== null &&
+      formats.has(format) &&
+      !(format === "html" && entry.name.toLowerCase() === "nav.html")
     ) {
-      documents.push({ absolutePath, path });
+      documents.push({ absolutePath, path, format });
     }
   }
 }

@@ -1,7 +1,8 @@
 import { lstat, mkdir, readdir, rename, rmdir } from "node:fs/promises";
-import { basename, dirname, extname, join } from "node:path";
-import { findContentDocuments, type ContentDocument } from "./documents.js";
+import { basename, dirname, join } from "node:path";
+import { findViewerDocuments, type ContentDocument } from "./documents.js";
 import { normalizeDocumentPath } from "./document-path.js";
+import { documentFormatFromPath } from "./document-format.js";
 
 export const ARCHIVED_DIRECTORY = ".archived";
 
@@ -122,7 +123,7 @@ async function findDocumentArchiveSnapshotUnlocked(
   contentRoot: string,
 ): Promise<DocumentArchiveSnapshot> {
   const [active, archived] = await Promise.all([
-    findContentDocuments(contentRoot),
+    findViewerDocuments(contentRoot),
     findArchivedDocumentsUnlocked(contentRoot),
   ]);
   return { active, archived };
@@ -169,10 +170,13 @@ async function collectArchivedDocuments(
 ): Promise<void> {
   const entries = await readdir(archiveDirectory, { withFileTypes: true });
   for (const entry of entries) {
+    if (entry.name.startsWith(".")) {
+      continue;
+    }
+    const format = entry.isFile() ? documentFormatFromPath(entry.name) : null;
     if (
-      !entry.isFile() ||
-      extname(entry.name).toLowerCase() !== ".html" ||
-      entry.name.toLowerCase() === "nav.html"
+      format === null ||
+      (format === "html" && entry.name.toLowerCase() === "nav.html")
     ) {
       continue;
     }
@@ -181,6 +185,7 @@ async function collectArchivedDocuments(
       path: relativeDirectory
         ? `${relativeDirectory}/${entry.name}`
         : entry.name,
+      format,
     });
   }
 }

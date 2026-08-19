@@ -4,7 +4,7 @@
 
 [English](./README.md) | 日本語
 
-LLMが通常Markdownで生成する設計書や仕様書を、構造的なHTMLへ置き換えてローカルで読みやすく閲覧するためのViewerです。標準のsemantic HTMLを使うことで、Markdown以上の表現力を持つ文書を簡単に作成し、navigation、文書間リンク、画像、Chart.js、Mermaidを活用できます。
+構造的なHTMLと既存Markdownの設計書・仕様書を、ローカルで読みやすく閲覧するためのViewerです。既存Markdownはそのまま表示するか、編集可能なSpec HTMLへ変換できます。新しいHTML文書ではより豊かなsemantic表現を使え、共通Viewerがnavigation、文書間link、画像、Chart.js、Mermaidを提供します。
 
 ![Spec HTMLのlight表示でMermaidを含む設計書を閲覧している画面](./assets/LightMode.webp)
 
@@ -17,6 +17,8 @@ Viewerと生成した文書は、手元の信頼済み環境で利用します�
 ## Features
 
 - content directory内のHTML fragmentからnavigationを自動構成
+- `.md`と`.markdown`を直接表示し、navigationへ`MD` badgeを表示
+- 既存fileを上書きせず、1つのMarkdownを整形済みの編集可能なSpec HTML fragmentへ変換
 - content directory内の変更を検知してbrowserを自動reload
 - 文書間の相対リンク、画像、browser historyに対応
 - mobile向けnavigationとkeyboard操作に対応
@@ -54,12 +56,12 @@ npm install --save-dev chart.js mermaid
 ```text
 specs/
 ├─ overview.html
-├─ architecture.html
+├─ architecture.md
 └─ assets/
    └─ diagram.svg
 ```
 
-Viewerはdirectory内の`.html`を再帰的に読み取り、最初の`h1`を表示名とするnavigationを実行時に構成します。メニュー用fileを作成したりrepositoryで管理したりする必要はありません。起動中は指定directory配下だけを監視し、文書や画像を変更・追加・削除するとbrowserを自動reloadします。
+Viewerはdirectory内の`.html`、`.md`、`.markdown`を再帰的に読み取り、最初の`h1`を表示名とするnavigationを実行時に構成します。Markdownには`MD` badgeが付き、`design.html`と`design.md`のような同名stemも別文書として表示します。メニュー用fileを作成したりrepositoryで管理したりする必要はありません。起動中は指定directory配下だけを監視し、文書や画像を変更・追加・削除するとbrowserを自動reloadします。
 
 各設計書はHTML document全体ではなく、`article`などから始まるfragmentとして保存します。
 
@@ -67,7 +69,7 @@ Viewerはdirectory内の`.html`を再帰的に読み取り、最初の`h1`を表
 <article lang="en">
   <h1>Authentication</h1>
   <p>Authentication is based on OpenID Connect.</p>
-  <img src="./assets/login-flow.svg" alt="Authentication flow">
+  <img src="./assets/login-flow.svg" alt="Authentication flow" />
 </article>
 ```
 
@@ -114,6 +116,27 @@ npx spec-html check ./specs --fix
 npx spec-html check ./specs --fixer --lint
 npx spec-html check ./specs --fixer --format --fix
 ```
+
+## Markdown互換機能
+
+Markdown previewは見出しと安定したID、段落、強調、取り消し線、listとtask list、blockquote、code、GFM table、link、画像、`mermaid` fenceに対応します。raw HTMLは実行せずliteral textとして表示し、`javascript:`、`data:`、`file:`などの危険なlink・画像schemeは除去します。Markdownから生成したMermaidにはMermaidの`strict` security levelを適用してcallback directiveを無効化し、信頼済みHTML文書の既存Mermaid挙動は維持します。相対linkとassetは元Markdownの位置から解決し、MarkdownとHTMLの相互linkもViewer内で遷移します。
+
+生成するMarkdown articleの言語は既定で`en`です。content root全体の言語を変更できます。
+
+```bash
+npx spec-html ./specs --markdown-lang ja
+```
+
+Markdownをstdoutへ変換するか、同じdirectoryへ新しいHTML fileを明示的に作成します。
+
+```bash
+npx spec-html convert ./specs/design.md --lang ja
+npx spec-html convert ./specs/design.md --lang ja --output ./specs/design.html
+```
+
+`--output`を省略するとstdoutにはHTMLだけを出力し、filesystemを変更しません。指定時は出力先が未作成である必要があり、通常fileもsymbolic linkも上書きしません。元Markdownの削除、rename、archive、同期は行わず、生成したHTMLは独立して編集する文書になります。table captionなどMarkdownから推測できないsemantic lint errorが残る場合は、指定したdraftを作成したうえで終了code `1`を返します。
+
+`lint`、`fix`、`format`、`check`は引き続きHTMLだけを処理します。mixed directoryで成功してもMarkdown sourceを検査した意味にはなりません。HTML draftへ変換した後は、そのHTMLへ`check`を実行してください。
 
 普段使う場合は利用プロジェクトの`package.json`へ登録します。
 
@@ -172,7 +195,7 @@ Sidebar上部の「Name」「Date」で、各directory内の文書を名前順�
 </aside>
 ```
 
-画面右下のsource buttonから、現在の文書のHTMLをdialogで確認できます。描画結果とLLMが生成したsourceを同じ画面で見比べられます。
+画面右下のsource buttonから、現在の文書の元HTMLまたはMarkdownをdialogで確認できます。描画結果とsourceを同じ画面で見比べられます。
 
 ![現在の文書のソースHTMLをdialogで表示している画面](./assets/source.webp)
 
@@ -183,15 +206,20 @@ Sidebar上部の「Name」「Date」で、各directory内の文書を名前順�
 `chart.js`が導入されている場合、通常のChart.jsコードをinline scriptで使用できます。
 
 ```html
-<canvas id="latency-chart" width="320" height="180" aria-label="P95 latency chart"></canvas>
+<canvas
+  id="latency-chart"
+  width="320"
+  height="180"
+  aria-label="P95 latency chart"
+></canvas>
 <script>
   const canvas = document.getElementById("latency-chart");
   new Chart(canvas, {
     type: "line",
     data: {
       labels: ["2.1", "2.2", "2.3"],
-      datasets: [{ label: "P95", data: [180, 220, 230] }]
-    }
+      datasets: [{ label: "P95", data: [180, 220, 230] }],
+    },
   });
 </script>
 ```
@@ -216,6 +244,7 @@ spec-html [directory] [options]
 --host <host>                  listenするhost（既定: 127.0.0.1）
 --allowed-host <hostname>      非loopbackで許可するHost（repeat可、wildcardでは必須）
 --port <port>                  listenするport（既定: 4173、0で自動割り当て）
+--markdown-lang <language-tag> 生成するMarkdown articleの言語（既定: en）
 --open                         起動後にbrowserを開く（既定）
 --no-open                      browserを開かない
 --help                         helpを表示
@@ -225,11 +254,12 @@ spec-html lint [directory] [options]
 spec-html format [path] --check|--write [options]
 spec-html fix [path] --check|--write [options]
 spec-html check [directory] [--fix] [options]
+spec-html convert <input.md> --lang <language-tag> [--output <output.html>]
 ```
 
 ## Security model
 
-Spec HTMLはローカルの信頼済みHTMLを対象にします。設計書内のinline scriptは実行されるため、第三者から受け取ったHTMLを確認せずに開かないでください。
+Spec HTMLはローカルの信頼済みHTMLを対象にします。HTML設計書内のinline scriptは実行されるため、第三者から受け取ったHTMLを確認せずに開かないでください。Markdownのraw HTMLはescapeし、危険なURL schemeを除去し、Markdown Mermaidのcallback directiveを描画・変換時に無効化しますが、remoteのHTTP(S) linkと画像は許可します。
 
 不慣れな文書へFixerを使う場合は、先に`--check`で変更を確認してください。`scritp`や`onclik`の訂正は対応するHTMLの動作を意図どおり有効にしますが、JavaScript source自体は変更しません。
 
@@ -239,7 +269,8 @@ content directory外を指すpath traversalとsymbolic linkは配信しません
 
 ## v0.1 limitations
 
-- 検索、Markdown変換は含みません。
+- 検索、front matter、文書単位のMarkdown言語metadataは含みません。
+- HTML向けlint／fix／format／checkはMarkdown source自体を検査しません。
 - Formatterはsemantic tag、alt、caption、見出しなど意味判断が必要な内容を自動修正しません。
 - Fixerは文章やJavaScriptを修正せず、HTMLの修正候補が複数ある場合は推測しません。
 - browser自動テストはChromiumで全件、FirefoxとWebKitで重要導線のsmoke testを実行します。

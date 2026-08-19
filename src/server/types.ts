@@ -6,6 +6,7 @@ export interface StartServerOptions {
   host: string;
   allowedHosts?: readonly string[];
   port: number;
+  markdownLanguage?: string;
   integrations?: OptionalIntegrations;
 }
 

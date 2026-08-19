@@ -1,8 +1,4 @@
-import type {
-  LoadState,
-  SortPreference,
-  ViewerElements,
-} from "./types.js";
+import type { LoadState, SortPreference, ViewerElements } from "./types.js";
 import { THEME_PREFERENCES } from "./theme.js";
 import type { ThemePreference } from "./theme.js";
 
@@ -59,7 +55,9 @@ export function createLayout(container: HTMLElement): ViewerElements {
       return [preference, button];
     }),
   ) as Record<ThemePreference, HTMLButtonElement>;
-  themeSwitcher.append(...THEME_PREFERENCES.map((value) => themeButtons[value]));
+  themeSwitcher.append(
+    ...THEME_PREFERENCES.map((value) => themeButtons[value]),
+  );
 
   const sidebar = document.createElement("aside");
   sidebar.className = "viewer-sidebar";
@@ -197,6 +195,7 @@ export function createLayout(container: HTMLElement): ViewerElements {
     documentActionStatus,
     documentModeButton,
     sourceDialog,
+    sourceDialogTitle,
     sourceDialogCode,
     sourceDialogCloseButton,
     sortButtons,

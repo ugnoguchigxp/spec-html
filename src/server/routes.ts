@@ -14,6 +14,7 @@ import {
   normalizeDocumentPath,
   type NavigationView,
 } from "../content/document-path.js";
+import { isViewerDocumentPath } from "../content/document-format.js";
 import type { LiveReload } from "./live-reload.js";
 import type { StartServerOptions } from "./types.js";
 import {
@@ -41,7 +42,11 @@ const RUNTIME_CACHE_CONTROL = "private, max-age=300";
 type RequestHandlerOptions = Pick<
   StartServerOptions,
   "contentRoot" | "runtimeRoot" | "integrations"
-> & { hostPolicy: HostPolicy; liveReload: LiveReload };
+> & {
+  hostPolicy: HostPolicy;
+  liveReload: LiveReload;
+  markdownLanguage: string;
+};
 
 export function createRequestHandler(
   options: RequestHandlerOptions,
@@ -120,6 +125,7 @@ async function handleRequest(
       createShellHtml({
         chartJs: options.integrations?.chartFile !== undefined,
         mermaid: options.integrations?.mermaidRoot !== undefined,
+        markdownLanguage: options.markdownLanguage,
       }),
     );
     return;
@@ -148,7 +154,12 @@ async function handleRequest(
     sendHtml(
       request,
       response,
-      await createNavigationHtml(options.contentRoot, new Date(), view),
+      await createNavigationHtml(
+        options.contentRoot,
+        new Date(),
+        view,
+        options.markdownLanguage,
+      ),
     );
     return;
   }
@@ -309,7 +320,7 @@ function createArchivedFallbackPath(
     return null;
   }
   const decodedFilename = decodedSegments.at(-1) ?? "";
-  if (!decodedFilename.toLowerCase().endsWith(".html")) {
+  if (!isViewerDocumentPath(decodedFilename)) {
     return null;
   }
   segments.splice(-1, 0, ARCHIVED_DIRECTORY);

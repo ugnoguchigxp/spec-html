@@ -5,6 +5,8 @@ import {
   NAVIGATION_PATH,
 } from "./constants.js";
 import type { NavigationView } from "../content/document-path.js";
+import { documentFormatFromPath } from "../content/document-format.js";
+import { compileMarkdown } from "../markdown/compiler.js";
 import { fetchDocument, DocumentHttpError } from "./document-loader.js";
 import { buildSrcdoc } from "./frame.js";
 import type { FrameIntegrations } from "./frame.js";
@@ -66,6 +68,7 @@ async function initializeViewer(): Promise<void> {
     chartJs: app.dataset.chartJs === "true",
     mermaid: app.dataset.mermaid === "true",
   };
+  const markdownLanguage = app.dataset.markdownLanguage ?? "en";
 
   let themePreference = readThemePreference();
   let sortPreference: SortPreference = "name";
@@ -142,6 +145,7 @@ async function initializeViewer(): Promise<void> {
     closeDocumentActionsMenu();
     clearDocumentActionStatus();
     elements.frame.title = "Document";
+    updateSourceLabels(elements, "html");
     resetDocumentTitle();
     updateActiveNavigation(navigationItems, {
       doc: null,
@@ -263,7 +267,7 @@ async function initializeViewer(): Promise<void> {
 
     try {
       const documentUrl = createContentUrl(doc, new URL(window.location.href));
-      const fragment = await fetchDocument(documentUrl, abortController.signal);
+      const source = await fetchDocument(documentUrl, abortController.signal);
       const archived = await fetchDocumentArchived(doc, abortController.signal);
       if (!isCurrentRequest(activeAbortController, abortController)) {
         return;
@@ -289,6 +293,14 @@ async function initializeViewer(): Promise<void> {
       );
       currentRoute = route;
 
+      const format = documentFormatFromPath(doc);
+      if (format === null) {
+        throw new Error(`Unsupported document format: ${doc}`);
+      }
+      const fragment =
+        format === "markdown"
+          ? compileMarkdown(source, { language: markdownLanguage }).fragment
+          : source;
       const title = getFragmentTitle(fragment, doc);
       const srcdoc = buildSrcdoc(
         fragment,
@@ -304,9 +316,10 @@ async function initializeViewer(): Promise<void> {
 
       activeAbortController = undefined;
       currentDocument = doc;
-      currentDocumentSource = fragment;
+      currentDocumentSource = source;
       currentDocumentArchived = archived;
       elements.frame.title = title;
+      updateSourceLabels(elements, format);
       applyDocumentTitle(title);
       updateActiveNavigation(navigationItems, route);
       const frameDocument = elements.frame.contentDocument;
@@ -665,6 +678,17 @@ function updateDocumentArchiveButton(
   archived: boolean,
 ): void {
   elements.documentArchiveButton.textContent = archived ? "Restore" : "Archive";
+}
+
+function updateSourceLabels(
+  elements: ViewerElements,
+  format: "html" | "markdown",
+): void {
+  const formatLabel = format === "markdown" ? "Markdown" : "HTML";
+  const actionLabel = `View source ${formatLabel}`;
+  elements.documentModeButton.setAttribute("aria-label", actionLabel);
+  elements.documentModeButton.title = actionLabel;
+  elements.sourceDialogTitle.textContent = `Source ${formatLabel}`;
 }
 
 function updateNavigationViewButton(

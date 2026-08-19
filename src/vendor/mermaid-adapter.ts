@@ -15,6 +15,9 @@ async function renderMermaid(): Promise<void> {
   ).href;
   const imported: unknown = await import(moduleUrl);
   const mermaid = getMermaidApi(imported);
+  const markdownDiagram = document.querySelector(
+    '.mermaid[data-spec-html-source="markdown"]',
+  );
   const selectedTheme = document.documentElement.dataset.theme;
   const dark =
     selectedTheme === "dark" ||
@@ -22,7 +25,7 @@ async function renderMermaid(): Promise<void> {
       matchMedia("(prefers-color-scheme: dark)").matches);
   mermaid.initialize({
     startOnLoad: false,
-    securityLevel: "loose",
+    securityLevel: markdownDiagram === null ? "loose" : "strict",
     theme: dark ? "base" : "default",
     ...(dark
       ? {

@@ -1,4 +1,5 @@
 import { TITLE_SUFFIX } from "./constants.js";
+import { removeDocumentExtension } from "../content/document-format.js";
 
 export function getFrameTitle(frameDocument: Document, doc: string): string {
   const heading = frameDocument.querySelector("h1")?.textContent?.trim();
@@ -7,7 +8,7 @@ export function getFrameTitle(frameDocument: Document, doc: string): string {
   }
 
   const filename = doc.split("/").at(-1) ?? "Documentation";
-  return filename.replace(/\.html$/i, "") || "Documentation";
+  return removeDocumentExtension(filename) || "Documentation";
 }
 
 export function getFragmentTitle(fragment: string, doc: string): string {

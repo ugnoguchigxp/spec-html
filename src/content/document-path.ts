@@ -1,3 +1,5 @@
+import { isViewerDocumentPath } from "./document-format.js";
+
 export type NavigationView = "documents" | "archive";
 
 export function normalizeDocumentPath(value: string): string | null {
@@ -11,14 +13,13 @@ export function normalizeDocumentPath(value: string): string | null {
   const segments = value.split("/");
   if (
     segments.some(
-      (segment) =>
-        segment.length === 0 || segment === "." || segment === "..",
+      (segment) => segment.length === 0 || segment === "." || segment === "..",
     )
   ) {
     return null;
   }
 
-  return segments.at(-1)?.toLowerCase().endsWith(".html") === true
+  return isViewerDocumentPath(segments.at(-1) ?? "")
     ? segments.join("/")
     : null;
 }

@@ -30,6 +30,7 @@ beforeEach(async () => {
       join(contentRoot, "nested", "page.html"),
       "<article><h1>Nested</h1></article>",
     ),
+    writeFile(join(contentRoot, "design.md"), "# Markdown Design\n"),
     writeFile(join(contentRoot, "assets", "pixel.svg"), "<svg></svg>"),
     writeFile(join(runtimeRoot, "viewer.js"), "export {};"),
     writeFile(join(runtimeRoot, "shell.css"), "body {}"),
@@ -62,7 +63,9 @@ describe("local content server", () => {
     const shellCss = await fetch(`${server.origin}/_spec-html/shell.css`);
     const documentCss = await fetch(`${server.origin}/_spec-html/document.css`);
     const mermaidLoader = await fetch(`${server.origin}/_spec-html/mermaid.js`);
-    const chart = await fetch(`${server.origin}/_spec-html/integrations/chart.js`);
+    const chart = await fetch(
+      `${server.origin}/_spec-html/integrations/chart.js`,
+    );
     const mermaid = await fetch(
       `${server.origin}/_spec-html/integrations/mermaid/mermaid.esm.min.mjs`,
     );
@@ -74,6 +77,7 @@ describe("local content server", () => {
       method: "HEAD",
     });
     const nested = await fetch(`${server.origin}/_content/nested/page.html`);
+    const markdown = await fetch(`${server.origin}/_content/design.md`);
     const asset = await fetch(`${server.origin}/_content/assets/pixel.svg`);
 
     expect(shell.status).toBe(200);
@@ -82,6 +86,7 @@ describe("local content server", () => {
     expect(shellBody).toContain('id="app"');
     expect(shellBody).toContain('data-chart-js="true"');
     expect(shellBody).toContain('data-mermaid="true"');
+    expect(shellBody).toContain('data-markdown-language="en"');
     expect(viewer.headers.get("content-type")).toContain("text/javascript");
     expect(viewer.headers.get("cache-control")).toBe("private, max-age=300");
     expect(shellCss.status).toBe(200);
@@ -91,14 +96,23 @@ describe("local content server", () => {
     expect(mermaid.status).toBe(200);
     expect(mermaidChunk.status).toBe(200);
     const navigationBody = await navigation.text();
-    expect(navigationBody).toContain('<h2>nested</h2>');
+    expect(navigationBody).toContain("<h2>nested</h2>");
     expect(navigationBody).toContain(
       '<a href="./nested/page.html" title="Nested"><span class="viewer-navigation-title">Nested</span><time datetime=',
     );
     expect(await nested.text()).toContain("Nested");
+    expect(markdown.headers.get("content-type")).toBe(
+      "text/markdown; charset=utf-8",
+    );
+    expect(await markdown.text()).toBe("# Markdown Design\n");
+    expect(navigationBody).toContain(
+      '<a href="./design.md" title="Markdown Design"><span class="viewer-navigation-title">Markdown Design</span><span class="viewer-navigation-format" aria-label="Markdown">MD</span><time datetime=',
+    );
     expect(asset.headers.get("content-type")).toBe("image/svg+xml");
     expect(liveReload.status).toBe(200);
-    expect(liveReload.headers.get("content-type")).toContain("text/event-stream");
+    expect(liveReload.headers.get("content-type")).toContain(
+      "text/event-stream",
+    );
   });
 
   it("runs without optional Chart.js and Mermaid installations", async () => {
@@ -127,6 +141,32 @@ describe("local content server", () => {
     ).toBe(404);
   });
 
+  it("canonicalizes and validates the programmatic Markdown language option", async () => {
+    await requireServer().close();
+    runningServer = await startServer({
+      contentRoot,
+      runtimeRoot,
+      host: "127.0.0.1",
+      port: 0,
+      markdownLanguage: "ja-jp",
+    });
+
+    const shell = await (await fetch(`${runningServer.origin}/`)).text();
+    expect(shell).toContain('data-markdown-language="ja-JP"');
+
+    await runningServer.close();
+    runningServer = undefined;
+    await expect(
+      startServer({
+        contentRoot,
+        runtimeRoot,
+        host: "127.0.0.1",
+        port: 0,
+        markdownLanguage: "invalid_tag",
+      }),
+    ).rejects.toThrow("Invalid language tag");
+  });
+
   it("responds to HEAD without a body", async () => {
     const origin = requireServer().origin;
     const body = await (await fetch(`${origin}/_spec-html/navigation`)).text();
@@ -143,9 +183,7 @@ describe("local content server", () => {
 
   it("reflects directory changes without a nav.html file", async () => {
     const origin = requireServer().origin;
-    expect(
-      (await fetch(`${origin}/_spec-html/navigation`)).status,
-    ).toBe(200);
+    expect((await fetch(`${origin}/_spec-html/navigation`)).status).toBe(200);
     expect((await fetch(`${origin}/_content/nav.html`)).status).toBe(404);
 
     await writeFile(
@@ -191,9 +229,7 @@ describe("local content server", () => {
       await (await fetch(`${origin}/_content/nested/page.html`)).text(),
     ).toContain("Nested");
     expect(
-      (
-        await fetch(`${origin}/_content/nested/.archived/page.html`)
-      ).status,
+      (await fetch(`${origin}/_content/nested/.archived/page.html`)).status,
     ).toBe(404);
     await expect(
       readFile(join(contentRoot, "nested", ".archived", "page.html"), "utf8"),
@@ -204,9 +240,9 @@ describe("local content server", () => {
       join(contentRoot, "nested", ".archived", ".archived", "deep.html"),
       "<h1>Deep archive</h1>",
     );
-    expect(
-      (await fetch(`${origin}/_content/nested/deep.html`)).status,
-    ).toBe(404);
+    expect((await fetch(`${origin}/_content/nested/deep.html`)).status).toBe(
+      404,
+    );
 
     const restored = await fetch(stateUrl, {
       method: "PUT",
@@ -223,6 +259,34 @@ describe("local content server", () => {
     ).resolves.toContain("Nested");
   });
 
+  it("keeps archived Markdown available through its stable content URL", async () => {
+    const origin = requireServer().origin;
+    const stateUrl = `${origin}/_spec-html/document-state?doc=design.md`;
+
+    const response = await fetch(stateUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived: true }),
+    });
+
+    expect(response.status).toBe(200);
+    const navigation = await (
+      await fetch(`${origin}/_spec-html/navigation?view=archive`)
+    ).text();
+    expect(navigation).toContain(
+      '<a href="./design.md" title="Markdown Design"><span class="viewer-navigation-title">Markdown Design</span><span class="viewer-navigation-format" aria-label="Markdown">MD</span>',
+    );
+    const source = await fetch(`${origin}/_content/design.md`);
+    expect(source.status).toBe(200);
+    expect(source.headers.get("content-type")).toBe(
+      "text/markdown; charset=utf-8",
+    );
+    await expect(source.text()).resolves.toBe("# Markdown Design\n");
+    expect(
+      (await fetch(`${origin}/_content/.archived/design.md`)).status,
+    ).toBe(404);
+  });
+
   it("validates document state requests and navigation views", async () => {
     const origin = requireServer().origin;
     const validState = `${origin}/_spec-html/document-state?doc=nested%2Fpage.html`;
@@ -231,10 +295,12 @@ describe("local content server", () => {
     expect(unsupported.status).toBe(405);
     expect(unsupported.headers.get("allow")).toBe("GET, HEAD, PUT");
     expect(
-      (await fetch(`${origin}/_spec-html/document-state?doc=..%2Fpage.html`)).status,
+      (await fetch(`${origin}/_spec-html/document-state?doc=..%2Fpage.html`))
+        .status,
     ).toBe(400);
     expect(
-      (await fetch(`${origin}/_spec-html/document-state?doc=missing.html`)).status,
+      (await fetch(`${origin}/_spec-html/document-state?doc=missing.html`))
+        .status,
     ).toBe(404);
     expect(
       (
@@ -260,19 +326,20 @@ describe("local content server", () => {
   it("returns useful HTTP errors", async () => {
     const server = requireServer();
     expect((await fetch(`${server.origin}/missing`)).status).toBe(404);
-    expect(
-      (await fetch(`${server.origin}/_content/missing.html`)).status,
-    ).toBe(404);
-    expect(
-      (await fetch(`${server.origin}/_content/nested`)).status,
-    ).toBe(404);
-    expect(
-      (await fetch(`${server.origin}/`, { method: "POST" })).status,
-    ).toBe(405);
+    expect((await fetch(`${server.origin}/_content/missing.html`)).status).toBe(
+      404,
+    );
+    expect((await fetch(`${server.origin}/_content/nested`)).status).toBe(404);
+    expect((await fetch(`${server.origin}/`, { method: "POST" })).status).toBe(
+      405,
+    );
   });
 
   it("rejects malformed request paths", async () => {
-    const response = await rawRequest(requireServer().origin, "/_content/%ZZ.html");
+    const response = await rawRequest(
+      requireServer().origin,
+      "/_content/%ZZ.html",
+    );
 
     expect(response.status).toBe(400);
   });
@@ -295,10 +362,14 @@ describe("client disconnect handling", () => {
       ),
     ).toBe(true);
     expect(
-      isClientDisconnectError(Object.assign(new Error("reset"), { code: "ECONNRESET" })),
+      isClientDisconnectError(
+        Object.assign(new Error("reset"), { code: "ECONNRESET" }),
+      ),
     ).toBe(true);
     expect(
-      isClientDisconnectError(Object.assign(new Error("disk"), { code: "EIO" })),
+      isClientDisconnectError(
+        Object.assign(new Error("disk"), { code: "EIO" }),
+      ),
     ).toBe(false);
     expect(isClientDisconnectError("aborted")).toBe(false);
   });

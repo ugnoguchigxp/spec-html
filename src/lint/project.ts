@@ -1,7 +1,7 @@
 import { access, readFile, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { findContentDocuments } from "../content/documents.js";
+import { findHtmlDocuments } from "../content/documents.js";
 import {
   createDiagnostic,
   sortAndDedupe,
@@ -18,10 +18,10 @@ interface DocumentRecord {
   facts: DocumentFacts | null;
 }
 
-/** Lint every viewer document in a content root. */
+/** Lint every HTML document in a content root. */
 export async function lintProject(contentRoot: string): Promise<LintResult> {
   const root = await resolveContentRoot(contentRoot);
-  const documents = await findContentDocuments(root);
+  const documents = await findHtmlDocuments(root);
   const diagnostics: LintDiagnostic[] = [];
   const records = new Map<string, DocumentRecord>();
 

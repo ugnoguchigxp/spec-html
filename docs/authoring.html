@@ -32,12 +32,42 @@
     </ol>
   </section>
 
+  <section id="markdown">
+    <h2>Work with existing Markdown</h2>
+    <p>
+      The viewer also discovers <code>.md</code> and <code>.markdown</code> files. It renders
+      headings, paragraphs, emphasis, lists and task lists, blockquotes, code, GFM tables, links,
+      images, and <code>mermaid</code> fences. Relative URLs are resolved from the Markdown file.
+      Raw HTML is displayed literally, unsafe URL schemes are omitted, and Mermaid callback
+      directives are disabled with Mermaid's <code>strict</code> security level.
+    </p>
+    <pre><code class="language-sh">spec-html ./specs --markdown-lang en
+spec-html convert ./specs/design.md --lang en
+spec-html convert ./specs/design.md --lang en --output ./specs/design.html
+</code></pre>
+    <p>
+      Omitting <code>--output</code> writes HTML only to stdout. An explicit output must be a new
+      <code>.html</code> file in the input directory; it is never allowed to overwrite an existing
+      file or symbolic link. Conversion does not delete, rename, archive, or synchronize the
+      Markdown source. Treat the generated HTML as an independent editable document.
+    </p>
+    <aside>
+      <p>
+        The <code>lint</code>, <code>fix</code>, <code>format</code>, and
+        <code>check</code> commands process HTML only. A successful check of a mixed directory does
+        not mean its Markdown source was linted. Generated drafts can retain semantic diagnostics,
+        such as a table that still needs an author-provided caption.
+      </p>
+    </aside>
+  </section>
+
   <section id="fix">
     <h2>Fix HTML typos</h2>
     <p>
       Use the fixer for unambiguous mistakes in tag names, attribute names, quotes, closing tags,
       closed attribute values, IDs, and local paths. It changes only HTML surface syntax and never
-      rewrites prose, <code>script</code> content, or JavaScript in event-handler values.
+      rewrites prose,
+      <code>script</code> content, or JavaScript in event-handler values.
     </p>
     <pre><code class="language-sh">spec-html fix ./specs --check
 spec-html fix ./specs --write
@@ -57,7 +87,8 @@ spec-html format ./specs --write
     <p>
       Full HTML documents are also accepted. Safe document wrappers and metadata are normalized to
       fragments, but conversion is refused when the head contains
-      <code>style</code>, <code>script</code>, <code>link</code>, or <code>base</code>
+      <code>style</code>, <code>script</code>, <code>link</code>, or
+      <code>base</code>
       content, or when wrapper attributes affect rendering or behavior. The formatter does not
       invent semantic choices such as alt text, captions, headings, or elements.
     </p>

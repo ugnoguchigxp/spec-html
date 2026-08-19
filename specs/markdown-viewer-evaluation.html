@@ -1,0 +1,535 @@
+<article lang="ja">
+  <h1>Markdown閲覧対応案の評価</h1>
+
+  <aside data-type="success" aria-labelledby="recommendation-title">
+    <strong id="recommendation-title">結論: 条件付きで採用を推奨</strong>
+    <p>
+      MarkdownをHTML文書と同じViewer
+      shellで閲覧できるようにする価値は高い。ただし、機能名と仕様は「HTMLと同等の文書形式」ではなく「Markdown
+      preview」とし、最初の段階では閲覧体験の共通化に限定する。HTMLは引き続き、semantic
+      structure、Chart.js、inline script、厳密なlintを利用できる上位形式として残す。
+    </p>
+    <p>
+      Markdownから永続的なHTMLを作る機能も採用価値がある。ただし、同期される生成物ではなく、Markdownを編集可能なSpec
+      HTMLへ移行する一方向のconversion／scaffoldとして提供する。
+    </p>
+  </aside>
+
+  <section id="evaluation-scope">
+    <h2>評価対象</h2>
+    <p>
+      ここでいう「ある程度同等」は、同じ内容を同じHTMLへ変換できることではなく、利用者が既存Viewerの主要な閲覧機能をMarkdown文書でも使えることを指す。
+    </p>
+    <table>
+      <caption>
+        Markdownで目標とする閲覧機能の範囲
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">機能</th>
+          <th scope="col">初期対応</th>
+          <th scope="col">条件・差分</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">navigation、並び替え、更新日時</th>
+          <td>対応</td>
+          <td>最初のh1をtitleに使い、なければfile名へfallbackする。</td>
+        </tr>
+        <tr>
+          <th scope="row">light／dark theme、印刷</th>
+          <td>対応</td>
+          <td>既存のsemantic HTML向けCSSを再利用する。</td>
+        </tr>
+        <tr>
+          <th scope="row">相対link、画像、browser history</th>
+          <td>対応</td>
+          <td><code>.html</code>と<code>.md</code>を相互に遷移できるようにする。</td>
+        </tr>
+        <tr>
+          <th scope="row">見出しへのfragment link</th>
+          <td>対応</td>
+          <td>重複を考慮した決定的なheading IDが必要。</td>
+        </tr>
+        <tr>
+          <th scope="row">source表示</th>
+          <td>対応</td>
+          <td>変換後HTMLではなく元のMarkdownを表示し、labelも形式に合わせる。</td>
+        </tr>
+        <tr>
+          <th scope="row">archive／restore、live reload</th>
+          <td>対応</td>
+          <td>document pathと探索処理を拡張子非依存に近づける。</td>
+        </tr>
+        <tr>
+          <th scope="row">Mermaid</th>
+          <td>限定対応</td>
+          <td><code>mermaid</code>指定のfenced code blockを既存integrationへ接続する。</td>
+        </tr>
+        <tr>
+          <th scope="row">aside、details、Chart.js、inline script</th>
+          <td>非対応</td>
+          <td>初期段階ではHTML文書を使用する。raw HTMLは既定で実行しない。</td>
+        </tr>
+        <tr>
+          <th scope="row">既存HTML linter／fixer／formatterとの同等性</th>
+          <td>非対応</td>
+          <td>Markdown source用の検査は別phaseで設計する。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="current-baseline">
+    <h2>現行実装との適合性</h2>
+    <p>
+      表示の中心は、content fileを文字列として取得し、共通stylesheetとoptional
+      integrationを付けた<code>iframe srcdoc</code>へ挿入する処理である。Markdownを一度HTML
+      fragmentへ変換すれば、この後半の処理はそのまま再利用できる。
+    </p>
+    <p>一方、次の箇所は現在<code>.html</code>をdocument identityとして扱っている。</p>
+    <ul>
+      <li>content directoryとarchiveからの文書探索</li>
+      <li>route、content URL、document stateで使うpath検証</li>
+      <li>navigation titleのh1抽出と<code>index.html</code>等の優先順位</li>
+      <li>archive／restoreの対象判定</li>
+      <li>lint、fix、formatの対象file解決と文書間参照検査</li>
+    </ul>
+    <p>
+      したがって、Markdown
+      parserを追加するだけでは不十分である。特に、Markdown内の<code>./other.md</code>を既存のclient-side
+      navigationへ渡せないと、raw fileへ直接遷移してViewer shellから外れてしまう。
+    </p>
+  </section>
+
+  <section id="architecture-options">
+    <h2>実現方式の比較</h2>
+    <table>
+      <caption>
+        Markdownから表示用HTMLを作る場所の比較
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">方式</th>
+          <th scope="col">長所</th>
+          <th scope="col">短所</th>
+          <th scope="col">評価</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">browserで変換</th>
+          <td>元sourceをそのまま保持でき、既存のfetchとsource dialogを再利用できる。</td>
+          <td>browser bundleが増え、navigation側でもtitle取得用のparseが必要。</td>
+          <td>推奨</td>
+        </tr>
+        <tr>
+          <th scope="row">serverで変換</th>
+          <td>browser側を薄くでき、変換処理をserverへ集約できる。</td>
+          <td>
+            <code>.md</code>
+            URLがHTMLを返す不自然さがあり、元source表示には別endpointまたは複合responseが必要。
+          </td>
+          <td>代替案</td>
+        </tr>
+        <tr>
+          <th scope="row">HTMLを事前生成</th>
+          <td>runtime parserが不要で、生成後は既存pipelineだけで動く。</td>
+          <td>生成物の重複、同期漏れ、watch、書込policyが増え、source directoryを汚す。</td>
+          <td>非推奨</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="recommended-design">
+    <h2>推奨設計</h2>
+    <p>
+      browser変換を採用し、Node.js側とbrowser側の両方から利用できる副作用のないMarkdown
+      rendererを1つ設ける。rendererは少なくとも、表示用HTML fragment、最初のh1から得たtitle、heading
+      IDを同じparse結果から生成する。navigationは同じrendererまたは同じtokenization処理からtitleを取得する。
+    </p>
+    <figure>
+      <pre class="mermaid">
+flowchart LR
+  H[HTML source] --> P[pass through]
+  M[Markdown source] --> R[shared Markdown renderer]
+  P --> F[HTML fragment]
+  R --> F
+  F --> V[existing iframe viewer]
+  V --> T[theme and print]
+  V --> L[links and history]
+  V --> I[optional integrations]
+      </pre>
+      <figcaption>
+        source形式ごとの差分をframeへ入れる前に閉じ、既存Viewerの後段を共通利用する。
+      </figcaption>
+    </figure>
+
+    <h3>Document model</h3>
+    <ul>
+      <li>
+        documentを<code>{ path, absolutePath, format }</code
+        >として扱い、<code>format</code>は<code>html</code>または<code>markdown</code>とする。
+      </li>
+      <li>初期対応拡張子は<code>.html</code>、<code>.md</code>、<code>.markdown</code>とする。</li>
+      <li>routeとarchiveのpath検証は許可拡張子を共有し、assetの配信許可とは分離する。</li>
+      <li>
+        <code>index</code
+        >、<code>overview</code>、<code>readme</code>のnavigation優先順位は拡張子に依存させない。
+      </li>
+    </ul>
+
+    <h3>Markdown dialect</h3>
+    <p>
+      初期dialectはGFM相当の一般的な記法を優先し、heading、paragraph、list、task
+      list、blockquote、fenced
+      code、table、strikethrough、autolink、link、imageを対象とする。通常改行を強制的な<code>br</code>へ変換しない。
+    </p>
+    <p>
+      parserの第一候補は<code>marked</code>とする。Node.jsとbrowserの両方で利用でき、GFMの主要機能を1依存で導入できるため、閲覧MVPに適する。heading
+      IDとMermaid fenceはcustom rendererで明示的に定義する。将来、Markdown
+      source位置に対応した高度なlintを主要要件にする場合は、位置情報を持つASTを扱いやすいunified／remark系を再評価する。
+    </p>
+
+    <h3>Raw HTMLとsecurity</h3>
+    <p>
+      Markdown内のraw HTMLは初期段階では実行しない。現在のHTML文書は信頼済みsourceとしてinline
+      scriptを実行するが、Markdown対応によって一般的なREADMEまで新たな実行対象になると、利用者が想定するtrust
+      boundaryが広がるためである。高度なHTML表現が必要な文書は<code>.html</code>を使う。
+    </p>
+    <aside data-type="warning" aria-labelledby="raw-html-warning">
+      <strong id="raw-html-warning">将来raw HTMLを許可する場合</strong>
+      <p>
+        暗黙に有効化せず、明示的なoptionとsecurity modelの更新を必要とする。Markdown
+        parserの出力が自動的に安全になるとはみなさない。
+      </p>
+    </aside>
+  </section>
+
+  <section id="parser-options">
+    <h2>Parser候補</h2>
+    <table>
+      <caption>
+        初期要件に対するparser候補の比較
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">候補</th>
+          <th scope="col">適合点</th>
+          <th scope="col">注意点</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">marked</th>
+          <td>browser／Node.js対応、GFM主要機能、依存が小さい、renderer拡張が可能。</td>
+          <td>heading IDは追加実装が必要。既定出力をsanitize済みと扱ってはいけない。</td>
+        </tr>
+        <tr>
+          <th scope="row">markdown-it</th>
+          <td>拡張しやすく、raw HTMLを既定で無効にできる。</td>
+          <td>task listやheading IDにpluginが必要で、dialect構成の依存が増える。</td>
+        </tr>
+        <tr>
+          <th scope="row">unified／remark／rehype</th>
+          <td>AST変換、位置情報、将来のlintや構造変換に強い。</td>
+          <td>閲覧MVPには構成要素と設計判断が多く、導入範囲が広い。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="persistent-conversion">
+    <h2>MarkdownからHTMLへの永続変換</h2>
+    <aside data-type="success" aria-labelledby="conversion-recommendation">
+      <strong id="conversion-recommendation">結論: 独立したCLIとして条件付き採用</strong>
+      <p>
+        Viewerの内部cacheや自動buildには使わず、Markdownを起点に編集可能なSpec HTML
+        fragmentを1回生成するmigration
+        toolとする。閲覧時変換と同じrendererを再利用するが、生成後のHTMLは独立したsource of
+        truthとして扱う。
+      </p>
+    </aside>
+
+    <h3>閲覧時変換との役割分担</h3>
+    <table>
+      <caption>
+        Markdown previewと永続変換の責務
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">観点</th>
+          <th scope="col">閲覧時変換</th>
+          <th scope="col">永続変換CLI</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">source of truth</th>
+          <td>Markdown</td>
+          <td>変換後はHTML</td>
+        </tr>
+        <tr>
+          <th scope="row">生成物</th>
+          <td>memory上の一時fragment</td>
+          <td>標準出力または新規<code>.html</code> file</td>
+        </tr>
+        <tr>
+          <th scope="row">主目的</th>
+          <td>Markdownを変更せず読む</td>
+          <td>HTML固有のsemantic表現へ移行し、その後編集する</td>
+        </tr>
+        <tr>
+          <th scope="row">再実行</th>
+          <td>source変更ごとに自動</td>
+          <td>既存HTMLへは再適用しない</td>
+        </tr>
+        <tr>
+          <th scope="row">lint</th>
+          <td>Markdown向けruleを別途適用</td>
+          <td>生成HTMLへ既存HTML linterを適用</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      この分離により、Markdownの変更で手編集済みHTMLが上書きされる問題と、同じ変換処理をruntime用とbuild用に二重実装する問題を避ける。
+    </p>
+
+    <h3>推奨CLI</h3>
+    <pre><code>spec-html convert ./design.md --lang ja
+spec-html convert ./design.md --lang ja --output ./design.html</code></pre>
+    <ul>
+      <li><code>--output</code>なしではHTML fragmentだけを標準出力し、fileを書き換えない。</li>
+      <li>
+        <code>--output</code
+        >はMVPでは入力と同じdirectoryの新規<code>.html</code>だけを許可し、既存fileがあれば失敗する。
+      </li>
+      <li>
+        <code>--lang</code>は必須とし、自動言語判定、暗黙の<code>en</code>、front
+        matter依存を避ける。
+      </li>
+      <li>directory一括変換、上書きoption、watch modeは初期対応しない。</li>
+      <li>compactな診断をstderrへ出し、標準出力のHTMLをpipe可能な状態に保つ。</li>
+    </ul>
+    <p>
+      同じdirectoryに同じstemの<code>.md</code>と<code>.html</code>を残すとnavigation上で重複する。変換は同期workflowではないため、利用者は確認後にMarkdownをcontent
+      root外へ移すか、明示的に整理する。converterが元Markdownを自動削除、移動、archiveすることはない。
+    </p>
+
+    <h3>出力contract</h3>
+    <ul>
+      <li>
+        出力はfull HTML documentではなく、<code>&lt;article lang="…"&gt;</code
+        >を唯一のrootとするSpec HTML fragmentにする。
+      </li>
+      <li>
+        CSS、navigation、<code>html</code>、<code>head</code>、<code>body</code>は生成しない。
+      </li>
+      <li>raw HTMLは実行可能要素として通さず、閲覧時変換と同じsecurity policyを使う。</li>
+      <li>heading IDは重複と日本語を含めて決定的にし、同じ入力とoptionから同じ出力を得る。</li>
+      <li>
+        relative linkとasset pathは保持する。このため、MVPのfile出力先は入力と同じdirectoryに限る。
+      </li>
+      <li>改行をLFへ揃え、既存HTML formatterと同じlayout、末尾改行へ正規化する。</li>
+      <li>Markdown sourceは変更しない。出力へgenerator commentや同期用metadataを埋め込まない。</li>
+    </ul>
+
+    <h3>自動変換できる範囲</h3>
+    <table>
+      <caption>
+        MarkdownからSpec HTMLへ情報を失わずに移せる範囲
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Markdown要素</th>
+          <th scope="col">変換方針</th>
+          <th scope="col">残る作業</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">heading、paragraph、list、blockquote、code</th>
+          <td>標準HTMLへ直接変換</td>
+          <td>通常はなし。h1の不足や重複は診断する。</td>
+        </tr>
+        <tr>
+          <th scope="row">link、image</th>
+          <td>相対URLとaltを保持</td>
+          <td>参照切れは既存linterで診断する。</td>
+        </tr>
+        <tr>
+          <th scope="row">task list</th>
+          <td>disabled checkboxを持つlistへ変換</td>
+          <td>interactiveな状態保存は行わない。</td>
+        </tr>
+        <tr>
+          <th scope="row">table</th>
+          <td>tableとcolumn headerの<code>scope</code>までは生成</td>
+          <td>
+            Markdownにcaption情報がないため、既存<code>TBL001</code>を満たすcaptionは利用者が追加する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Mermaid fence</th>
+          <td>sourceを保持した<code>pre.mermaid</code>へ変換</td>
+          <td>必要ならfigureとfigcaptionへ手動で昇格する。</td>
+        </tr>
+        <tr>
+          <th scope="row">aside、details、Chart.js</th>
+          <td>推測して生成しない</td>
+          <td>変換後HTMLでsemantic要素とfallbackを追加する。</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      この差があるため、converterは一般的なMarkdownを常にlint error 0のSpec
+      HTMLへ変換できるとは約束しない。構文的に正しく整形されたdraftを生成し、既存linterの診断を同時に返す。意味を推測してcaptionやcalloutを捏造するより、残作業を明示する方を優先する。
+    </p>
+
+    <h3>書込安全性</h3>
+    <ul>
+      <li>入力はUTF-8の通常fileに限定し、symbolic linkを拒否する。</li>
+      <li>変換後のformatとlintが完了するまで出力fileを作らない。</li>
+      <li>変換中に入力内容が変わった場合はsnapshot不一致として書込を中止する。</li>
+      <li>出力は排他的に新規作成し、存在確認と作成の間のraceでも既存fileを上書きしない。</li>
+      <li>
+        一時fileを使い、失敗時にpartial outputを残さないcreate専用のsafe-write処理を追加する。
+      </li>
+      <li>既存fileを更新する<code>--force</code>や<code>--overwrite</code>は設けない。</li>
+    </ul>
+
+    <h3>既存commandとの統合</h3>
+    <p>
+      変換pipelineは、Markdown parse、HTML
+      fragment生成、既存formatter、既存linterの順にする。converter自身はHTML
+      typoのfixを行わない。生成したHTMLにconverter由来のtypoがあれば実装bugであり、fixerで隠さずtestで防ぐ。
+    </p>
+    <p>
+      出力後は通常の<code>spec-html check ./specs --fix --warnings-as-errors</code
+      >を使える。変換時のreportは、生成したfile、変換status、HTML lint diagnosticsを区別し、lint
+      errorが残る場合も「draftを生成した」ことが分かるようにする。
+    </p>
+
+    <h3>変換機能の受入条件</h3>
+    <ul>
+      <li>同じ入力、言語、parser versionからbyte単位で同じfragmentを生成する。</li>
+      <li>標準出力modeではstdoutにHTML以外を混ぜず、filesystemを変更しない。</li>
+      <li>file出力modeでは既存target、symbolic link、入力の同時変更を安全に拒否する。</li>
+      <li>生成物は常にHTML parserとformatterを通過し、構文errorを含まない。</li>
+      <li>lint診断がMarkdown由来の意味不足とconverterの失敗を区別できる。</li>
+      <li>相対linkと画像は同じdirectoryへの出力後も同じresourceを指す。</li>
+      <li>raw HTML内のscriptやevent handlerが生成物で実行可能にならない。</li>
+      <li>変換後HTMLを手編集しても、converterの再実行で上書きされない。</li>
+      <li>Node.jsとBunの対応runtimeで同じfixtureを変換できる。</li>
+    </ul>
+  </section>
+
+  <section id="delivery-phases">
+    <h2>段階的な導入</h2>
+    <ol>
+      <li>
+        <strong>Phase 1: Viewer MVP。</strong>
+        文書探索、route、navigation、archive、source
+        labelを複数形式へ対応させ、GFM相当の基本表示、relative link、heading fragment、Mermaid
+        fenceをbrowser testで保証する。HTMLの既存挙動は変更しない。
+      </li>
+      <li>
+        <strong>Phase 2: 検査の最小対応。</strong>
+        Markdownのh1、heading順序、画像alt、local file／fragment参照をsource位置付きで検査する。HTML
+        formatterとfixerはMarkdownを書き換えず、対象外であることをreport上で明確にする。
+      </li>
+      <li>
+        <strong>Phase 3: 要求が確認できた拡張のみ。</strong>
+        footnote、callout、raw HTML
+        opt-in、より高度なMermaid表現を個別に検討する。Chart.js用の独自Markdown記法は設けない。
+      </li>
+    </ol>
+    <p>
+      永続変換CLIはshared rendererと出力contractが固まった後に追加できる。Viewer
+      route変更とは独立して提供可能だが、別rendererを先行実装して後から統合することは避ける。
+    </p>
+  </section>
+
+  <section id="cost-and-risk">
+    <h2>コストとrisk</h2>
+    <table>
+      <caption>
+        主な変更領域とrisk低減策
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">領域</th>
+          <th scope="col">規模</th>
+          <th scope="col">主なrisk</th>
+          <th scope="col">対策</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">document探索／path／archive</th>
+          <td>中</td>
+          <td>HTML専用条件の取り残し、archive conflict。</td>
+          <td>許可拡張子とdocument判定を1箇所へ集約する。</td>
+        </tr>
+        <tr>
+          <th scope="row">Markdown rendering</th>
+          <td>中</td>
+          <td>dialect差、heading ID不一致、raw HTML実行。</td>
+          <td>optionを固定し、fixtureで出力contractを検証する。</td>
+        </tr>
+        <tr>
+          <th scope="row">client-side navigation</th>
+          <td>中</td>
+          <td><code>.md</code> linkがViewer外へ遷移する。</td>
+          <td>同一originの対応document拡張子を共通path parserで扱う。</td>
+        </tr>
+        <tr>
+          <th scope="row">source UI</th>
+          <td>小</td>
+          <td>MarkdownなのにSource HTMLと表示される。</td>
+          <td>document formatに応じてbuttonとdialogのlabelを更新する。</td>
+        </tr>
+        <tr>
+          <th scope="row">lint／fix／format parity</th>
+          <td>大</td>
+          <td>生成HTMLの診断位置がMarkdown sourceと一致しない。</td>
+          <td>Viewer MVPから分離し、Markdown token／ASTを直接検査する。</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Viewer MVP全体は中規模である。parser追加だけなら小さいが、document
+      identityと遷移を一貫して拡張し、HTML回帰を防ぐtestまで含めると複数moduleにまたがる。既存checkとの完全な同等化はMVPより明確に大きい。
+    </p>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>Phase 1の受入条件</h2>
+    <ul>
+      <li>HTMLだけの既存fixtureとbrowser testが変更前と同じ結果になる。</li>
+      <li>同じdirectoryの<code>.html</code>と<code>.md</code>がnavigationへ同時に表示される。</li>
+      <li>MarkdownのGFM table、task list、code fence、画像が既存themeで読める。</li>
+      <li>MarkdownからHTML、HTMLからMarkdown、Markdown同士の相対linkがViewer内で遷移する。</li>
+      <li>重複見出しと日本語見出しを含むfragment linkがreloadとhistory操作後も機能する。</li>
+      <li>Mermaid未導入時も通常のcode blockとしてsourceを読め、導入時はdiagramを表示する。</li>
+      <li>source dialogが元Markdownを表示し、HTML文書では既存のSource HTML表示を維持する。</li>
+      <li>Markdownをarchive／restoreした後もURLと文書形式が維持される。</li>
+      <li>Markdown内の<code>script</code>などのraw HTMLが実行されない。</li>
+      <li>Node.jsとBunの対応runtime、およびChromium／Firefox／WebKitの既存検証方針を満たす。</li>
+    </ul>
+  </section>
+
+  <section id="non-goals">
+    <h2>Phase 1で行わないこと</h2>
+    <ul>
+      <li>MarkdownとHTMLのround-trip変換</li>
+      <li>Markdown sourceの自動整形や自動修正</li>
+      <li>front matter、MDX、wiki link、数式、独自directiveの導入</li>
+      <li>code syntax highlightingの追加</li>
+      <li>MarkdownだけでChart.js scriptを生成する独自記法</li>
+      <li>GitHubのrepository contextに依存するissue参照、mention、emoji等の再現</li>
+    </ul>
+  </section>
+</article>

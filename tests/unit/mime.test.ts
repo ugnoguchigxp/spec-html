@@ -5,6 +5,8 @@ describe("getContentType", () => {
   it.each([
     ["page.html", "text/html; charset=utf-8"],
     ["page.HTM", "text/html; charset=utf-8"],
+    ["notes.md", "text/markdown; charset=utf-8"],
+    ["design.Markdown", "text/markdown; charset=utf-8"],
     ["viewer.js", "text/javascript; charset=utf-8"],
     ["viewer.mjs", "text/javascript; charset=utf-8"],
     ["theme.css", "text/css; charset=utf-8"],

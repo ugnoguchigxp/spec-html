@@ -61,6 +61,27 @@ describe("archived documents", () => {
     await expect(access(join(root, "nested", ".archived"))).rejects.toThrow();
   });
 
+  it("archives Markdown independently from an HTML document with the same stem", async () => {
+    await writeFile(join(root, "overview.md"), "# Markdown Overview\n");
+
+    await setDocumentArchived(root, "overview.md", true);
+
+    await expect(getDocumentArchived(root, "overview.md")).resolves.toBe(true);
+    await expect(getDocumentArchived(root, "overview.html")).resolves.toBe(
+      false,
+    );
+    await expect(findArchivedDocuments(root)).resolves.toMatchObject([
+      { path: "overview.md", format: "markdown" },
+    ]);
+  });
+
+  it("does not expose dot-prefixed files placed in an archive directory", async () => {
+    await mkdir(join(root, ".archived"));
+    await writeFile(join(root, ".archived", ".secret.md"), "# Secret\n");
+
+    await expect(findArchivedDocuments(root)).resolves.toEqual([]);
+  });
+
   it("serializes concurrent moves without losing documents", async () => {
     await Promise.all([
       setDocumentArchived(root, "overview.html", true),

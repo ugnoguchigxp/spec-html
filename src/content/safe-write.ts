@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, open, readFile, rename, rm } from "node:fs/promises";
+import { link, lstat, open, readFile, rename, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { TextDecoder } from "node:util";
 
@@ -10,6 +10,12 @@ export interface FileSnapshot {
 
 export interface AtomicWriteOperations {
   readonly rename: typeof rename;
+}
+
+export interface AtomicCreateOperations {
+  readonly link: typeof link;
+  readonly open: typeof open;
+  readonly rm: typeof rm;
 }
 
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
@@ -40,8 +46,10 @@ export async function fileMatchesSnapshot(
   displayPath: string,
   snapshot: FileSnapshot,
 ): Promise<boolean> {
-  return absolutePath === snapshot.absolutePath &&
-    digest(await readUtf8File(absolutePath, displayPath)) === snapshot.digest;
+  return (
+    absolutePath === snapshot.absolutePath &&
+    digest(await readUtf8File(absolutePath, displayPath)) === snapshot.digest
+  );
 }
 
 export async function atomicReplace(
@@ -87,6 +95,62 @@ export async function atomicReplace(
         await rm(temporaryPath, { force: true });
       }
     }
+  }
+  throw new Error(`一時file名を確保できません: ${targetPath}`);
+}
+
+/** Publish a new file atomically without ever replacing an existing entry. */
+export async function atomicCreate(
+  targetPath: string,
+  output: string,
+  temporaryTag: string,
+  operations: AtomicCreateOperations = { link, open, rm },
+): Promise<void> {
+  const directory = dirname(targetPath);
+  const file = basename(targetPath);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const temporaryPath = join(
+      directory,
+      `.${file}.${temporaryTag}-${process.pid}-${attempt}.tmp`,
+    );
+    let temporaryCreated = false;
+    let failed = false;
+    let operationError: unknown;
+    try {
+      const handle = await operations.open(temporaryPath, "wx", 0o666);
+      temporaryCreated = true;
+      try {
+        await handle.writeFile(output, "utf8");
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+      await operations.link(temporaryPath, targetPath);
+    } catch (error: unknown) {
+      if (!temporaryCreated && isNodeError(error, "EEXIST")) {
+        continue;
+      }
+      failed = true;
+      operationError = error;
+    }
+    if (temporaryCreated) {
+      try {
+        await operations.rm(temporaryPath, { force: true });
+      } catch (error: unknown) {
+        if (operations.rm !== rm) {
+          await rm(temporaryPath, { force: true });
+        }
+        if (!failed) {
+          failed = true;
+          operationError = error;
+        }
+      }
+    }
+    if (failed) {
+      throw operationError;
+    }
+    return;
   }
   throw new Error(`一時file名を確保できません: ${targetPath}`);
 }

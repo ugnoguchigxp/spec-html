@@ -13,7 +13,11 @@ let tarballPath;
 let viewerProcess;
 
 try {
-  const packOutput = await run(npmCommand, ["pack", "--json", "--silent"], projectRoot);
+  const packOutput = await run(
+    npmCommand,
+    ["pack", "--json", "--silent"],
+    projectRoot,
+  );
   const packedFiles = parsePackOutput(packOutput.stdout);
   const packedPackage = packedFiles[0];
   const packedFile = packedPackage?.filename;
@@ -53,12 +57,21 @@ try {
   }
   if (
     installedPackageJson.publishConfig?.access !== "public" ||
-    installedPackageJson.publishConfig?.registry !== "https://registry.npmjs.org/"
+    installedPackageJson.publishConfig?.registry !==
+      "https://registry.npmjs.org/"
   ) {
     throw new Error("packしたpackageの公開先設定が不正です");
   }
   if (installedPackageJson.dependencies?.prettier !== "3.9.6") {
     throw new Error("packしたpackageのPrettier versionが固定されていません");
+  }
+  if (
+    installedPackageJson.dependencies?.marked !== "18.0.10" ||
+    installedPackageJson.dependencies?.["github-slugger"] !== "2.0.0"
+  ) {
+    throw new Error(
+      "packしたpackageのMarkdown dependency versionが固定されていません",
+    );
   }
   const expectedDocumentation = [
     "README.md",
@@ -91,7 +104,8 @@ try {
     throw new Error("英語版だけを提供するshowcaseに日本語版が含まれています");
   }
   if (
-    installedPackageJson.peerDependenciesMeta?.["chart.js"]?.optional !== true ||
+    installedPackageJson.peerDependenciesMeta?.["chart.js"]?.optional !==
+      true ||
     installedPackageJson.peerDependenciesMeta?.mermaid?.optional !== true
   ) {
     throw new Error("optional peer dependencyのmetadataが不正です");
@@ -102,9 +116,15 @@ try {
     temporaryRoot,
   );
   if (versionOutput.stdout.trim() !== installedPackageJson.version) {
-    throw new Error("installしたspec-html CLIをpackage bin経由で実行できません");
+    throw new Error(
+      "installしたspec-html CLIをpackage bin経由で実行できません",
+    );
   }
-  await run(npmCommand, ["exec", "--", "spec-html", "lint", "./specs"], temporaryRoot);
+  await run(
+    npmCommand,
+    ["exec", "--", "spec-html", "lint", "./specs"],
+    temporaryRoot,
+  );
   await expectExitCode(
     npmCommand,
     ["exec", "--", "spec-html", "lint", "./invalid"],
@@ -117,6 +137,56 @@ try {
     temporaryRoot,
     2,
   );
+  const convertedStdout = await run(
+    npmCommand,
+    ["exec", "--", "spec-html", "convert", "./specs/guide.md", "--lang", "en"],
+    temporaryRoot,
+  );
+  if (
+    !convertedStdout.stdout.startsWith('<article lang="en">') ||
+    !convertedStdout.stdout.includes(
+      '<h1 id="consumer-guide">Consumer guide</h1>',
+    )
+  ) {
+    throw new Error("packしたConverterがstdoutへHTMLを出力していません");
+  }
+  await run(
+    npmCommand,
+    [
+      "exec",
+      "--",
+      "spec-html",
+      "convert",
+      "./specs/guide.md",
+      "--lang",
+      "en",
+      "--output",
+      "./specs/guide.html",
+    ],
+    temporaryRoot,
+  );
+  await expectExitCode(
+    npmCommand,
+    [
+      "exec",
+      "--",
+      "spec-html",
+      "convert",
+      "./specs/guide.md",
+      "--lang",
+      "en",
+      "--output",
+      "./specs/guide.html",
+    ],
+    temporaryRoot,
+    2,
+  );
+  if (
+    (await readFile(join(temporaryRoot, "specs", "guide.md"), "utf8")) !==
+    "# Consumer guide\n"
+  ) {
+    throw new Error("Converterが元Markdownを変更しました");
+  }
   await expectExitCode(
     npmCommand,
     ["exec", "--", "spec-html", "fix", "./fixable", "--check"],
@@ -133,12 +203,17 @@ try {
     ["exec", "--", "spec-html", "fix", "./fixable", "--check"],
     temporaryRoot,
   );
-  const fixedDocument = await readFile(join(temporaryRoot, "fixable", "document.html"), "utf8");
+  const fixedDocument = await readFile(
+    join(temporaryRoot, "fixable", "document.html"),
+    "utf8",
+  );
   if (
     !fixedDocument.includes('<script>const teh = "<div>";</script>') ||
     !fixedDocument.includes('onclick="if (teh) run()"')
   ) {
-    throw new Error("installしたFixerがHTML名だけを修正してJavaScriptを保持していません");
+    throw new Error(
+      "installしたFixerがHTML名だけを修正してJavaScriptを保持していません",
+    );
   }
   await expectExitCode(
     npmCommand,
@@ -172,8 +247,14 @@ try {
     ["exec", "--", "spec-html", "format", "./full", "--write"],
     temporaryRoot,
   );
-  const normalizedDocument = await readFile(join(temporaryRoot, "full", "document.html"), "utf8");
-  if (normalizedDocument.includes("<html") || normalizedDocument.includes("<body")) {
+  const normalizedDocument = await readFile(
+    join(temporaryRoot, "full", "document.html"),
+    "utf8",
+  );
+  if (
+    normalizedDocument.includes("<html") ||
+    normalizedDocument.includes("<body")
+  ) {
     throw new Error("full HTML documentがfragmentへ正規化されていません");
   }
   await expectExitCode(
@@ -207,25 +288,28 @@ try {
   viewerProcess.stderr.on("data", (chunk) => process.stderr.write(chunk));
   const origin = await waitForViewerUrl(viewerProcess);
 
-  const [shell, navigation, overview, asset, viewer] = await Promise.all([
-    fetch(`${origin}/`),
-    fetch(`${origin}/_spec-html/navigation`),
-    fetch(`${origin}/_content/overview.html`),
-    fetch(`${origin}/_content/assets/pixel.svg`),
-    fetch(`${origin}/_spec-html/viewer.js`),
-  ]);
+  const [shell, navigation, overview, markdown, asset, viewer] =
+    await Promise.all([
+      fetch(`${origin}/`),
+      fetch(`${origin}/_spec-html/navigation`),
+      fetch(`${origin}/_content/overview.html`),
+      fetch(`${origin}/_content/guide.md`),
+      fetch(`${origin}/_content/assets/pixel.svg`),
+      fetch(`${origin}/_spec-html/viewer.js`),
+    ]);
 
   if (
     !shell.ok ||
     !navigation.ok ||
     !overview.ok ||
+    !markdown.ok ||
     !asset.ok ||
     !viewer.ok
   ) {
     throw new Error("packしたViewerのHTTP endpointを確認できません");
   }
   const shellBody = await shell.text();
-  if (!shellBody.includes('/_spec-html/viewer.js')) {
+  if (!shellBody.includes("/_spec-html/viewer.js")) {
     throw new Error("Viewer Shellがbrowser bundleを参照していません");
   }
   if (
@@ -236,6 +320,15 @@ try {
   }
   if (!(await overview.text()).includes("Consumer overview")) {
     throw new Error("consumer側の設計書を取得できません");
+  }
+  if (
+    markdown.headers.get("content-type") !== "text/markdown; charset=utf-8" ||
+    (await markdown.text()) !== "# Consumer guide\n"
+  ) {
+    throw new Error("consumer側のMarkdownを取得できません");
+  }
+  if (!(await navigation.text()).includes('aria-label="Markdown">MD</span>')) {
+    throw new Error("consumer側のMarkdownがnavigationへ表示されていません");
   }
 
   await stopViewer(viewerProcess);
@@ -274,6 +367,7 @@ async function writeConsumerFixture(root) {
       join(specsRoot, "overview.html"),
       '<article lang="en"><h1>Consumer overview</h1></article>',
     ),
+    writeFile(join(specsRoot, "guide.md"), "# Consumer guide\n"),
     writeFile(
       join(specsRoot, "assets", "pixel.svg"),
       '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>',
@@ -299,7 +393,10 @@ async function writeConsumerFixture(root) {
 
 function run(command, args, cwd) {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(command, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command, args, {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8");
@@ -316,19 +413,26 @@ function run(command, args, cwd) {
         resolvePromise({ stdout, stderr });
         return;
       }
-      reject(new Error(`${command} ${args.join(" ")} failed: ${stderr || stdout}`));
+      reject(
+        new Error(`${command} ${args.join(" ")} failed: ${stderr || stdout}`),
+      );
     });
   });
 }
 
 async function expectExitCode(command, args, cwd, expected) {
   const result = await new Promise((resolvePromise, reject) => {
-    const child = spawn(command, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command, args, {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     child.once("error", reject);
     child.once("exit", (code) => resolvePromise(code));
   });
   if (result !== expected) {
-    throw new Error(`${command} ${args.join(" ")} returned ${result}, expected ${expected}`);
+    throw new Error(
+      `${command} ${args.join(" ")} returned ${result}, expected ${expected}`,
+    );
   }
 }
 
