@@ -1,7 +1,4 @@
-import {
-  CONTENT_PREFIX,
-  NAVIGATION_PATH,
-} from "./constants.js";
+import { CONTENT_PREFIX, NAVIGATION_PATH } from "./constants.js";
 import type { NavigationView } from "../content/document-path.js";
 import { documentFormatFromPath } from "../content/document-format.js";
 import { renderMarkdownDocument } from "./markdown.js";
@@ -9,10 +6,7 @@ import { fetchDocument } from "./document-loader.js";
 import { buildSrcdoc } from "./frame.js";
 import type { FrameIntegrations } from "./frame.js";
 import { createLayout, renderLoadState } from "./layout.js";
-import {
-  mountNavigation,
-  updateActiveNavigation,
-} from "./navigation.js";
+import { mountNavigation, updateActiveNavigation } from "./navigation.js";
 import {
   createContentUrl,
   normalizeDocumentPath,
@@ -29,12 +23,7 @@ import {
   saveThemePreference,
   THEME_PREFERENCES,
 } from "./theme.js";
-import type { ThemePreference } from "./theme.js";
-import type {
-  NavigationItem,
-  RouteState,
-  ViewerElements,
-} from "./types.js";
+import type { NavigationItem, RouteState } from "./types.js";
 import {
   fetchDocumentState,
   messageForArchiveError,
@@ -243,7 +232,10 @@ async function initializeViewer(): Promise<void> {
     try {
       const documentUrl = createContentUrl(doc, new URL(window.location.href));
       const source = await fetchDocument(documentUrl, abortController.signal);
-      const documentState = await fetchDocumentState(doc, abortController.signal);
+      const documentState = await fetchDocumentState(
+        doc,
+        abortController.signal,
+      );
       const archived = documentState.archived;
       if (!isCurrentRequest(activeAbortController, abortController)) {
         return;
@@ -273,9 +265,10 @@ async function initializeViewer(): Promise<void> {
       if (format === null) {
         throw new Error(`Unsupported document format: ${doc}`);
       }
-      const fragment = format === "markdown"
-        ? await renderMarkdownDocument(source, markdownLanguage)
-        : source;
+      const fragment =
+        format === "markdown"
+          ? await renderMarkdownDocument(source, markdownLanguage)
+          : source;
       const title = getFragmentTitle(fragment, doc);
       const srcdoc = buildSrcdoc(
         fragment,
@@ -451,7 +444,7 @@ async function initializeViewer(): Promise<void> {
     elements.sourceDialog.showModal();
   });
   elements.sourceDialogCloseButton.addEventListener("click", () =>
-    closeSourceDialog(elements)
+    closeSourceDialog(elements),
   );
 
   document.addEventListener("pointerdown", (event) => {

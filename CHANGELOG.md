@@ -4,11 +4,31 @@ Notable changes to Spec HTML are recorded here. The project follows [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- Markdown linting for a single non-empty H1, local references, unsafe URLs, and Mermaid syntax, with Markdown file counts in project summaries
+- Repeatable 50, 500, and 5,000 document benchmarks for startup, cold and warm navigation, and live reload, with CI budgets for the smaller scales
+- A security policy, private vulnerability reporting guidance, and structured GitHub issue templates
+
+### Changed
+
+- CLI help, usage errors, and lint diagnostics now use English by default, with the supported options and exit codes documented in both READMEs
+- Viewer startup is split into focused controllers with jsdom coverage, and the Markdown compiler is loaded only when a Markdown document is opened
+- Navigation titles and document discovery results are cached for repeated reads, while check reuses a shared discovery snapshot
+- Runtime paths, mutation locking, migration ownership checks, and duplicated utilities now follow shared lower-level modules instead of crossing architectural layers
+- Windows CI follows the current Node.js 24 release line, with live reload canonicalizing Windows short paths before creating a recursive watcher
+
 ### Fixed
 
 - Migration content parity now collects headings, mixed ordered/unordered lists, and inline marks in document order instead of selector-group order
 - Table, heading, and link text parity no longer invents spaces at inline element boundaries while preserving explicit line breaks
 - Formatting preserves inline code contents verbatim and protects only the outermost range when protected elements are nested
+
+### Security
+
+- Non-loopback servers now require a matching Origin header for document state changes while retaining loopback CLI compatibility
+- Static-file reads verify the opened file identity against the validated path to close the path-resolution race window
+- Mermaid uses strict security mode for both HTML and Markdown documents, and the `open` runtime dependency is pinned exactly
 
 ## 0.1.2 - 2026-08-19
 

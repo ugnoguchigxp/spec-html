@@ -7,8 +7,8 @@ import { join, resolve } from "node:path";
 const checkMode = process.argv.includes("--check");
 const scales = checkMode ? [50, 500] : [50, 500, 5_000];
 const budgets = new Map([
-  [50, { startup: 1_000, cold: 1_500, warm: 1_000 }],
-  [500, { startup: 1_000, cold: 5_000, warm: 2_500 }],
+  [50, { startup: 1_000, cold: 1_500, warm: 1_000, reload: 1_000 }],
+  [500, { startup: 1_000, cold: 5_000, warm: 2_500, reload: 1_000 }],
 ]);
 const rows = [];
 
@@ -29,7 +29,8 @@ for (const count of scales) {
       const warmStart = performance.now();
       await fetchNavigation(navigationUrl);
       const warm = performance.now() - warmStart;
-      rows.push({ documents: count, startup, cold, warm });
+      const reload = await measureReload(server.origin, contentRoot);
+      rows.push({ documents: count, startup, cold, warm, reload });
     } finally {
       await server.close();
     }
@@ -38,11 +39,14 @@ for (const count of scales) {
   }
 }
 
-console.log("documents startup_ms navigation_cold_ms navigation_warm_ms");
+console.log(
+  "documents startup_ms navigation_cold_ms navigation_warm_ms reload_ms",
+);
 for (const row of rows) {
   console.log(
     [row.documents, row.startup, row.cold, row.warm]
-      .map((value, index) => index === 0 ? String(value) : value.toFixed(1))
+      .concat(row.reload)
+      .map((value, index) => (index === 0 ? String(value) : value.toFixed(1)))
       .join(" "),
   );
 }
@@ -51,10 +55,12 @@ if (checkMode) {
   const failures = rows.flatMap((row) => {
     const budget = budgets.get(row.documents);
     if (budget === undefined) return [];
-    return ["startup", "cold", "warm"].flatMap((metric) =>
+    return ["startup", "cold", "warm", "reload"].flatMap((metric) =>
       row[metric] > budget[metric]
-        ? [`${row.documents} ${metric}: ${row[metric].toFixed(1)}ms > ${budget[metric]}ms`]
-        : []
+        ? [
+            `${row.documents} ${metric}: ${row[metric].toFixed(1)}ms > ${budget[metric]}ms`,
+          ]
+        : [],
     );
   });
   if (failures.length > 0) {
@@ -105,18 +111,19 @@ function startViewer(contentRoot) {
       clearTimeout(timeout);
       resolveStart({
         origin: origin.replace(/\/$/, ""),
-        close: () => new Promise((resolveClose, rejectClose) => {
-          child.once("exit", (code, signal) => {
-            if (code === 0 || signal === "SIGTERM") {
-              resolveClose();
-            } else {
-              rejectClose(
-                new Error(`Viewer exited with ${String(code)}: ${stderr}`),
-              );
-            }
-          });
-          child.kill("SIGTERM");
-        }),
+        close: () =>
+          new Promise((resolveClose, rejectClose) => {
+            child.once("exit", (code, signal) => {
+              if (code === 0 || signal === "SIGTERM") {
+                resolveClose();
+              } else {
+                rejectClose(
+                  new Error(`Viewer exited with ${String(code)}: ${stderr}`),
+                );
+              }
+            });
+            child.kill("SIGTERM");
+          }),
       });
     });
     child.once("error", (error) => {
@@ -126,7 +133,11 @@ function startViewer(contentRoot) {
     child.once("exit", (code) => {
       clearTimeout(timeout);
       if (!stdout.includes("Spec HTML:")) {
-        reject(new Error(`Viewer exited before startup (${String(code)}): ${stderr}`));
+        reject(
+          new Error(
+            `Viewer exited before startup (${String(code)}): ${stderr}`,
+          ),
+        );
       }
     });
   });
@@ -138,4 +149,47 @@ async function fetchNavigation(url) {
     throw new Error(`Navigation request failed: HTTP ${response.status}`);
   }
   await response.text();
+}
+
+async function measureReload(origin, contentRoot) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  let reader;
+  try {
+    const response = await fetch(`${origin}/_spec-html/live-reload`, {
+      signal: controller.signal,
+    });
+    if (!response.ok || response.body === null) {
+      throw new Error(`Live reload connection failed: HTTP ${response.status}`);
+    }
+    reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const connected = await readUntil(reader, decoder, "", ": connected\n\n");
+    const reloadStart = performance.now();
+    await writeFile(
+      join(contentRoot, "document-00000.md"),
+      "# Document 0\n\nReload benchmark update.\n",
+      "utf8",
+    );
+    await readUntil(reader, decoder, connected, "data: reload\n\n");
+    return performance.now() - reloadStart;
+  } finally {
+    clearTimeout(timeout);
+    if (reader !== undefined) {
+      await reader.cancel().catch(() => undefined);
+    }
+    controller.abort();
+  }
+}
+
+async function readUntil(reader, decoder, initial, marker) {
+  let buffer = initial;
+  while (!buffer.includes(marker)) {
+    const { done, value } = await reader.read();
+    if (done) {
+      throw new Error(`Live reload connection ended before ${marker.trim()}`);
+    }
+    buffer += decoder.decode(value, { stream: true });
+  }
+  return buffer.slice(buffer.indexOf(marker) + marker.length);
 }

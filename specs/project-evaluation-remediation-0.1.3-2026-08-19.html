@@ -1,0 +1,271 @@
+<article lang="ja">
+  <h1>プロジェクト評価課題の対処記録（0.1.3準備）</h1>
+
+  <p>
+    2026年8月19日付の2件のプロジェクト評価を統合し、0.1.3の準備として実施した対処と判断を記録する。結論として、release操作と検索機能を除く実装課題は対処済みである。package
+    versionは、公開操作を行うまで<code>0.1.2</code>のまま維持する。
+  </p>
+
+  <aside data-type="note" aria-labelledby="scope-decisions">
+    <strong id="scope-decisions">確定したscope</strong>
+    <ul>
+      <li>
+        文書検索は実装しない。規模別benchmarkだけを追加し、現在のnavigation性能を継続観測する。
+      </li>
+      <li>
+        過去versionのtag、GitHub Release、release
+        workflow、provenanceなどのrelease操作は、0.1.3公開後に行う。
+      </li>
+      <li>
+        GitHub
+        repositoryのdescription、homepage、topics、非公開脆弱性報告はrelease操作ではないため、この対処に含める。
+      </li>
+    </ul>
+  </aside>
+
+  <section id="sequence">
+    <h2>実施順序</h2>
+    <figure>
+      <pre class="mermaid">
+flowchart LR
+  A[評価2文書の課題を統合] --> B[security・品質・architectureを修正]
+  B --> C[全品質gate]
+  C --> D[0.1.3を公開]
+  D --> E[tag・GitHub Release・provenanceを整備]
+  A --> F[検索は非目標]
+  F --> G[規模別benchmarkのみ継続]
+      </pre>
+      <figcaption>
+        実装修正と公開後のrelease traceabilityを分離する。検索は0.1.3の完了条件に含めない。
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="results">
+    <h2>統合課題一覧と結果</h2>
+    <table>
+      <caption>
+        2件の評価文書から統合した改善項目
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">優先度</th>
+          <th scope="col">課題</th>
+          <th scope="col">結果</th>
+          <th scope="col">主な証拠</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">P0</th>
+          <td>非loopback公開時の状態変更API保護</td>
+          <td>完了。非loopbackでは一致するOriginを必須にした。</td>
+          <td><code>src/server/host-policy.ts</code>、server security test</td>
+        </tr>
+        <tr>
+          <th scope="row">P0</th>
+          <td>Markdownの無検査green</td>
+          <td>完了。h1、local参照、危険URL、Mermaid構文を検査し、summaryへ件数を出す。</td>
+          <td><code>src/lint/markdown.ts</code>、MD001〜MD003</td>
+        </tr>
+        <tr>
+          <th scope="row">P0</th>
+          <td>既存versionのtagとGitHub Release</td>
+          <td>公開後へ保留。0.1.3公開後のrelease作業として扱う。</td>
+          <td>この文書のscope決定</td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>CLIの言語方針</td>
+          <td>完了。help、usage error、lint診断を英語既定に統一した。</td>
+          <td>
+            <code>src/cli/</code
+            >、<code>src/lint/rules.ts</code>、英日README
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>repositoryの発見性と報告窓口</td>
+          <td>完了。GitHub metadata、security policy、非公開報告、issue templateを整備した。</td>
+          <td>
+            <code>SECURITY.md</code>、<code
+              >.github/ISSUE_TEMPLATE/</code
+            >
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>
+            <code>content</code
+            >から<code>migrate</code>への層逆転
+          </td>
+          <td>完了。汎用lockをcontent層、migration ownershipをmigrate層へ分離した。</td>
+          <td>
+            <code>src/content/mutation-lock.ts</code>、<code
+              >src/migrate/archive.ts</code
+            >
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>HTTP path定数の重複</td>
+          <td>完了。serverとbrowserが共有moduleを参照する。</td>
+          <td><code>src/shared/runtime-paths.ts</code></td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>966行のViewer起動処理</td>
+          <td>完了。責務別controllerへ分割し、jsdom unit testを追加した。</td>
+          <td>
+            <code>src/browser/*-controls.ts</code>、<code
+              >tests/unit/browser-controls.test.ts</code
+            >
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>未記載のCLI契約</td>
+          <td>
+            完了。reporter、最大件数、実行選択、終了code、既定directoryを英日READMEへ記載した。
+          </td>
+          <td>
+            <code>README.md</code>、<code
+              >README.ja.md</code
+            >
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>navigation titleの再parse</td>
+          <td>完了。mtimeとsizeをkeyにしたcacheをserver lifetimeで共有する。</td>
+          <td><code>src/server/navigation.ts</code></td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>読取pathのTOCTOU</td>
+          <td>完了。検証時とopen後のdevice・inodeを比較してから応答する。</td>
+          <td><code>src/server/static-file.ts</code></td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>HTML由来Mermaidのsecurity level</td>
+          <td>
+            完了。HTMLとMarkdownの両方を<code>strict</code>に統一した。
+          </td>
+          <td><code>src/vendor/mermaid-adapter.ts</code></td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td><code>open</code>依存のcaret指定</td>
+          <td>完了。<code>11.0.1</code>へ完全固定した。</td>
+          <td>
+            <code>package.json</code>、<code>package-lock.json</code>
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>走査とbundleの重複cost</td>
+          <td>完了。checkはdiscovery snapshotを共有し、Markdown compilerは利用時だけ取得する。</td>
+          <td>
+            <code>src/content/documents.ts</code>、<code>src/browser/markdown.ts</code>
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>規模別benchmarkと検索</td>
+          <td>benchmarkは完了。検索実装は明示的に対象外とした。</td>
+          <td><code>scripts/benchmark.mjs</code></td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>重複utility</td>
+          <td>完了。error、path境界、診断key、migration rootを共通化した。</td>
+          <td>
+            <code>src/shared/</code>、<code>src/lint/diagnostic-key.ts</code>
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>Windows Node 24のpin</td>
+          <td>完了。短縮pathをrealpathで正規化する回避策を入れ、CIをNode 24 currentへ戻した。</td>
+          <td>
+            <code>src/server/live-reload.ts</code>、<code>.github/workflows/ci.yml</code>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="performance">
+    <h2>性能実測</h2>
+    <p>
+      release
+      buildのCLIを実processとして起動し、生成したMarkdown文書集合で測定した。単位はmsで、navigation
+      warmはtitle cacheが有効な2回目の値、reloadはfile更新からSSE通知までの値である。
+    </p>
+    <table>
+      <caption>
+        2026年8月19日の規模別benchmark
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">文書数</th>
+          <th scope="col">起動</th>
+          <th scope="col">navigation cold</th>
+          <th scope="col">navigation warm</th>
+          <th scope="col">reload</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">50</th>
+          <td>158.1</td>
+          <td>36.1</td>
+          <td>2.0</td>
+          <td>64.7</td>
+        </tr>
+        <tr>
+          <th scope="row">500</th>
+          <td>172.5</td>
+          <td>61.3</td>
+          <td>4.8</td>
+          <td>63.2</td>
+        </tr>
+        <tr>
+          <th scope="row">5,000</th>
+          <td>158.9</td>
+          <td>348.0</td>
+          <td>33.5</td>
+          <td>65.4</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      50文書と500文書にはCI
+      budgetを設定した。現在の結果から、0.1.3で検索indexを導入する性能上の必然性はない。
+    </p>
+  </section>
+
+  <section id="quality-gates">
+    <h2>品質gate</h2>
+    <ul>
+      <li>TypeScript typecheckとESLintが成功する。</li>
+      <li>Vitestは30 file、437 testが成功し、coverage thresholdを満たす。</li>
+      <li>PlaywrightはChromium全体とFirefox／WebKit smokeの33 testが成功する。</li>
+      <li>Spec、example、browser fixtureのfix・format・lint checkが成功する。</li>
+      <li>50／500文書のperformance budget checkが成功する。</li>
+      <li>npm pack後のconsumer smoke testが成功する。</li>
+    </ul>
+  </section>
+
+  <section id="post-release">
+    <h2>0.1.3公開後に行うこと</h2>
+    <ol>
+      <li>0.1.3の公開内容とsource commitを確認する。</li>
+      <li>署名付きtagとGitHub Releaseを作成する。</li>
+      <li>必要なら過去versionのtraceabilityを補完する。</li>
+      <li>release workflow、provenance、tag存在検査の方式を決める。</li>
+    </ol>
+    <p>これらは今回の実装gateを妨げないが、公開後の完了条件として残す。</p>
+  </section>
+</article>

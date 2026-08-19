@@ -1,10 +1,5 @@
 import { lstat, realpath, statfs } from "node:fs/promises";
-import {
-  basename,
-  dirname,
-  join,
-  relative,
-} from "node:path";
+import { basename, dirname, join } from "node:path";
 import { removeDocumentExtension } from "../content/document-format.js";
 import { validateDocumentArchiveDestination } from "../content/archive.js";
 import { findViewerDocuments } from "../content/documents.js";
@@ -218,13 +213,23 @@ export async function createMigrationPlan(
     }
     sourceKeys.set(sourceKey, document.path);
     const key = canonicalMigrationPathKey(outputPath);
-    if (outputPath.split("/").at(-1)?.toLocaleLowerCase("en-US") === "nav.html") {
-      issues.push(errorIssue("MIG002", "nav.htmlは移行先にできません", document.path));
+    if (
+      outputPath.split("/").at(-1)?.toLocaleLowerCase("en-US") === "nav.html"
+    ) {
+      issues.push(
+        errorIssue("MIG002", "nav.htmlは移行先にできません", document.path),
+      );
       continue;
     }
     const collision = outputKeys.get(key);
     if (collision !== undefined) {
-      issues.push(errorIssue("MIG002", `出力先が衝突します: ${collision}, ${document.path}`, document.path));
+      issues.push(
+        errorIssue(
+          "MIG002",
+          `出力先が衝突します: ${collision}, ${document.path}`,
+          document.path,
+        ),
+      );
       continue;
     }
     outputKeys.set(key, document.path);
@@ -247,7 +252,13 @@ export async function createMigrationPlan(
       !activePathKeys.has(canonicalMigrationPathKey(outputPath)) &&
       (await entryExists(absoluteOutput))
     ) {
-      issues.push(errorIssue("MIG001", `出力先が既に存在します: ${outputPath}`, sourcePath));
+      issues.push(
+        errorIssue(
+          "MIG001",
+          `出力先が既に存在します: ${outputPath}`,
+          sourcePath,
+        ),
+      );
     }
   }
   for (const path of options.languages?.keys() ?? []) {
@@ -342,7 +353,13 @@ export async function createMigrationPlan(
       const detail = formatted.problems
         .map((problem) => `${problem.code}: ${problem.message}`)
         .join("; ");
-      issues.push(errorIssue("MIG003", `生成HTMLを整形できません: ${detail}`, document.path));
+      issues.push(
+        errorIssue(
+          "MIG003",
+          `生成HTMLを整形できません: ${detail}`,
+          document.path,
+        ),
+      );
       continue;
     }
     for (const notice of compiled.notices) {
@@ -379,7 +396,10 @@ export async function createMigrationPlan(
       outputPath,
       mapping,
     );
-    if (remainingLinks.rewrites.length > 0 || remainingLinks.blockers.length > 0) {
+    if (
+      remainingLinks.rewrites.length > 0 ||
+      remainingLinks.blockers.length > 0
+    ) {
       issues.push(
         errorIssue(
           "MIG005",
@@ -397,7 +417,8 @@ export async function createMigrationPlan(
       output: formatted.output,
       sourceSnapshot,
       directorySnapshot,
-      outputDigest: createFileSnapshot(outputAbsolutePath, formatted.output).digest,
+      outputDigest: createFileSnapshot(outputAbsolutePath, formatted.output)
+        .digest,
       language: sourceLanguage,
       notices: compiled.notices,
       captions: compiled.tableCaptions,
@@ -471,7 +492,10 @@ export async function createMigrationPlan(
         output: rewritten.output,
         sourceSnapshot,
         directorySnapshot,
-        outputDigest: createFileSnapshot(document.absolutePath, rewritten.output).digest,
+        outputDigest: createFileSnapshot(
+          document.absolutePath,
+          rewritten.output,
+        ).digest,
         rewrites: rewritten.rewrites,
       });
     }
@@ -493,7 +517,12 @@ export async function createMigrationPlan(
         unavailablePaths: [...mapping.keys()],
       }),
     ]);
-    addLintIssues(issues, baselineLint.diagnostics, virtualLint.diagnostics, new Set(sources.map((source) => source.outputPath)));
+    addLintIssues(
+      issues,
+      baselineLint.diagnostics,
+      virtualLint.diagnostics,
+      new Set(sources.map((source) => source.outputPath)),
+    );
     expectedDiagnosticKeys = virtualLint.diagnostics.map(diagnosticStableKey);
   }
 
@@ -514,15 +543,20 @@ export async function createMigrationPlan(
       "backups",
       "existing-html",
       ...replacement.path.split("/"),
-    )
+    ),
   );
   const pathCandidates = [
     ...markdownDocuments.flatMap((document) => [
       document.absolutePath,
-      join(contentRoot, ...(mapping.get(document.path) ?? document.path).split("/")),
+      join(
+        contentRoot,
+        ...(mapping.get(document.path) ?? document.path).split("/"),
+      ),
       archivedPath(contentRoot, document.path),
     ]),
-    ...outputPaths.map((path) => atomicTemporaryPath(path, "spec-html-migrate-create")),
+    ...outputPaths.map((path) =>
+      atomicTemporaryPath(path, "spec-html-migrate-create"),
+    ),
     ...replacementPaths.flatMap((path) => [
       path,
       atomicTemporaryPath(path, "spec-html-migrate-replace"),
@@ -542,10 +576,7 @@ export async function createMigrationPlan(
     ),
     ...[...new Set(sources.map((source) => source.directorySnapshot))].map(
       (directory) =>
-        join(
-          directory,
-          ".spec-html-migrate-capability-9999999999-ffffffff",
-        ),
+        join(directory, ".spec-html-migrate-capability-9999999999-ffffffff"),
     ),
   ];
   const maxPathLength = pathCandidates.reduce(
@@ -587,7 +618,8 @@ export async function createMigrationPlan(
     0,
   );
   const backupBytes = replacements.reduce(
-    (total, replacement) => total + Buffer.byteLength(replacement.source, "utf8"),
+    (total, replacement) =>
+      total + Buffer.byteLength(replacement.source, "utf8"),
     0,
   );
   const requiredBytes = outputBytes * 2 + backupBytes * 2 + 1_048_576;
@@ -626,7 +658,9 @@ export async function createMigrationPlan(
     markdown: markdownDocuments.length,
     creates: sources.length,
     captions: sources.reduce(
-      (count, source) => count + source.captions.filter((caption) => caption.caption !== null).length,
+      (count, source) =>
+        count +
+        source.captions.filter((caption) => caption.caption !== null).length,
       0,
     ),
     htmlRewrites: replacements.reduce(
@@ -635,7 +669,8 @@ export async function createMigrationPlan(
     ),
     archives: sources.length,
     errors: sortedIssues.filter((issue) => issue.severity === "error").length,
-    warnings: sortedIssues.filter((issue) => issue.severity === "warning").length,
+    warnings: sortedIssues.filter((issue) => issue.severity === "warning")
+      .length,
     parityMatched,
     inputBytes,
     sourceBytes,
@@ -688,7 +723,9 @@ export function portableMigrationPathProblem(path: string): string | null {
 function archivedPath(contentRoot: string, documentPath: string): string {
   return join(
     contentRoot,
-    ...dirname(documentPath).split("/").filter((segment) => segment !== "."),
+    ...dirname(documentPath)
+      .split("/")
+      .filter((segment) => segment !== "."),
     ".archived",
     basename(documentPath),
   );
@@ -698,8 +735,9 @@ export function migrationPlanHasBlockers(
   plan: MigrationPlan,
   warningsAsErrors: boolean,
 ): boolean {
-  return plan.summary.errors > 0 ||
-    (warningsAsErrors && plan.summary.warnings > 0);
+  return (
+    plan.summary.errors > 0 || (warningsAsErrors && plan.summary.warnings > 0)
+  );
 }
 
 async function entryExists(path: string): Promise<boolean> {
@@ -719,7 +757,7 @@ async function directoryMatches(
   expectedDirectory: string,
 ): Promise<boolean> {
   try {
-    return await realpath(dirname(absolutePath)) === expectedDirectory;
+    return (await realpath(dirname(absolutePath))) === expectedDirectory;
   } catch {
     return false;
   }
@@ -768,7 +806,11 @@ function lintIssue(diagnostic: LintDiagnostic): MigrationIssue {
   };
 }
 
-function errorIssue(code: string, message: string, file?: string): MigrationIssue {
+function errorIssue(
+  code: string,
+  message: string,
+  file?: string,
+): MigrationIssue {
   return {
     severity: "error",
     code,
@@ -777,7 +819,11 @@ function errorIssue(code: string, message: string, file?: string): MigrationIssu
   };
 }
 
-function warningIssue(code: string, message: string, file?: string): MigrationIssue {
+function warningIssue(
+  code: string,
+  message: string,
+  file?: string,
+): MigrationIssue {
   return {
     severity: "warning",
     code,

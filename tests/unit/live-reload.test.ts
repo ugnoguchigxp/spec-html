@@ -8,7 +8,7 @@ describe("live reload", () => {
     let watchedPath = "";
     const close = vi.fn();
     const liveReload = await createLiveReload("C:\\SHORT~1\\specs", {
-      realpath: async () => "C:\\Long Workspace\\specs",
+      realpath: () => Promise.resolve("C:\\Long Workspace\\specs"),
       watch: (path) => {
         watchedPath = path;
         return { close } as unknown as FSWatcher;
@@ -23,7 +23,7 @@ describe("live reload", () => {
   it("answers HEAD connections without retaining a client", async () => {
     const watcherClose = vi.fn();
     const liveReload = await createLiveReload("/specs", {
-      realpath: async (path) => path,
+      realpath: (path) => Promise.resolve(path),
       watch: () => ({ close: watcherClose }) as unknown as FSWatcher,
     });
     const writeHead = vi.fn();
@@ -34,7 +34,9 @@ describe("live reload", () => {
 
     expect(writeHead).toHaveBeenCalledWith(
       200,
-      expect.objectContaining({ "Content-Type": "text/event-stream; charset=utf-8" }),
+      expect.objectContaining({
+        "Content-Type": "text/event-stream; charset=utf-8",
+      }),
     );
     expect(end).toHaveBeenCalledOnce();
     liveReload.close();
