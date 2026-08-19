@@ -321,7 +321,21 @@ try {
   ) {
     throw new Error("packしたViewerのHTTP endpointを確認できません");
   }
-  const shellBody = await shell.text();
+  const [
+    shellBody,
+    navigationBody,
+    overviewBody,
+    markdownBody,
+    assetBody,
+    viewerBody,
+  ] = await Promise.all([
+    shell.text(),
+    navigation.text(),
+    overview.text(),
+    markdown.text(),
+    asset.arrayBuffer(),
+    viewer.text(),
+  ]);
   if (!shellBody.includes("/_spec-html/viewer.js")) {
     throw new Error("Viewer Shellがbrowser bundleを参照していません");
   }
@@ -331,17 +345,20 @@ try {
   ) {
     throw new Error("optional integrationなしでViewerが起動していません");
   }
-  if (!(await overview.text()).includes("Consumer overview")) {
+  if (!overviewBody.includes("Consumer overview")) {
     throw new Error("consumer側の設計書を取得できません");
   }
   if (
     markdown.headers.get("content-type") !== "text/markdown; charset=utf-8" ||
-    (await markdown.text()) !== "# Consumer guide\n"
+    markdownBody !== "# Consumer guide\n"
   ) {
     throw new Error("consumer側のMarkdownを取得できません");
   }
-  if (!(await navigation.text()).includes('aria-label="Markdown">MD</span>')) {
+  if (!navigationBody.includes('aria-label="Markdown">MD</span>')) {
     throw new Error("consumer側のMarkdownがnavigationへ表示されていません");
+  }
+  if (assetBody.byteLength === 0 || viewerBody.length === 0) {
+    throw new Error("packしたViewerのassetまたはbrowser bundleが空です");
   }
 
   await stopViewer(viewerProcess);

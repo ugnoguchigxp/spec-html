@@ -110,6 +110,11 @@
       runnerはNode
       24.19.0で、まだ修正を含んでいない。したがって、retryで隠すのではなく、既知の正常versionへ一時固定する。
     </p>
+    <p>
+      修正後の再実行ではWindows jobがpack consumerまで成功した。一方、Node 20 jobで未消費のHTTP
+      responseがserver終了を妨げる<code>SIGKILL</code>も検出したため、全response
+      bodyを消費してからgraceful shutdownするよう併せて修正する。
+    </p>
   </section>
 
   <section id="phase-1">
