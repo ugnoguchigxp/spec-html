@@ -1,14 +1,18 @@
 import { createServer } from "node:http";
 import { createLiveReload } from "./live-reload.js";
 import type { LiveReload } from "./live-reload.js";
+import { createHostPolicy } from "./host-policy.js";
 import { createRequestHandler } from "./routes.js";
 import type { RunningServer, StartServerOptions } from "./types.js";
 
 export function startServer(
   options: StartServerOptions,
 ): Promise<RunningServer> {
+  const hostPolicy = createHostPolicy(options.host, options.allowedHosts);
   const liveReload = createLiveReload(options.contentRoot);
-  const server = createServer(createRequestHandler({ ...options, liveReload }));
+  const server = createServer(
+    createRequestHandler({ ...options, hostPolicy, liveReload }),
+  );
 
   return new Promise((resolve, reject) => {
     const onError = (error: Error): void => {
@@ -28,7 +32,7 @@ export function startServer(
 
       let closePromise: Promise<void> | undefined;
       resolve({
-        origin: createOrigin(options.host, address.port),
+        origin: createOrigin(hostPolicy.browserHost, address.port),
         port: address.port,
         close: (): Promise<void> => {
           closePromise ??= closeRunningServer(server, liveReload);

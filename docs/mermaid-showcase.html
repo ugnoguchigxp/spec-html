@@ -1,79 +1,80 @@
-<article lang="ja">
+<article lang="en">
   <header>
     <h1>Mermaid showcase</h1>
     <p>
-      設計書でよく使うMermaid diagramの表示例です。図はHTML
-      fragment内のsourceからViewerが描画し、OSのlight／dark設定へ自動的に追従します。
+      These examples cover Mermaid diagrams commonly used in specifications. The viewer renders each
+      diagram from source in the HTML fragment and follows the operating system's light or dark
+      preference.
     </p>
   </header>
 
   <aside aria-labelledby="mermaid-note">
-    <strong id="mermaid-note">このページについて</strong>
+    <strong id="mermaid-note">About this page</strong>
     <p>
-      すべての図は<code>&lt;pre class="mermaid"&gt;</code
-      >で記述しています。生成済みSVGを管理する必要はありません。
+      Every diagram is written in <code>&lt;pre class="mermaid"&gt;</code>. Generated SVG files do
+      not need to be committed.
     </p>
   </aside>
 
   <section id="system-flow">
     <h2>System flow</h2>
-    <p>利用者の操作から永続化までの主要componentとdata flowを俯瞰します。</p>
+    <p>Overview of the main components and data flow from user action to local content.</p>
     <figure>
       <pre class="mermaid">
 flowchart LR
-  User([利用者]) --> Browser[Browser]
-  Browser -->|HTTPS| Viewer[Spec HTML Viewer]
-  Viewer -->|HTML fragment| Document[設計書]
+  User([User]) --> Browser[Browser]
+  Browser -->|HTTP| Viewer[Spec HTML Viewer]
+  Viewer -->|HTML fragment| Document[Specification]
   Viewer -->|optional| Mermaid[Mermaid]
   Viewer -->|optional| Chart[Chart.js]
   Document --> Asset[(Local assets)]
     </pre>
-      <figcaption>Viewerがdocumentと任意integrationを読み込む流れ。</figcaption>
+      <figcaption>The viewer loads a document and its optional integrations.</figcaption>
     </figure>
   </section>
 
   <section id="request-sequence">
     <h2>Request sequence</h2>
-    <p>navigationから文書を選択したときの読み込み順序を示します。</p>
+    <p>The loading sequence after a user selects a document from the navigation.</p>
     <figure>
       <pre class="mermaid">
 sequenceDiagram
-  actor User as 利用者
+  actor User
   participant Shell as Viewer Shell
   participant Server as Local Server
   participant Frame as Document Frame
-  User->>Shell: 文書を選択
+  User->>Shell: Select document
   Shell->>Server: GET /document.html
   Server-->>Shell: HTML fragment
-  Shell->>Frame: srcdocを構築
-  Frame->>Server: CSSとintegrationを取得
-  Server-->>Frame: runtime assets
-  Frame-->>User: 文書と図表を表示
+  Shell->>Frame: Build srcdoc
+  Frame->>Server: Request CSS and integrations
+  Server-->>Frame: Runtime assets
+  Frame-->>User: Display document and diagrams
     </pre>
-      <figcaption>文書選択からiframe内の描画完了まで。</figcaption>
+      <figcaption>From document selection to rendering inside the iframe.</figcaption>
     </figure>
   </section>
 
   <section id="document-state">
     <h2>Document state</h2>
-    <p>Viewer内で文書が遷移する代表的な状態です。</p>
+    <p>Representative document states inside the viewer.</p>
     <figure>
       <pre class="mermaid">
 stateDiagram-v2
   [*] --> Loading
-  Loading --> Ready: 読み込み成功
-  Loading --> Error: 取得または描画に失敗
-  Ready --> Loading: 別の文書を選択
-  Error --> Loading: 再試行
-  Ready --> [*]: Viewerを閉じる
+  Loading --> Ready: Loaded successfully
+  Loading --> Error: Fetch or render failed
+  Ready --> Loading: Select another document
+  Error --> Loading: Retry
+  Ready --> [*]: Close viewer
     </pre>
-      <figcaption>読み込み、表示、error、再試行の状態遷移。</figcaption>
+      <figcaption>Loading, ready, error, and retry transitions.</figcaption>
     </figure>
   </section>
 
   <section id="content-model">
     <h2>Content model</h2>
-    <p>content directoryを構成する主なentityと関係を表します。</p>
+    <p>The main entities and relationships within a content directory.</p>
     <figure>
       <pre class="mermaid">
 erDiagram
@@ -92,7 +93,7 @@ erDiagram
     string mediaType
   }
     </pre>
-      <figcaption>Navigation、document、assetの配置と参照関係。</figcaption>
+      <figcaption>How navigation, documents, and assets are arranged and referenced.</figcaption>
     </figure>
   </section>
 </article>

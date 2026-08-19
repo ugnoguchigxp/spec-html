@@ -1,0 +1,729 @@
+<article lang="ja">
+  <header>
+    <h1>重要指摘対応 Hardening 実装計画</h1>
+    <p>
+      本書は、Spec
+      HTMLの評価で確認されたデータ安全性、HTTP配信境界、回帰検出、保守性の課題を、既存機能を壊さず段階的に改修するための実装計画を定める。各phaseは単独で検証・review・rollbackできる単位とし、先行phaseの受け入れ条件を満たすまで後続phaseへ進まない。
+    </p>
+  </header>
+
+  <section id="goals">
+    <h2>1. 目標</h2>
+    <ul>
+      <li>
+        <code>spec-html fix --write</code
+        >が、preflight後に編集されたfileや不正なUTF-8を上書きしないようにする。
+      </li>
+      <li>
+        content
+        root内の隠しfileと隠しdirectoryをHTTP経由で配信せず、許可していない<code>Host</code>を持つrequestを拒否する。
+      </li>
+      <li>data lossと情報漏えいに直結する境界条件を自動testで固定し、将来の回帰をCIで検出する。</li>
+      <li>FormatterとFixerの安全なfile書込処理を共有し、実装差による保護漏れをなくす。</li>
+      <li>
+        Node側のcoverage下限とFirefox/WebKitのsmoke testを追加し、現在の多層testを定量的に補強する。
+      </li>
+    </ul>
+
+    <h3>1.1 成功状態</h3>
+    <ul>
+      <li>
+        Fixerのpreflight後に対象fileの内容が変わった場合、1fileも書き換えず終了code 2で失敗する。
+      </li>
+      <li>
+        不正なUTF-8を含むHTMLはFixerとFormatterの両方が読み込み時に拒否し、元byte列を保持する。
+      </li>
+      <li>
+        <code>/_content/.env</code>、<code>/_content/.git/config</code>、nestedな隠しpath、percent
+        encodeされた隠しpathが配信されない。
+      </li>
+      <li>
+        default設定のserverへ<code>Host: attacker.example</code
+        >を送ると、documentやshellを返さず<code>421</code>になる。
+      </li>
+      <li>
+        Chromiumの全browser test、FirefoxとWebKitのsmoke test、Node側coverage threshold、package
+        consumer testがCIで通過する。
+      </li>
+      <li>
+        <code>npm run check</code>、<code>npm audit</code>、<code>npm pack --dry-run</code>がclean
+        checkoutで成功する。
+      </li>
+    </ul>
+  </section>
+
+  <section id="scope">
+    <h2>2. 対象範囲と優先度</h2>
+    <table>
+      <caption>
+        評価指摘と本計画の対応関係
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">優先度</th>
+          <th scope="col">課題</th>
+          <th scope="col">主な影響</th>
+          <th scope="col">対応phase</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">P0</th>
+          <td>Fixerがpreflight後の同時編集を検出しない</td>
+          <td>利用者の編集内容を古い出力で上書きする可能性</td>
+          <td>Phase 1</td>
+        </tr>
+        <tr>
+          <th scope="row">P0</th>
+          <td>隠しfile配信と未検証Host</td>
+          <td>誤ったcontent root指定やDNS rebindingによる情報漏えい</td>
+          <td>Phase 2</td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>Fixerが不正UTF-8を置換して扱う</td>
+          <td>修正時に元byte列を不可逆に変更する可能性</td>
+          <td>Phase 1</td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>coverage下限と複数browser回帰testがない</td>
+          <td>未検査経路の増加とbrowser固有回帰の見逃し</td>
+          <td>Phase 3</td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>安全なfile書込処理の重複と巨大module</td>
+          <td>修正漏れ、review負荷、変更時の回帰risk</td>
+          <td>Phase 1、Phase 4</td>
+        </tr>
+        <tr>
+          <th scope="row">Gate</th>
+          <td>現在のworktreeがcleanではない</td>
+          <td>変更の混在、review単位の曖昧化、release再現性低下</td>
+          <td>Phase 0、Phase 5</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <aside data-type="warning" aria-labelledby="scope-warning">
+      <strong id="scope-warning">実装開始条件</strong>
+      <p>
+        現在のFixer追加と文書変更を先にreview可能なcommitへ整理する。本計画のhardening差分を既存の未整理差分へ混ぜず、baseline
+        commitを固定してからPhase 1へ進む。
+      </p>
+    </aside>
+  </section>
+
+  <section id="decisions">
+    <h2>3. 固定する設計判断</h2>
+    <table>
+      <caption>
+        実装時に選び直さない設計事項
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">項目</th>
+          <th scope="col">固定方針</th>
+          <th scope="col">理由</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">書込前提</th>
+          <td>全対象のsnapshot検証完了後にだけ最初のfileを書き込む</td>
+          <td>途中まで書き込んでから競合を発見する状態を避ける。</td>
+        </tr>
+        <tr>
+          <th scope="row">文字encoding</th>
+          <td>FixerとFormatterの入力はfatal UTF-8 decode</td>
+          <td>無効byteを置換文字へ変換して保存しない。</td>
+        </tr>
+        <tr>
+          <th scope="row">Snapshot</th>
+          <td>canonical absolute pathとSHA-256 digestを保持</td>
+          <td>path差替えと内容変更の両方を検出する。</td>
+        </tr>
+        <tr>
+          <th scope="row">File置換</th>
+          <td>同一directoryの排他的temporary fileからatomic rename</td>
+          <td>既存のmode保持、flush、cleanup契約を維持する。</td>
+        </tr>
+        <tr>
+          <th scope="row">Content公開範囲</th>
+          <td>decoded pathのどのsegmentでも、<code>.</code>から始まる名前を配信しない</td>
+          <td>navigation探索が隠すfileとHTTP配信範囲を一致させる。</td>
+        </tr>
+        <tr>
+          <th scope="row">Host検証</th>
+          <td>loopbackはloopback名だけ、具体hostはそのhostだけを許可</td>
+          <td>DNS rebindingとHost header経由の想定外originを拒否する。</td>
+        </tr>
+        <tr>
+          <th scope="row">Wildcard bind</th>
+          <td>
+            <code>0.0.0.0</code
+            >または<code>::</code>は、repeat可能な<code>--allowed-host</code>を必須にする
+          </td>
+          <td>listen addressとbrowserが使う公開hostを明示的に分離する。</td>
+        </tr>
+        <tr>
+          <th scope="row">HTTP status</th>
+          <td>
+            不許可Hostは<code>421</code>、不正pathは<code>400</code>、非公開pathは<code>404</code>
+          </td>
+          <td>入力不正と存在秘匿を区別し、response本文へpath情報を出さない。</td>
+        </tr>
+        <tr>
+          <th scope="row">Coverage</th>
+          <td>Node側をlines/statements/functions/branches 80%以上</td>
+          <td>初期下限を明示し、以後は理由なく下げない。</td>
+        </tr>
+        <tr>
+          <th scope="row">Browser test</th>
+          <td>Chromiumは全件、FirefoxとWebKitは重要導線のsmoke test</td>
+          <td>実行時間を抑えながらbrowser固有差分を検出する。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="target-design">
+    <h2>4. 目標構成</h2>
+    <h3>4.1 安全なfile I/O</h3>
+    <p>
+      新規<code>src/content/safe-write.ts</code>をFormatterとFixerだけが利用する内部moduleとして追加する。format/fix固有のtarget解決、diagnostic、reportは各moduleへ残し、汎用filesystem
+      frameworkにはしない。
+    </p>
+    <table>
+      <caption>
+        safe-write moduleの最小API
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">API</th>
+          <th scope="col">責務</th>
+          <th scope="col">失敗条件</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><code>readUtf8Snapshot</code></th>
+          <td>fileをfatal UTF-8で読み、absolute path、source、digestを返す。</td>
+          <td>不正UTF-8、通常file以外、読込error</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>assertSnapshotsUnchanged</code></th>
+          <td>全targetのcanonical pathと現在digestをsnapshotと照合する。</td>
+          <td>target集合、path、内容のいずれかが変化</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>atomicReplace</code></th>
+          <td>modeを保持し、temporary fileをflushしてrenameし、失敗時にcleanupする。</td>
+          <td>temporary名枯渇、write、sync、chmod、renameの失敗</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Result
+      objectとsnapshot集合の関連付けは既存と同じ<code>WeakMap</code>方式を維持する。外部から構築したresultや別runのresultを<code>--write</code>へ渡した場合は拒否する。
+    </p>
+
+    <h3>4.2 HTTP request boundary</h3>
+    <p>
+      <code>src/server/routes.ts</code>のroutingより前にHostを検証し、content routeではstatic
+      file解決前に公開policyを適用する。runtime assetとoptional
+      integrationはpackage管理下のrootなので、content用の隠しpath policyを流用しない。
+    </p>
+    <ul>
+      <li>
+        <code>src/server/host-policy.ts</code>を追加し、CLI
+        optionから正規化済み許可hostname集合を構築する。
+      </li>
+      <li>
+        Host値はWHATWG URLと<code>node:net</code>を使ってhostnameとして正規化し、user
+        info、path、空値、複数値を拒否する。
+      </li>
+      <li>
+        loopback
+        bindでは<code>127.0.0.1</code>、<code>localhost</code>、<code>::1</code>だけを許可する。
+      </li>
+      <li>
+        具体的な非loopback hostでは、指定hostと明示的な<code>--allowed-host</code>だけを許可する。
+      </li>
+      <li>
+        <code>PUT /_spec-html/document-state</code>は<code>Origin</code>がある場合、request
+        Hostとsame-originであることも確認する。OriginがないCLIや同一machineのHTTP
+        clientは互換性のため許可する。
+      </li>
+    </ul>
+  </section>
+
+  <section id="phase-0">
+    <h2>5. Phase 0: Baseline固定</h2>
+    <ol>
+      <li>
+        現在の未コミット変更を機能単位に整理し、Fixerを含むbaseline commitをreview可能にする。
+      </li>
+      <li>clean checkoutで<code>npm ci</code>と<code>npm run check</code>を実行する。</li>
+      <li>
+        現状再現testを先に追加し、Fixer同時編集、Fixer不正UTF-8、隠しfile配信、任意Hostが修正前に失敗することを確認する。
+      </li>
+      <li>hardening実装用branchはbaseline commitから作成し、既存機能追加との差分を混ぜない。</li>
+    </ol>
+    <p>
+      再現testは実装を先取りせず、観測済みの危険動作だけを固定する。各testが意図した理由で失敗していることを確認してからPhase
+      1へ進む。
+    </p>
+  </section>
+
+  <section id="phase-1">
+    <h2>6. Phase 1: FixerとFormatterのdata safety統一</h2>
+    <h3>6.1 実装順</h3>
+    <ol>
+      <li>
+        Formatterのfatal UTF-8 decode、digest、snapshot照合、atomic
+        replaceを、挙動を変えず<code>src/content/safe-write.ts</code>へ移す。
+      </li>
+      <li>
+        Formatterの既存testを変更せず通し、抽出前後のreportとfile出力が同一であることを確認する。
+      </li>
+      <li>
+        Fixerの<code>readFile(..., "utf8")</code>を<code>readUtf8Snapshot</code>へ置き換える。
+      </li>
+      <li>Fixer resultとsnapshot集合を関連付け、書込開始前に全対象を再検証する。</li>
+      <li>
+        Fixer固有の重複<code>atomicWrite</code>を削除し、共通<code>atomicReplace</code>を使う。
+      </li>
+      <li>
+        rename途中失敗時の<code>完了</code>、<code>失敗</code>、<code>未処理</code>report契約をFormatterとFixerで揃える。
+      </li>
+    </ol>
+
+    <h3>6.2 追加test</h3>
+    <ul>
+      <li>preflight後に変更対象fileを外部編集した場合、すべてのfileが未変更のまま失敗する。</li>
+      <li>preflight後に変更不要fileを外部編集した場合も、変更対象を含め1fileも書き込まない。</li>
+      <li>対象fileが同じ名前のsymlinkへ差し替わった場合に拒否する。</li>
+      <li>不正UTF-8と修正可能typoが同居しても、元byte列を保持して失敗する。</li>
+      <li>temporary file名が衝突した場合だけretryし、renameの<code>EEXIST</code>はretryしない。</li>
+      <li>
+        2file目のrename失敗時に、完了済みfileと未処理fileを正確に報告してtemporary fileを残さない。
+      </li>
+      <li>file modeを保持し、変更不要fileのmtimeを更新しない。</li>
+    </ul>
+
+    <h3>6.3 Phase 1受け入れ条件</h3>
+    <ul>
+      <li>Formatterの既存出力とdiagnostic snapshotに差分がない。</li>
+      <li>Fixerがcontent競合、不正UTF-8、path差替えをすべて書込前に拒否する。</li>
+      <li>
+        <code>src/fix/project.ts</code>と<code>src/format/project.ts</code>にatomic
+        write実装が重複しない。
+      </li>
+      <li><code>npm test</code>と<code>npm run test:pack</code>が成功する。</li>
+    </ul>
+  </section>
+
+  <section id="phase-2">
+    <h2>7. Phase 2: HTTP配信境界のhardening</h2>
+    <h3>7.1 Content path policy</h3>
+    <ol>
+      <li>
+        <code>resolveRequestFile</code>へcontent専用の<code>denyDotSegments</code>
+        optionを追加する。defaultは既存runtime routeとの互換性のため<code>false</code>にする。
+      </li>
+      <li>
+        各segmentをdecodeした後、<code>.</code>から始まるsegmentがあれば存在確認前に非公開扱いにする。
+      </li>
+      <li>
+        <code>routes.ts</code>の個別hidden
+        path判定を削除し、特定の内部directory名だけを特別扱いする分岐をなくす。
+      </li>
+      <li>
+        path traversal、slash encode、backslash encode、null byte、symlink
+        escapeの既存拒否を維持する。
+      </li>
+    </ol>
+
+    <h3>7.2 HostとOrigin policy</h3>
+    <ol>
+      <li>
+        CLIへrepeat可能な<code>--allowed-host &lt;hostname&gt;</code
+        >を追加し、<code>CliRunOptions</code>からserverへ渡す。
+      </li>
+      <li>loopback、具体host、wildcard bindごとの許可host構築をpure functionとして実装する。</li>
+      <li>wildcard bindで許可hostが0件なら、server起動前にusage errorとして終了する。</li>
+      <li>
+        request
+        handlerの最初でHostを検査し、不許可時はrouteやfileの存在を確認せず<code>421</code>を返す。
+      </li>
+      <li>
+        document stateのPUTでは、存在するOriginがHostと一致しない場合に<code>403</code>を返す。
+      </li>
+      <li>
+        wildcard bind時にbrowserを開くURLは、listen
+        addressではなく最初の<code>--allowed-host</code>から生成する。
+      </li>
+    </ol>
+
+    <h3>7.3 追加test</h3>
+    <table>
+      <caption>
+        HTTP境界の回帰test
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">分類</th>
+          <th scope="col">入力</th>
+          <th scope="col">期待結果</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Hidden</th>
+          <td><code>.env</code>、<code>.git/config</code>、<code>nested/.private/file</code></td>
+          <td><code>404</code></td>
+        </tr>
+        <tr>
+          <th scope="row">Encoded hidden</th>
+          <td><code>%2Egit/config</code>、<code>.%61rchived/document.html</code></td>
+          <td><code>404</code></td>
+        </tr>
+        <tr>
+          <th scope="row">Case-insensitive FS</th>
+          <td><code>.ARCHIVED/document.html</code></td>
+          <td><code>404</code></td>
+        </tr>
+        <tr>
+          <th scope="row">Host</th>
+          <td><code>attacker.example</code>、空、複数Host</td>
+          <td><code>421</code>または不正requestとして<code>400</code></td>
+        </tr>
+        <tr>
+          <th scope="row">Loopback</th>
+          <td><code>127.0.0.1</code>、<code>localhost</code>、<code>::1</code></td>
+          <td>許可した組合せだけ<code>200</code></td>
+        </tr>
+        <tr>
+          <th scope="row">Origin</th>
+          <td>PUTにcross-origin Origin</td>
+          <td><code>403</code>、documentのarchive状態未変更</td>
+        </tr>
+        <tr>
+          <th scope="row">Wildcard</th>
+          <td><code>--host 0.0.0.0</code>のみ</td>
+          <td>起動拒否</td>
+        </tr>
+        <tr>
+          <th scope="row">Wildcard allow</th>
+          <td><code>--host 0.0.0.0 --allowed-host 192.0.2.10</code></td>
+          <td>指定Hostだけ許可</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>7.4 Phase 2受け入れ条件</h3>
+    <ul>
+      <li>観測済みの<code>.git/config</code>配信と任意Host受付が再現しない。</li>
+      <li>通常のdocument、asset、Chart.js、Mermaid、live reloadは既存URLで動作する。</li>
+      <li>archive/restoreはsame-originで成功し、cross-originでは状態を変更しない。</li>
+      <li>READMEとCLI helpがwildcard bindの新契約を説明する。</li>
+    </ul>
+  </section>
+
+  <section id="phase-3">
+    <h2>8. Phase 3: Coverageとbrowser matrix</h2>
+    <h3>8.1 Vitest coverage</h3>
+    <ol>
+      <li>
+        <code>@vitest/coverage-v8</code>を現在のVitestと同じversion帯でdev dependencyへ追加する。
+      </li>
+      <li>
+        <code>vitest.config.ts</code>へV8
+        coverageを設定し、<code>src/cli</code>、<code>src/content</code>、<code>src/server</code>、<code>src/lint</code>、<code>src/format</code>、<code>src/fix</code>を対象にする。
+      </li>
+      <li>
+        DOM実行をPlaywrightが担う<code>src/browser</code>と、外部runtime連携を担う<code>src/vendor</code>はVitest
+        coverageの分母から除外し、除外理由をconfig commentに残す。
+      </li>
+      <li>
+        lines、statements、functions、branchesを80%へ固定し、<code>coverage/</code>をgitignoreへ追加する。
+      </li>
+      <li><code>npm test</code>の二重実行を避け、CIではcoverage付きrunを1回だけ実行する。</li>
+    </ol>
+
+    <h3>8.2 FirefoxとWebKit smoke test</h3>
+    <ol>
+      <li>
+        既存testのうち、初期表示、文書間navigation、archive更新、mobile
+        menuをsmoke対象としてtag付けする。
+      </li>
+      <li>Chromium projectは全testを実行し、Firefox/WebKit projectはsmoke tagだけを実行する。</li>
+      <li>
+        Linux CIで3browserをinstallし、macOS/Windows jobは従来どおりNode・build・packに限定する。
+      </li>
+      <li>
+        browser固有差異が製品仕様に影響しない場合だけtest側で吸収し、製品動作の欠落をskipで隠さない。
+      </li>
+    </ol>
+
+    <h3>8.3 Phase 3受け入れ条件</h3>
+    <ul>
+      <li>coverage thresholdを1行でも下回る変更がCIで失敗する。</li>
+      <li>Chromium全件とFirefox/WebKit smokeが同じcommitで成功する。</li>
+      <li>CI全体が既存の15分timeout内に収まる。超える場合はtest削減ではなくjob分割を行う。</li>
+    </ul>
+  </section>
+
+  <section id="phase-4">
+    <h2>9. Phase 4: 保守性改善</h2>
+    <p>
+      このphaseは安全性修正と同じcommitに含めない。Phase
+      1から3の回帰testが揃った後、外部動作を変えないrefactorとして実施する。
+    </p>
+    <ol>
+      <li>
+        <code>src/browser/start.ts</code>から、frame link、archive API、print
+        lifecycleを副作用の小さいmoduleへ抽出する。
+      </li>
+      <li><code>initializeViewer</code>には状態所有、event wiring、初期route復元だけを残す。</li>
+      <li>
+        <code>src/fix/document.ts</code
+        >と<code>src/format/envelope.ts</code>は、単なる行数削減を目的に分割しない。candidate生成、source
+        range解析、変換判断の境界がtestで独立できる場合だけ抽出する。
+      </li>
+      <li>public CLI、diagnostic code、JSON schema、HTML出力、HTTP routeは変更しない。</li>
+    </ol>
+    <p>
+      Refactor前後でVitest、Playwright、package consumer
+      testの結果が一致し、利用者向けchangelogを必要とする挙動差分がないことを受け入れ条件とする。
+    </p>
+  </section>
+
+  <section id="phase-5">
+    <h2>10. Phase 5: 文書・release整合</h2>
+    <ol>
+      <li>READMEの日英版へHost allowlist、隠しpath非公開、trusted local HTMLの境界を反映する。</li>
+      <li>CONTRIBUTINGの日英版へcoverageと3browser testのcommandを追加する。</li>
+      <li>
+        CHANGELOGのSecurityへHost validationとhidden path denialを、FixedへFixer data
+        safetyを記録する。
+      </li>
+      <li>
+        package tarballへ追加dependency、coverage artifact、temporary
+        fileが混入しないことを確認する。
+      </li>
+      <li>
+        release candidateはreview済みのclean commitからだけ作成し、publication guardは別のrelease
+        enable変更まで維持する。
+      </li>
+    </ol>
+  </section>
+
+  <section id="work-packages">
+    <h2>11. 実装task分割</h2>
+    <table>
+      <caption>
+        Review可能な変更単位
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Task</th>
+          <th scope="col">主な変更file</th>
+          <th scope="col">完了判定</th>
+          <th scope="col">依存</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">T0 再現test</th>
+          <td>
+            <code>tests/unit/fix-project.test.ts</code>、<code>tests/server/server.test.ts</code>
+          </td>
+          <td>4つの観測済み問題を意図したassertionで再現</td>
+          <td>Baseline</td>
+        </tr>
+        <tr>
+          <th scope="row">T1 Safe I/O抽出</th>
+          <td><code>src/content/safe-write.ts</code>、<code>src/format/project.ts</code></td>
+          <td>Formatterの既存testと出力が不変</td>
+          <td>T0</td>
+        </tr>
+        <tr>
+          <th scope="row">T2 Fixer保護</th>
+          <td><code>src/fix/project.ts</code>、Fixer unit test</td>
+          <td>競合、UTF-8、path差替えをwrite前に拒否</td>
+          <td>T1</td>
+        </tr>
+        <tr>
+          <th scope="row">T3 Hidden path</th>
+          <td><code>src/server/static-file.ts</code>、<code>src/server/routes.ts</code></td>
+          <td>全dot segmentがcontent routeで非公開</td>
+          <td>T0</td>
+        </tr>
+        <tr>
+          <th scope="row">T4 Host policy</th>
+          <td>
+            <code>src/server/host-policy.ts</code>、<code>src/cli/options.ts</code>、<code
+              >src/server/start.ts</code
+            >
+          </td>
+          <td>Host、Origin、wildcard bind契約をtestで固定</td>
+          <td>T3</td>
+        </tr>
+        <tr>
+          <th scope="row">T5 QA gate</th>
+          <td><code>vitest.config.ts</code>、<code>playwright.config.ts</code>、CI</td>
+          <td>coverageと3browser matrixがCIで成功</td>
+          <td>T2、T4</td>
+        </tr>
+        <tr>
+          <th scope="row">T6 文書</th>
+          <td>README、CONTRIBUTING、CHANGELOGの日英対象</td>
+          <td>CLI・security model・commandの記述が一致</td>
+          <td>T2、T4、T5</td>
+        </tr>
+        <tr>
+          <th scope="row">T7 Refactor</th>
+          <td><code>src/browser/start.ts</code>と抽出module</td>
+          <td>外部挙動とtest結果に差分なし</td>
+          <td>T5</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="verification">
+    <h2>12. 検証matrix</h2>
+    <table>
+      <caption>
+        変更領域ごとの必須検証
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">変更領域</th>
+          <th scope="col">Unit</th>
+          <th scope="col">Integration</th>
+          <th scope="col">最終確認</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Safe write</th>
+          <td>digest、UTF-8、temp collision、rename failure</td>
+          <td>Fixer/Formatter project write</td>
+          <td>package consumerの<code>--write</code></td>
+        </tr>
+        <tr>
+          <th scope="row">Content policy</th>
+          <td>encoded segmentとdot segment</td>
+          <td>実HTTP requestでstatus確認</td>
+          <td>通常assetとintegrationの非回帰</td>
+        </tr>
+        <tr>
+          <th scope="row">Host policy</th>
+          <td>正規化とallowlist構築</td>
+          <td>raw Host、Origin、wildcard bind</td>
+          <td>CLI起動URLとbrowser接続</td>
+        </tr>
+        <tr>
+          <th scope="row">Browser</th>
+          <td>routerとpure helper</td>
+          <td>Chromium全件、Firefox/WebKit smoke</td>
+          <td>light/dark、mobile、printの既存test</td>
+        </tr>
+        <tr>
+          <th scope="row">Package</th>
+          <td>metadata assertion</td>
+          <td>tarballをtemporary consumerへinstall</td>
+          <td><code>npm pack --dry-run</code>内容確認</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <pre><code class="language-sh">npm run typecheck
+npm run lint
+npm run test:coverage
+npm run build
+npm run fix:check
+npm run format:check
+npm run lint:docs
+npm run test:browser
+npm run test:pack
+npm audit
+npm pack --dry-run
+</code></pre>
+  </section>
+
+  <section id="risks">
+    <h2>13. Riskとrollback</h2>
+    <table>
+      <caption>
+        主な実装riskと抑制策
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Risk</th>
+          <th scope="col">抑制策</th>
+          <th scope="col">Rollback単位</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">共有I/O抽出でFormatter挙動が変わる</th>
+          <td>先にFormatterだけを移行し、既存testとoutputを比較する。</td>
+          <td>T1だけをrevert</td>
+        </tr>
+        <tr>
+          <th scope="row">Host制限でLAN利用を壊す</th>
+          <td>具体hostは互換維持し、wildcardだけ明示allowlistを要求する。</td>
+          <td>T4だけをrevert</td>
+        </tr>
+        <tr>
+          <th scope="row">隠しassetを利用しているprojectがある</th>
+          <td>Security上のbreaking hardeningとしてchangelogへ明記し、例外optionは追加しない。</td>
+          <td>T3は原則維持</td>
+        </tr>
+        <tr>
+          <th scope="row">Coverage導入でCIが不安定になる</th>
+          <td>測定対象をNode側に限定し、thresholdを固定してtestのflaky化と分離する。</td>
+          <td>T5だけをrevert</td>
+        </tr>
+        <tr>
+          <th scope="row">Refactorが機能修正と混ざる</th>
+          <td>Phase 4を独立commitにし、挙動差分が出たら抽出を中止する。</td>
+          <td>T7だけをrevert</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="non-goals">
+    <h2>14. 非目標</h2>
+    <ul>
+      <li>Untrusted HTMLを安全にsandbox実行する機能は追加しない。</li>
+      <li>認証、TLS、internet公開server、multi-user archive管理は実装しない。</li>
+      <li>
+        全fileの複数file
+        transactionを実装しない。書込開始前の全件検証とfile単位atomicityを保証範囲とする。
+      </li>
+      <li>Markdown変換、検索、hosted service対応をhardeningへ混ぜない。</li>
+      <li>coverage数値を上げるためだけの意味のないassertionや内部実装固定testを追加しない。</li>
+      <li>巨大moduleを行数だけで機械的に分割しない。</li>
+    </ul>
+  </section>
+
+  <section id="definition-of-done">
+    <h2>15. Definition of Done</h2>
+    <ol>
+      <li>P0とP1の再現testが修正後に成功し、既存testに回帰がない。</li>
+      <li>FixerとFormatterが同じsafe-write基盤を利用している。</li>
+      <li>隠しcontent path、任意Host、cross-origin mutationが自動testで拒否される。</li>
+      <li>coverage thresholdと3browser matrixがCIの必須checkになっている。</li>
+      <li>日英README、CONTRIBUTING、CHANGELOG、CLI helpが実装と一致する。</li>
+      <li>clean checkoutから完全検証とtarball consumer testが成功する。</li>
+      <li>各taskが独立reviewされ、未完了項目や一時的なsecurity bypassが残っていない。</li>
+    </ol>
+  </section>
+</article>

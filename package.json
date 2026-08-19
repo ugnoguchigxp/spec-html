@@ -1,7 +1,6 @@
 {
   "name": "spec-html",
   "version": "0.1.0",
-  "private": true,
   "description": "Local HTML document viewer for AI-generated specifications.",
   "keywords": [
     "documentation",
@@ -12,6 +11,18 @@
   ],
   "license": "MIT",
   "author": "Spec HTML contributors",
+  "homepage": "https://github.com/ugnoguchigxp/spec-html#readme",
+  "bugs": {
+    "url": "https://github.com/ugnoguchigxp/spec-html/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ugnoguchigxp/spec-html.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "type": "module",
   "bin": {
     "spec-html": "dist/cli.js"
@@ -19,18 +30,21 @@
   "files": [
     "dist",
     "README.md",
+    "README.ja.md",
+    "LICENSE",
     "RELEASING.md",
+    "RELEASING.ja.md",
     "CHANGELOG.md",
     "CONTRIBUTING.md",
+    "CONTRIBUTING.ja.md",
+    "assets",
     "docs/authoring.html",
-    "docs/implementation-plan.html",
+    "docs/authoring.ja.html",
     "docs/mermaid-showcase.html",
-    "docs/charts-showcase.html",
-    "docs/linter-implementation-plan.html",
-    "docs/formatter-implementation-plan.html"
+    "docs/charts-showcase.html"
   ],
   "engines": {
-    "node": ">=24"
+    "node": "^20.19.0 || ^22.16.0 || >=24.0.0"
   },
   "scripts": {
     "clean": "node ./scripts/clean.mjs",
@@ -38,16 +52,18 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:browser": "playwright test",
     "test:pack": "node ./scripts/test-pack.mjs",
+    "fix:check": "node ./dist/cli.js fix ./docs --check && node ./dist/cli.js fix ./examples --check && node ./dist/cli.js fix ./tests/fixtures/browser --check",
     "format:check": "node ./dist/cli.js format ./docs --check && node ./dist/cli.js format ./examples --check && node ./dist/cli.js format ./tests/fixtures/browser --check",
     "lint:docs": "node ./dist/cli.js lint ./docs --warnings-as-errors && node ./dist/cli.js lint ./examples --warnings-as-errors",
-    "check": "npm run typecheck && npm run lint && npm test && npm run build && npm run format:check && npm run lint:docs && npm run test:browser && npm run test:pack",
-    "prepack": "npm run typecheck && npm test && npm run build",
-    "prepublishOnly": "node ./scripts/refuse-publish.mjs"
+    "docs:check": "node ./dist/cli.js check ./docs --warnings-as-errors && node ./dist/cli.js check ./examples --warnings-as-errors && node ./dist/cli.js check ./tests/fixtures/browser --fixer --format",
+    "check": "npm run typecheck && npm run lint && npm run test:coverage && npm run build && npm run docs:check && npm run test:browser && npm run test:pack",
+    "prepack": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
-    "html-validate": "11.3.0",
+    "html-validate": "10.17.0",
     "open": "^11.0.1",
     "prettier": "3.9.6"
   },
@@ -66,7 +82,8 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
-    "@types/node": "^26.2.0",
+    "@types/node": "^20.19.0",
+    "@vitest/coverage-v8": "4.1.10",
     "chart.js": "^4.5.1",
     "esbuild": "^0.28.2",
     "eslint": "^10.8.1",

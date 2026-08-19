@@ -1,6 +1,6 @@
 export class DocumentHttpError extends Error {
   constructor(readonly status: number) {
-    super(`設計書の取得に失敗しました: HTTP ${status}`);
+    super(`Failed to fetch document: HTTP ${status}`);
     this.name = "DocumentHttpError";
   }
 }

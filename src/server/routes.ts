@@ -1,7 +1,12 @@
-import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
+import type {
+  IncomingMessage,
+  RequestListener,
+  ServerResponse,
+} from "node:http";
 import {
+  ARCHIVED_DIRECTORY,
   ContentDocumentNotFoundError,
-  ARCHIVE_STATE_DIRECTORY,
+  DocumentArchiveConflictError,
   getDocumentArchived,
   setDocumentArchived,
 } from "../content/archive.js";
@@ -11,6 +16,11 @@ import {
 } from "../content/document-path.js";
 import type { LiveReload } from "./live-reload.js";
 import type { StartServerOptions } from "./types.js";
+import {
+  requestOriginMatches,
+  validateRequestHost,
+  type HostPolicy,
+} from "./host-policy.js";
 import { createNavigationHtml } from "./navigation.js";
 import { createShellHtml } from "./shell.js";
 import {
@@ -31,7 +41,7 @@ const RUNTIME_CACHE_CONTROL = "private, max-age=300";
 type RequestHandlerOptions = Pick<
   StartServerOptions,
   "contentRoot" | "runtimeRoot" | "integrations"
-> & { liveReload: LiveReload };
+> & { hostPolicy: HostPolicy; liveReload: LiveReload };
 
 export function createRequestHandler(
   options: RequestHandlerOptions,
@@ -69,6 +79,16 @@ async function handleRequest(
   response: ServerResponse,
   options: RequestHandlerOptions,
 ): Promise<void> {
+  const hostValidation = validateRequestHost(request, options.hostPolicy);
+  if (hostValidation.status === "invalid") {
+    sendText(request, response, 400, "Bad Request");
+    return;
+  }
+  if (hostValidation.status === "disallowed") {
+    sendText(request, response, 421, "Misdirected Request");
+    return;
+  }
+
   let url: URL;
   try {
     url = new URL(request.url ?? "/", "http://localhost");
@@ -78,7 +98,13 @@ async function handleRequest(
   }
 
   if (url.pathname === DOCUMENT_STATE_PATH) {
-    await handleDocumentState(request, response, options.contentRoot, url);
+    await handleDocumentState(
+      request,
+      response,
+      options.contentRoot,
+      url,
+      hostValidation.origin,
+    );
     return;
   }
 
@@ -149,11 +175,7 @@ async function handleRequest(
 
   if (url.pathname.startsWith(CONTENT_PREFIX)) {
     const encodedRelativePath = url.pathname.slice(CONTENT_PREFIX.length);
-    if (isPrivateContentPath(encodedRelativePath)) {
-      sendText(request, response, 404, "Not Found");
-      return;
-    }
-    await sendStaticRoute(
+    await sendContentRoute(
       request,
       response,
       options.contentRoot,
@@ -181,6 +203,7 @@ async function handleDocumentState(
   response: ServerResponse,
   contentRoot: string,
   url: URL,
+  requestOrigin: string,
 ): Promise<void> {
   if (
     request.method !== "GET" &&
@@ -199,19 +222,29 @@ async function handleDocumentState(
   }
 
   try {
+    let archived: boolean;
     if (request.method === "PUT") {
-      const archived = await readArchivedUpdate(request);
-      if (archived === null) {
+      if (!requestOriginMatches(request, requestOrigin)) {
+        sendText(request, response, 403, "Forbidden");
+        return;
+      }
+      const update = await readArchivedUpdate(request);
+      if (update === null) {
         sendText(request, response, 400, "Invalid request body");
         return;
       }
-      await setDocumentArchived(contentRoot, documentPath, archived);
+      archived = await setDocumentArchived(contentRoot, documentPath, update);
+    } else {
+      archived = await getDocumentArchived(contentRoot, documentPath);
     }
-    const archived = await getDocumentArchived(contentRoot, documentPath);
     sendJson(request, response, { doc: documentPath, archived });
   } catch (error: unknown) {
     if (error instanceof ContentDocumentNotFoundError) {
       sendText(request, response, 404, "Document not found");
+      return;
+    }
+    if (error instanceof DocumentArchiveConflictError) {
+      sendText(request, response, 409, "Document archive conflict");
       return;
     }
     throw error;
@@ -225,30 +258,80 @@ function parseNavigationView(value: string | null): NavigationView | null {
   return value === "archive" ? "archive" : null;
 }
 
-function isPrivateContentPath(encodedRelativePath: string): boolean {
-  const firstSegment = encodedRelativePath.split("/", 1)[0];
+async function sendContentRoute(
+  request: IncomingMessage,
+  response: ServerResponse,
+  root: string,
+  encodedRelativePath: string,
+): Promise<void> {
   try {
-    return decodeURIComponent(firstSegment ?? "") === ARCHIVE_STATE_DIRECTORY;
-  } catch {
-    return false;
+    const activeFile = await resolveRequestFile(root, encodedRelativePath, {
+      denyDotSegments: true,
+    });
+    if (activeFile !== null) {
+      await sendFile(request, response, activeFile);
+      return;
+    }
+
+    const archivedPath = createArchivedFallbackPath(encodedRelativePath);
+    if (archivedPath !== null) {
+      const archivedFile = await resolveRequestFile(root, archivedPath);
+      if (archivedFile !== null) {
+        await sendFile(request, response, archivedFile);
+        return;
+      }
+    }
+    sendText(request, response, 404, "Not Found");
+  } catch (error: unknown) {
+    if (error instanceof InvalidRequestPathError) {
+      sendText(request, response, 400, "Bad Request");
+      return;
+    }
+    throw error;
   }
+}
+
+function createArchivedFallbackPath(
+  encodedRelativePath: string,
+): string | null {
+  const segments = encodedRelativePath.split("/");
+  const filename = segments.at(-1);
+  if (filename === undefined) {
+    return null;
+  }
+  let decodedSegments: string[];
+  try {
+    decodedSegments = segments.map((segment) => decodeURIComponent(segment));
+  } catch {
+    return null;
+  }
+  if (decodedSegments.some((segment) => segment.startsWith("."))) {
+    return null;
+  }
+  const decodedFilename = decodedSegments.at(-1) ?? "";
+  if (!decodedFilename.toLowerCase().endsWith(".html")) {
+    return null;
+  }
+  segments.splice(-1, 0, ARCHIVED_DIRECTORY);
+  return segments.join("/");
 }
 
 async function readArchivedUpdate(
   request: IncomingMessage,
 ): Promise<boolean | null> {
-  if (!request.headers["content-type"]?.startsWith("application/json")) {
+  if (!isJsonContentType(request.headers["content-type"])) {
     return null;
   }
 
   const chunks: Uint8Array[] = [];
   let size = 0;
   for await (const chunk of request as AsyncIterable<unknown>) {
-    const buffer = typeof chunk === "string"
-      ? Buffer.from(chunk)
-      : chunk instanceof Uint8Array
-      ? chunk
-      : null;
+    const buffer =
+      typeof chunk === "string"
+        ? Buffer.from(chunk)
+        : chunk instanceof Uint8Array
+          ? chunk
+          : null;
     if (buffer === null) {
       return null;
     }
@@ -274,6 +357,10 @@ async function readArchivedUpdate(
     return null;
   }
   return parsed.archived;
+}
+
+function isJsonContentType(value: string | undefined): boolean {
+  return value?.split(";", 1)[0]?.trim().toLowerCase() === "application/json";
 }
 
 async function sendStaticRoute(

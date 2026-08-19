@@ -1,42 +1,44 @@
-<article lang="ja">
+<article lang="en">
   <header>
     <h1>Chart.js showcase</h1>
     <p>
-      設計書の指標や比較を可視化するChart.jsの表示例です。各chartはsemanticな<code>figure</code>と<code>canvas</code>で構成し、Viewerのthemeに合わせた色を使用します。
+      These Chart.js examples visualize metrics and comparisons commonly found in specifications.
+      Each chart uses semantic <code>figure</code> and <code>canvas</code> elements and takes its
+      colors from the viewer theme.
     </p>
   </header>
 
   <aside aria-labelledby="charts-note">
-    <strong id="charts-note">このページについて</strong>
+    <strong id="charts-note">About this page</strong>
     <p>
-      Chart.jsを導入したprojectでは、HTML fragmentのinline
-      scriptからglobalの<code>Chart</code>を直接利用できます。
+      When Chart.js is installed in the project, inline scripts in an HTML fragment can use the
+      global <code>Chart</code> API directly.
     </p>
   </aside>
 
   <section id="trend">
     <h2>Latency trend</h2>
-    <p>複数系列の時系列変化を比較する折れ線chartです。</p>
+    <p>A line chart comparing changes across multiple time series.</p>
     <figure>
       <canvas
         id="latency-trend-chart"
         width="760"
         height="340"
         role="img"
-        aria-label="直近6週間のP50とP95 latencyの推移"
-        >直近6週間のP50とP95 latencyの推移。</canvas
+        aria-label="P50 and P95 latency over the last six weeks"
+        >P50 and P95 latency over the last six weeks.</canvas
       >
-      <figcaption>直近6週間のAPI latency。単位はms。</figcaption>
+      <figcaption>API latency over the last six weeks, in milliseconds.</figcaption>
     </figure>
     <details>
       <summary>Source data</summary>
       <table>
         <caption>
-          週別API latency（ms）
+          Weekly API latency (ms)
         </caption>
         <thead>
           <tr>
-            <th scope="col">週</th>
+            <th scope="col">Week</th>
             <th scope="col">P50</th>
             <th scope="col">P95</th>
           </tr>
@@ -79,29 +81,29 @@
 
   <section id="comparison">
     <h2>Requests by endpoint</h2>
-    <p>categoryごとの量と内訳を比較する積み上げ棒chartです。</p>
+    <p>A stacked bar chart comparing totals and outcomes across categories.</p>
     <figure>
       <canvas
         id="request-volume-chart"
         width="760"
         height="340"
         role="img"
-        aria-label="endpoint別の成功requestとerror requestの件数"
-        >endpoint別の成功requestとerror requestの件数。</canvas
+        aria-label="Successful and failed requests by endpoint"
+        >Successful and failed requests by endpoint.</canvas
       >
-      <figcaption>1時間あたりのrequest数をendpointと結果別に比較。</figcaption>
+      <figcaption>Hourly request volume by endpoint and outcome.</figcaption>
     </figure>
     <details>
       <summary>Source data</summary>
       <table>
         <caption>
-          endpoint別の1時間あたりrequest数
+          Hourly requests by endpoint
         </caption>
         <thead>
           <tr>
             <th scope="col">Endpoint</th>
-            <th scope="col">成功</th>
-            <th scope="col">Error</th>
+            <th scope="col">Successful</th>
+            <th scope="col">Errors</th>
           </tr>
         </thead>
         <tbody>
@@ -132,28 +134,28 @@
 
   <section id="composition">
     <h2>Traffic sources</h2>
-    <p>全体に占める割合を示すドーナツchartです。</p>
+    <p>A doughnut chart showing the proportion of each category.</p>
     <figure>
       <canvas
         id="traffic-source-chart"
         width="760"
         height="340"
         role="img"
-        aria-label="client種別ごとのtraffic構成比"
-        >client種別ごとのtraffic構成比。</canvas
+        aria-label="Traffic share by client type"
+        >Traffic share by client type.</canvas
       >
-      <figcaption>client種別ごとのtraffic構成比。</figcaption>
+      <figcaption>Traffic share by client type.</figcaption>
     </figure>
     <details>
       <summary>Source data</summary>
       <table>
         <caption>
-          client種別ごとのtraffic構成比
+          Traffic share by client type
         </caption>
         <thead>
           <tr>
             <th scope="col">Client</th>
-            <th scope="col">構成比（%）</th>
+            <th scope="col">Share (%)</th>
           </tr>
         </thead>
         <tbody>
@@ -180,54 +182,56 @@
 
   <section id="profile">
     <h2>Quality profile</h2>
-    <p>複数の評価軸をまとめて比較するレーダーchartです。</p>
+    <p>A radar chart comparing several evaluation dimensions at once.</p>
     <figure>
       <canvas
         id="quality-profile-chart"
         width="760"
         height="340"
         role="img"
-        aria-label="現行releaseと次期releaseの品質指標比較"
-        >現行releaseと次期releaseの品質指標比較。</canvas
+        aria-label="Quality comparison between the current and next releases"
+        >Quality comparison between the current and next releases.</canvas
       >
-      <figcaption>現行releaseと次期releaseの品質指標。値が大きいほど良好。</figcaption>
+      <figcaption>
+        Quality metrics for the current and next releases; higher values are better.
+      </figcaption>
     </figure>
     <details>
       <summary>Source data</summary>
       <table>
         <caption>
-          release別の品質指標
+          Quality metrics by release
         </caption>
         <thead>
           <tr>
-            <th scope="col">指標</th>
-            <th scope="col">現行release</th>
-            <th scope="col">次期release</th>
+            <th scope="col">Metric</th>
+            <th scope="col">Current release</th>
+            <th scope="col">Next release</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <th scope="row">速度</th>
+            <th scope="row">Performance</th>
             <td>68</td>
             <td>84</td>
           </tr>
           <tr>
-            <th scope="row">安定性</th>
+            <th scope="row">Stability</th>
             <td>78</td>
             <td>90</td>
           </tr>
           <tr>
-            <th scope="row">可用性</th>
+            <th scope="row">Availability</th>
             <td>74</td>
             <td>82</td>
           </tr>
           <tr>
-            <th scope="row">保守性</th>
+            <th scope="row">Maintainability</th>
             <td>65</td>
             <td>88</td>
           </tr>
           <tr>
-            <th scope="row">accessibility</th>
+            <th scope="row">Accessibility</th>
             <td>72</td>
             <td>91</td>
           </tr>
@@ -260,7 +264,7 @@
       const red = Number.parseInt(match[1], 16);
       const green = Number.parseInt(match[2], 16);
       const blue = Number.parseInt(match[3], 16);
-      return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+      return "rgba(" + red + ", " + green + ", " + blue + ", " + alpha + ")";
     }
 
     const cartesianOptions = {
@@ -306,14 +310,14 @@
         labels: ["GET /docs", "GET /assets", "GET /nav", "GET /runtime"],
         datasets: [
           {
-            label: "成功",
+            label: "Successful",
             data: [1240, 940, 430, 380],
             backgroundColor: greenFill,
             borderColor: green,
             borderWidth: 1
           },
           {
-            label: "error",
+            label: "Errors",
             data: [24, 18, 7, 3],
             backgroundColor: orangeFill,
             borderColor: orange,
@@ -352,17 +356,17 @@
     new Chart(document.getElementById("quality-profile-chart"), {
       type: "radar",
       data: {
-        labels: ["速度", "安定性", "可用性", "保守性", "accessibility"],
+        labels: ["Performance", "Stability", "Availability", "Maintainability", "Accessibility"],
         datasets: [
           {
-            label: "現行release",
+            label: "Current release",
             data: [68, 78, 74, 65, 72],
             borderColor: chartMuted,
             backgroundColor: mutedFill,
             pointBackgroundColor: chartMuted
           },
           {
-            label: "次期release",
+            label: "Next release",
             data: [84, 90, 82, 88, 91],
             borderColor: purple,
             backgroundColor: purpleFill,

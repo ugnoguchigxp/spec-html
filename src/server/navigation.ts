@@ -1,7 +1,10 @@
 import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname } from "node:path";
-import { readArchivedDocuments } from "../content/archive.js";
-import { findContentDocuments } from "../content/documents.js";
+import {
+  withDocumentArchiveSnapshot,
+  type DocumentArchiveSnapshot,
+} from "../content/archive.js";
+import type { ContentDocument } from "../content/documents.js";
 import type { NavigationView } from "../content/document-path.js";
 
 interface NavigationDocument {
@@ -20,12 +23,26 @@ export async function createNavigationHtml(
   now = new Date(),
   view: NavigationView = "documents",
 ): Promise<string> {
-  const [allDocuments, archivedDocuments] = await Promise.all([
-    findNavigationDocuments(contentRoot),
-    readArchivedDocuments(contentRoot),
-  ]);
-  const documents = allDocuments.filter(
-    (document) => archivedDocuments.has(document.path) === (view === "archive"),
+  return withDocumentArchiveSnapshot(contentRoot, (snapshot) =>
+    createNavigationHtmlFromSnapshot(snapshot, now, view),
+  );
+}
+
+async function createNavigationHtmlFromSnapshot(
+  snapshot: DocumentArchiveSnapshot,
+  now: Date,
+  view: NavigationView,
+): Promise<string> {
+  const { active: activeDocuments, archived: archivedDocuments } = snapshot;
+  const activePaths = new Set(activeDocuments.map((document) => document.path));
+  const conflict = archivedDocuments.find((document) =>
+    activePaths.has(document.path),
+  );
+  if (conflict !== undefined) {
+    throw new Error(`Document archive conflict: ${conflict.path}`);
+  }
+  const documents = await findNavigationDocuments(
+    view === "archive" ? archivedDocuments : activeDocuments,
   );
   const groups = new Map<string, NavigationDocument[]>();
 
@@ -37,7 +54,7 @@ export async function createNavigationHtml(
     groups.set(group, groupDocuments);
   }
 
-  const navigationLabel = view === "archive" ? "Archive" : "Documents";
+  const navigationLabel = view === "archive" ? "Archived" : "Documents";
   const lines = [`<nav aria-label="${navigationLabel}">`];
   const sortedGroups = [...groups].sort(([left], [right]) => {
     if (left.length === 0) {
@@ -91,9 +108,8 @@ function documentRank(path: string): number {
 }
 
 async function findNavigationDocuments(
-  contentRoot: string,
+  contentDocuments: readonly ContentDocument[],
 ): Promise<NavigationDocument[]> {
-  const contentDocuments = await findContentDocuments(contentRoot);
   return Promise.all(
     contentDocuments.map(async ({ absolutePath, path }) => {
       const [html, fileStats] = await Promise.all([
@@ -137,12 +153,13 @@ function formatRelativeTime(value: number, unit: string): string {
 }
 
 function documentTitle(html: string, filename: string): string {
-  const heading = /<h1(?:\s[^>]*)?>([\s\S]*?)<\/h1\s*>/i.exec(html)?.[1];
+  const visibleHtml = html
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(script|style|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, " ");
+  const heading = /<h1(?:\s[^>]*)?>([\s\S]*?)<\/h1\s*>/i.exec(visibleHtml)?.[1];
   if (heading !== undefined) {
     const title = decodeHtmlEntities(
-      heading
-        .replace(/<!--[\s\S]*?-->/g, " ")
-        .replace(/<[^>]*>/g, " "),
+      heading.replace(/<!--[\s\S]*?-->/g, " ").replace(/<[^>]*>/g, " "),
     )
       .replace(/\s+/g, " ")
       .trim();
@@ -180,7 +197,9 @@ function decodeHtmlEntities(value: string): string {
         decimal ?? hexadecimal ?? "",
         decimal === undefined ? 16 : 10,
       );
-      return isValidCodePoint(codePoint) ? String.fromCodePoint(codePoint) : entity;
+      return isValidCodePoint(codePoint)
+        ? String.fromCodePoint(codePoint)
+        : entity;
     },
   );
 }

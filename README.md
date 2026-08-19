@@ -1,54 +1,57 @@
 # Spec HTML
 
-LLMが通常Markdownで生成する設計書や仕様書を、構造的なHTMLへ置き換えてローカルで読みやすく閲覧するためのViewerです。標準のsemantic HTMLを使うことで、Markdown以上の表現力を持つ文書を簡単に作成し、navigation、文書間リンク、画像、Chart.js、Mermaidを活用できます。
+English | [日本語](./README.ja.md)
 
-![Spec HTMLのlight表示でMermaidを含む設計書を閲覧している画面](./assets/LightMode.webp)
+Spec HTML is a local viewer for design documents and specifications written as structured HTML. It gives LLM-generated documents more expressive building blocks than Markdown while keeping authoring simple: use standard semantic HTML, and let the shared viewer provide navigation, cross-document links, images, Chart.js, and Mermaid.
+
+![A specification with a Mermaid diagram in Spec HTML's light theme](./assets/LightMode.webp)
 
 ## Purpose and scope
 
-Spec HTMLの目的は、LLMにWeb application一式を実装させることではありません。LLMに構造的なHTML fragmentを直接生成させ、見出し、table、code、callout、details、画像、図表など、Markdownだけでは表現しにくい情報を読みやすい設計書・仕様書として活用できるようにすることです。共通Viewerが表示とnavigationを整えるため、文書ごとにCSSやメニューを作る必要はありません。
+Spec HTML is not a framework for asking an LLM to build an entire web application. It is a document viewer for HTML fragments generated directly by an LLM. Headings, tables, code, callouts, details, images, and diagrams can express information that is awkward to represent in Markdown, without requiring each document to define its own CSS or navigation.
 
-このprojectと生成した文書は、手元の信頼済み環境で利用します。公開npm package、公開Web service、第三者向けhostingを目的としておらず、npm registryへのpublishや公開用GitHub Releaseを行いません。npmは開発dependencyの管理、ローカルbuild、ローカルpackage検証のためだけに使用します。
+The viewer and its documents are intended for trusted local environments. The npm package distributes the CLI; it does not turn Spec HTML into a hosted service or make untrusted HTML safe to run.
 
 ## Features
 
-- content directory内のHTML fragmentからnavigationを自動構成
-- content directory内の変更を検知してbrowserを自動reload
-- 文書間の相対リンク、画像、browser historyに対応
-- mobile向けnavigationとkeyboard操作に対応
-- OS設定へ追従するlight／dark表示と文書印刷に対応
-- content directory外へのpath traversalとsymbolic link escapeを拒否
-- Chart.jsとMermaidはoptional dependency
-- Mermaidは実行時に公式ES moduleを読み込むため、仕様変更時のSVG変換は不要
-- HTML fragmentとfull HTML documentを決定的なfragmentへ整形するFormatter CLI
+- Builds navigation automatically from HTML fragments in a content directory
+- Reloads the browser when content in that directory changes
+- Supports relative links, images, and browser history
+- Provides mobile navigation and keyboard controls
+- Follows the OS light/dark preference and supports document printing
+- Rejects path traversal and symbolic-link escapes outside the content directory
+- Keeps dot-prefixed files and directories private and validates every HTTP Host
+- Treats Chart.js and Mermaid as optional peer dependencies
+- Loads Mermaid's official ES modules at runtime, so diagrams stay as source
+- Formats HTML fragments and safe full HTML documents deterministically
+- Lints document structure, references, and accessibility before viewing
+- Fixes unambiguous HTML tag, attribute, quote, closing-tag, and local-reference typos
 
 ## Requirements
 
-- Node.js 24以上
-- ローカルの信頼済みHTML
+- Node.js 20.19+, 22.16+, or 24+
+- Bun 1.3+ is also supported when the CLI is run with `--bun`
+- Trusted local HTML
 
-## Local setup
+## Installation
 
-このrepositoryをローカルへcheckoutし、dependencyとViewerを準備します。
-
-```bash
-npm ci
-npm run build
-```
-
-別のローカルprojectから使用する場合は、npm registryではなく、このrepositoryのpathを指定します。
+Install Spec HTML in the project that contains your specifications:
 
 ```bash
-npm install --save-dev /absolute/path/to/spec-html
+npm install --save-dev spec-html
 ```
 
-Chart.jsとMermaidも使う場合は、利用projectへ追加します。どちらか一方だけでも導入でき、未導入のintegrationは通常のHTML、CSS、画像、navigationへ影響しません。
+Install either or both optional integrations when your documents use them:
 
 ```bash
 npm install --save-dev chart.js mermaid
 ```
 
+An integration that is not installed does not affect ordinary HTML, CSS, images, or navigation.
+
 ## Quick start
+
+Create a content directory:
 
 ```text
 specs/
@@ -58,9 +61,7 @@ specs/
    └─ diagram.svg
 ```
 
-Viewerはdirectory内の`.html`を再帰的に読み取り、最初の`h1`を表示名とするnavigationを実行時に構成します。メニュー用fileを作成したりrepositoryで管理したりする必要はありません。起動中は指定directory配下だけを監視し、文書や画像を変更・追加・削除するとbrowserを自動reloadします。
-
-各設計書はHTML document全体ではなく、`article`などから始まるfragmentとして保存します。
+Each specification should be an HTML fragment rather than a complete HTML document:
 
 ```html
 <article lang="en">
@@ -70,65 +71,121 @@ Viewerはdirectory内の`.html`を再帰的に読み取り、最初の`h1`を表
 </article>
 ```
 
-ローカルpathからinstallしたViewerを起動します。`--no-install`により、registryから同名packageを取得しません。
+Spec HTML scans `.html` files recursively and uses the first `h1` as the navigation label. While the viewer is running, adding, changing, or removing a document or asset reloads the browser automatically.
+
+Start the locally installed viewer:
 
 ```bash
-npx --no-install spec-html ./specs
+npx spec-html ./specs
 ```
 
-Viewerで開く前に、文書構造、参照、accessibilityを静的検査できます。通常は簡潔な診断を使い、修正方法が不明なruleだけ説明を表示します。
+With Bun, install the same package and force its Node-compatible CLI to run on
+the Bun runtime:
 
 ```bash
-npx --no-install spec-html lint ./specs
-npx --no-install spec-html lint ./specs --warnings-as-errors
-npx --no-install spec-html lint --explain DOC001
+bun add --dev spec-html
+bunx --bun spec-html ./specs
 ```
 
-HTMLのインデントと改行を統一する場合はFormatterを使います。`--check`はfileを変更せず、`--write`は変更が必要なfileだけを書き換えます。full HTML documentを渡した場合は、安全に無視できる`doctype`、`html`、`head`、`body`を除いてfragmentへ正規化します。headにstyle、script、link、baseがある場合は内容を失わないよう変換を拒否します。
+Lint document structure, references, and accessibility before opening the viewer:
 
 ```bash
-npx --no-install spec-html format ./specs --check
-npx --no-install spec-html format ./specs --write
+npx spec-html lint ./specs
+npx spec-html lint ./specs --warnings-as-errors
+npx spec-html lint --explain DOC001
 ```
 
-普段使う場合は利用プロジェクトの`package.json`へ登録します。
+Use the fixer to repair unambiguous HTML surface typos. `--check` reports files without changing them; `--write` applies only fixes with a single valid candidate. It can repair names such as `scritp`, `onclik`, `scr`, and `herf`, but never rewrites JavaScript inside a `script` element or event-handler value.
+
+```bash
+npx spec-html fix ./specs --check
+npx spec-html fix ./specs --write
+```
+
+Use the formatter to normalize indentation and line breaks. `--check` reports files without changing them; `--write` updates only files that need formatting.
+
+```bash
+npx spec-html format ./specs --check
+npx spec-html format ./specs --write
+```
+
+The formatter can also accept a full HTML document and reduce a safe `doctype`/`html`/`head`/`body` envelope to a fragment. It refuses the conversion when the head contains `style`, `script`, `link`, or `base` content that cannot be discarded safely.
+
+Run the fixer, formatter, and linter together with `check`. Without stage options it checks all three without writing. `--fix` applies fixer and formatter changes before linting the resulting files. Selectors limit the run when only a combination is needed.
+
+```bash
+npx spec-html check ./specs
+npx spec-html check ./specs --fix
+npx spec-html check ./specs --fixer --lint
+npx spec-html check ./specs --fixer --format --fix
+```
+
+For regular use, add scripts to the consuming project's `package.json`:
 
 ```json
 {
   "scripts": {
     "docs": "spec-html ./specs",
+    "docs:fix": "spec-html fix ./specs --write",
     "docs:format": "spec-html format ./specs --write",
-    "docs:check": "spec-html format ./specs --check && spec-html lint ./specs"
+    "docs:check": "spec-html check ./specs",
+    "docs:check:fix": "spec-html check ./specs --fix"
   }
 }
 ```
 
-詳しい記述規約、リンク解決、integrationの使い方は[Authoring guide](./docs/authoring.html)を参照してください。`docs/`全体はSpec HTML自身で閲覧できる構造的なHTMLになっています。
+See the [authoring guide](./docs/authoring.html) for writing rules, link resolution, and integrations. A [Japanese version](./docs/authoring.ja.html) is also available.
+
+## AI agent instructions
+
+Copy the following instructions into the consuming project's `AGENTS.md`. Replace `specs/` when the project uses a different content directory.
+
+```md
+## Spec HTML documents
+
+When design decisions, specifications, implementation plans, or research results are worth preserving, create or update a Spec HTML document under `specs/` without waiting for a separate documentation request. Choose the structure and presentation that best fit the content, and follow these rules.
+
+- Make each file an HTML fragment with one root `article` whose `lang` identifies the document's primary language. Do not add `html`, `head`, `body`, document-specific CSS, or navigation.
+- Add exactly one `h1` and use standard semantic HTML. Use tables, `aside`, `details`, and `figure` when they improve understanding.
+- Keep requirements, conclusions, and values understandable from the HTML text. Use scripts, canvases, and diagrams only as supporting material. Keep links and assets inside `specs/` and reference them with relative URLs.
+
+### Mermaid
+
+When Mermaid is installed and a flow, sequence, relationship, or structure is clearer as a diagram, use it without waiting for an explicit request. Use `<figure><pre class="mermaid">…</pre><figcaption>…</figcaption></figure>` with multiline Mermaid source; do not add an initialization script or generated SVG.
+
+### Chart.js
+
+When Chart.js is installed and a comparison, trend, or composition is clearer as a chart, use it without waiting for an explicit request. Use `<figure><canvas id="…" aria-label="…"></canvas><figcaption>…</figcaption></figure>` and an inline script with the global `Chart`; keep exact values in the text or a table.
+
+### Check
+
+- After creating or editing documents, run `npx spec-html check ./specs --fix --warnings-as-errors` and resolve any remaining diagnostics.
+```
 
 ## Appearance
 
-Sidebar上部の「Name」「Date」で、各directory内の文書を名前順または更新日順に並び替えられます。選択中のボタンをもう一度押すと、昇順と降順が反転します。「Light」「Dark」からは表示themeを選択でき、選択内容はbrowserへ保存されます。初回表示ではOS設定に合うthemeを使用します。Shell、文書、Chart.js、Mermaidは同時に切り替わり、dark表示は[Tokyo Night Storm](https://github.com/folke/tokyonight.nvim)を参考にした青みのあるpaletteです。Sidebar幅を超える文書タイトルは末尾を省略表示し、hover時のtooltipで全文を確認できます。
+The sidebar's **Name** and **Date** controls sort documents within each directory. Selecting the active control again reverses the order. **Light** and **Dark** select a theme and save the preference in the browser; the first visit follows the operating system setting. The shell, document, Chart.js charts, and Mermaid diagrams switch together.
 
-![Spec HTMLのdark表示で実装計画を閲覧している画面](./assets/darkMode.webp)
+![An implementation plan in Spec HTML's dark theme](./assets/darkMode.webp)
 
-見出し、list、table、code、blockquote、details、figureなどのsemantic HTMLには既定styleが適用されます。`aside`はnote表示になり、`data-type`へ`warning`、`danger`、`success`を指定できます。
+Standard semantic elements such as headings, lists, tables, code, blockquotes, details, and figures receive default styles. An `aside` is displayed as a note and accepts `warning`, `danger`, or `success` in `data-type`.
 
 ```html
 <aside data-type="warning" aria-labelledby="migration-warning">
-  <strong id="migration-warning">注意</strong>
-  <p>この変更にはdatabase migrationが必要です。</p>
+  <strong id="migration-warning">Caution</strong>
+  <p>This change requires a database migration.</p>
 </aside>
 ```
 
-画面右下のsource buttonから、現在の文書のHTMLをdialogで確認できます。描画結果とLLMが生成したsourceを同じ画面で見比べられます。
+The source button in the lower-right corner opens the current document's HTML in a dialog, making it easy to compare the rendered result with the source generated by an LLM.
 
-![現在の文書のソースHTMLをdialogで表示している画面](./assets/source.webp)
+![The current document's source HTML displayed in a dialog](./assets/source.webp)
 
-印刷時はSidebarとmobile menu buttonを除外し、現在の文書をlight配色で印刷します。
+Printing hides the sidebar and mobile menu button and prints the current document with the light color scheme.
 
 ## Chart.js
 
-`chart.js`が導入されている場合、通常のChart.jsコードをinline scriptで使用できます。
+When `chart.js` is installed, an inline script can use the ordinary global `Chart` API:
 
 ```html
 <canvas id="latency-chart" width="320" height="180" aria-label="P95 latency chart"></canvas>
@@ -146,7 +203,7 @@ Sidebar上部の「Name」「Date」で、各directory内の文書を名前順�
 
 ## Mermaid
 
-`mermaid`が導入されている場合、`.mermaid`要素を自動描画します。初期化scriptやSVGへの事前変換は不要です。公式ES moduleと現在の図種に必要なchunkだけを読み込みます。
+When `mermaid` is installed, Spec HTML renders `.mermaid` elements automatically. No initialization script or generated SVG needs to be committed.
 
 ```html
 <pre class="mermaid">
@@ -161,35 +218,41 @@ sequenceDiagram
 ```text
 spec-html [directory] [options]
 
---host <host>    listenするhost（既定: 127.0.0.1）
---port <port>    listenするport（既定: 4173、0で自動割り当て）
---open           起動後にbrowserを開く（既定）
---no-open        browserを開かない
---help           helpを表示
---version        versionを表示
+--host <host>                  host to listen on (default: 127.0.0.1)
+--allowed-host <hostname>      allowed Host for non-loopback binds (repeatable; required for wildcard)
+--port <port>                  port to listen on (default: 4173; 0 selects a free port)
+--open                         open the browser after startup (default)
+--no-open                      do not open the browser
+--help                         show help
+--version                      show the version
 
 spec-html lint [directory] [options]
 spec-html format [path] --check|--write [options]
+spec-html fix [path] --check|--write [options]
+spec-html check [directory] [--fix] [options]
 ```
 
 ## Security model
 
-Spec HTMLはローカルの信頼済みHTMLを対象にします。設計書内のinline scriptは実行されるため、第三者から受け取ったHTMLを確認せずに開かないでください。
+Spec HTML is designed for trusted local HTML. Inline scripts in a specification are executed, so do not open HTML from an untrusted source without reviewing it first.
 
-既定では`127.0.0.1`だけで待ち受けます。`--host`を変更して、信頼できないnetworkへ公開しないでください。content directory外を指すpath traversalとsymbolic linkは配信しません。
+Review fixer changes with `--check` before writing unfamiliar documents. Correcting a typo such as `scritp` or `onclik` intentionally activates the corresponding HTML behavior, while leaving the JavaScript source itself unchanged.
 
-package自体も外部公開を禁止しています。公開npm registryへのpublish、公開用GitHub Release、ViewerのInternet hostingは行わないでください。方針の詳細は[Local use policy](./RELEASING.md)を参照してください。
+The server listens only on `127.0.0.1` by default and accepts only the loopback names `127.0.0.1`, `localhost`, and `::1` for loopback binds. A concrete non-loopback bind can add repeatable `--allowed-host <hostname>` values. A wildcard bind such as `--host 0.0.0.0` requires at least one; it still must not be used on an untrusted network. Cross-origin document-state updates are rejected.
+
+Requests that traverse outside the content directory, including symbolic-link escapes, are rejected. Files and directories whose names start with `.` are never served from the content route, even when the segment is percent-encoded.
 
 ## v0.1 limitations
 
-- 検索、Markdown変換は含みません。
-- Formatterはsemantic tag、alt、caption、見出しなど意味判断が必要な内容を自動修正しません。
-- browser自動テストの対象はChromiumです。
-- Node.js 24未満はサポートしません。
+- Search and Markdown conversion are not included.
+- The formatter does not invent semantic choices such as alt text, captions, or headings.
+- The fixer does not correct prose or JavaScript and does not guess when multiple HTML repairs are possible.
+- Browser automation runs the complete suite in Chromium and critical smoke paths in Firefox and WebKit.
+- Node.js versions earlier than 24 are not supported.
 
 ## Development
 
-開発環境の構築、検証command、変更時のchecklistは[CONTRIBUTING.md](./CONTRIBUTING.md)を参照してください。ローカル利用と非公開の方針は[Local use policy](./RELEASING.md)、変更履歴は[CHANGELOG.md](./CHANGELOG.md)にあります。
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development environment and checks, [RELEASING.md](./RELEASING.md) for the release process, and [CHANGELOG.md](./CHANGELOG.md) for notable changes. Bilingual documents link to their Japanese counterparts.
 
 ## License
 

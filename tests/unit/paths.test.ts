@@ -24,6 +24,9 @@ beforeEach(async () => {
   await writeFile(join(root, "nested", "page.html"), "nested");
   await writeFile(join(root, "space file.html"), "space");
   await writeFile(join(root, "日本語.html"), "unicode");
+  await mkdir(join(root, ".git"));
+  await writeFile(join(root, ".env"), "secret");
+  await writeFile(join(root, ".git", "config"), "secret");
 });
 
 afterEach(async () => {
@@ -45,6 +48,21 @@ describe("resolveRequestFile", () => {
 
   it("returns null for files that do not exist", async () => {
     await expect(resolveRequestFile(root, "missing.html")).resolves.toBeNull();
+  });
+
+  it.each([".env", ".git/config", "%2Egit/config"])(
+    "can deny a hidden request path without revealing whether it exists: %s",
+    async (path) => {
+      await expect(
+        resolveRequestFile(root, path, { denyDotSegments: true }),
+      ).resolves.toBeNull();
+    },
+  );
+
+  it("keeps hidden paths available to package-managed static roots by default", async () => {
+    await expect(resolveRequestFile(root, ".env")).resolves.toBe(
+      await realpath(join(root, ".env")),
+    );
   });
 
   it("does not follow a symlink outside the content root", async () => {

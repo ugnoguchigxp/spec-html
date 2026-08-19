@@ -1,48 +1,36 @@
-import { createHash } from "node:crypto";
-import {
-  lstat,
-  open,
-  readFile,
-  realpath,
-  rename,
-  rm,
-} from "node:fs/promises";
-import { basename, dirname, extname, join } from "node:path";
-import { TextDecoder } from "node:util";
+import { lstat, realpath, rename } from "node:fs/promises";
+import { basename, extname } from "node:path";
 import { findContentDocuments, type ContentDocument } from "../content/documents.js";
+import {
+  atomicReplace,
+  createFileSnapshot,
+  fileMatchesSnapshot,
+  readUtf8File,
+  type AtomicWriteOperations,
+  type FileSnapshot,
+} from "../content/safe-write.js";
 import { formatDocument } from "./document.js";
 import {
   createFormatProjectResult,
   type FormatProjectResult,
 } from "./diagnostics.js";
 
-interface FormatTargetSnapshot {
-  readonly absolutePath: string;
-  readonly digest: string;
-}
-
-export interface FormatWriteOperations {
-  readonly rename: typeof rename;
-}
+export type FormatWriteOperations = AtomicWriteOperations;
 
 const projectSnapshots = new WeakMap<
   FormatProjectResult,
-  ReadonlyMap<string, FormatTargetSnapshot>
+  ReadonlyMap<string, FileSnapshot>
 >();
-const utf8Decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 /** Format an HTML file or every viewer document in a directory without writing. */
 export async function formatProject(targetPath: string): Promise<FormatProjectResult> {
   const targets = await resolveFormatTargets(targetPath);
   const documents = [];
-  const snapshots = new Map<string, FormatTargetSnapshot>();
+  const snapshots = new Map<string, FileSnapshot>();
   for (const target of targets) {
-    const source = await readUtf8(target.absolutePath, target.path);
+    const source = await readUtf8File(target.absolutePath, target.path);
     documents.push(await formatDocument(source, target.absolutePath, target.path));
-    snapshots.set(target.path, {
-      absolutePath: target.absolutePath,
-      digest: digest(source),
-    });
+    snapshots.set(target.path, createFileSnapshot(target.absolutePath, source));
   }
   const result = createFormatProjectResult(documents);
   projectSnapshots.set(result, snapshots);
@@ -82,8 +70,11 @@ export async function writeFormatProject(
     if (
       target === undefined ||
       snapshot === undefined ||
-      target.absolutePath !== snapshot.absolutePath ||
-      digest(await readUtf8(target.absolutePath, document.file)) !== snapshot.digest
+      !(await fileMatchesSnapshot(
+        target.absolutePath,
+        document.file,
+        snapshot,
+      ))
     ) {
       throw new Error(`整形後に内容が変わったためfileを書き換えませんでした: ${document.file}`);
     }
@@ -98,7 +89,7 @@ export async function writeFormatProject(
   const written: string[] = [];
   for (const [index, { document, target, output }] of writePlan.entries()) {
     try {
-      await atomicWrite(target.absolutePath, output, operations);
+      await atomicReplace(target.absolutePath, output, "spec-html", operations);
       written.push(document.file);
     } catch (error: unknown) {
       const pending = writePlan.slice(index + 1).map((item) => item.document.file);
@@ -138,71 +129,6 @@ async function resolveFormatTargets(targetPath: string): Promise<ContentDocument
   }
   const absolutePath = await realpath(targetPath);
   return [{ absolutePath, path: basename(absolutePath) }];
-}
-
-async function atomicWrite(
-  targetPath: string,
-  output: string,
-  operations: FormatWriteOperations,
-): Promise<void> {
-  const stats = await lstat(targetPath);
-  if (!stats.isFile() || stats.isSymbolicLink()) {
-    throw new Error(`書込対象が通常fileではありません: ${targetPath}`);
-  }
-
-  const directory = dirname(targetPath);
-  const file = basename(targetPath);
-  const mode = stats.mode & 0o777;
-  let temporaryPath: string | undefined;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const candidate = join(
-      directory,
-      `.${file}.spec-html-${process.pid}-${attempt}.tmp`,
-    );
-    try {
-      const handle = await open(candidate, "wx", mode);
-      temporaryPath = candidate;
-      try {
-        await handle.writeFile(output, "utf8");
-        await handle.chmod(mode);
-        await handle.sync();
-      } finally {
-        await handle.close();
-      }
-      await operations.rename(candidate, targetPath);
-      temporaryPath = undefined;
-      return;
-    } catch (error: unknown) {
-      if (temporaryPath === undefined && isNodeError(error, "EEXIST")) {
-        continue;
-      }
-      throw error;
-    } finally {
-      if (temporaryPath !== undefined) {
-        await rm(temporaryPath, { force: true });
-      }
-    }
-  }
-  throw new Error(`一時file名を確保できません: ${targetPath}`);
-}
-
-function digest(value: string): string {
-  return createHash("sha256").update(value, "utf8").digest("hex");
-}
-
-async function readUtf8(absolutePath: string, displayPath: string): Promise<string> {
-  const source = await readFile(absolutePath);
-  try {
-    return utf8Decoder.decode(source);
-  } catch (error: unknown) {
-    throw new Error(`UTF-8として解釈できないfileです: ${displayPath}`, {
-      cause: error,
-    });
-  }
-}
-
-function isNodeError(error: unknown, code: string): boolean {
-  return error instanceof Error && "code" in error && error.code === code;
 }
 
 function messageOf(error: unknown): string {

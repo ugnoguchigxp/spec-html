@@ -27,14 +27,20 @@ export async function lintProject(contentRoot: string): Promise<LintResult> {
 
   for (const document of documents) {
     const source = await readFile(document.absolutePath, "utf8");
-    const result = await lintDocument(source, document.absolutePath, document.path);
+    const result = await lintDocument(
+      source,
+      document.absolutePath,
+      document.path,
+    );
     diagnostics.push(...result.diagnostics);
     records.set(document.path, { facts: result.facts });
   }
 
   for (const record of records.values()) {
     if (record.facts !== null) {
-      diagnostics.push(...(await resolveReferences(root, records, record.facts)));
+      diagnostics.push(
+        ...(await resolveReferences(root, records, record.facts)),
+      );
     }
   }
 
@@ -43,8 +49,10 @@ export async function lintProject(contentRoot: string): Promise<LintResult> {
     diagnostics: sorted,
     summary: {
       files: documents.length,
-      errors: sorted.filter((diagnostic) => diagnostic.severity === "error").length,
-      warnings: sorted.filter((diagnostic) => diagnostic.severity === "warning").length,
+      errors: sorted.filter((diagnostic) => diagnostic.severity === "error")
+        .length,
+      warnings: sorted.filter((diagnostic) => diagnostic.severity === "warning")
+        .length,
     },
   };
 }
@@ -112,8 +120,14 @@ async function resolveReference(
   }
   const scheme = /^([a-z][a-z\d+.-]*):/i.exec(value)?.[1]?.toLowerCase();
   if (scheme !== undefined) {
-    const isExternal = ["http", "https", "mailto", "tel", "data", "blob"]
-      .includes(scheme);
+    const isExternal = [
+      "http",
+      "https",
+      "mailto",
+      "tel",
+      "data",
+      "blob",
+    ].includes(scheme);
     return isExternal && isValidExternalUrl(value)
       ? { kind: "ignore" }
       : { kind: "invalid" };
@@ -123,13 +137,16 @@ async function resolveReference(
   }
 
   const hashIndex = value.indexOf("#");
-  const rawBeforeFragment = hashIndex === -1 ? value : value.slice(0, hashIndex);
+  const rawBeforeFragment =
+    hashIndex === -1 ? value : value.slice(0, hashIndex);
   const rawFragment = hashIndex === -1 ? null : value.slice(hashIndex + 1);
   const queryIndex = rawBeforeFragment.indexOf("?");
-  const rawPath = queryIndex === -1
-    ? rawBeforeFragment
-    : rawBeforeFragment.slice(0, queryIndex);
-  const rawQuery = queryIndex === -1 ? null : rawBeforeFragment.slice(queryIndex + 1);
+  const rawPath =
+    queryIndex === -1
+      ? rawBeforeFragment
+      : rawBeforeFragment.slice(0, queryIndex);
+  const rawQuery =
+    queryIndex === -1 ? null : rawBeforeFragment.slice(queryIndex + 1);
   if (isHref && rawPath.length === 0 && rawFragment === null) {
     return rawQuery !== null && hasMalformedPercentEncoding(rawQuery)
       ? { kind: "invalid" }
@@ -142,7 +159,11 @@ async function resolveReference(
   let pathPart: string;
   let fragment: string | null;
   try {
-    pathPart = decodeURIComponent(rawPath);
+    const decodedPath = decodeLocalPath(rawPath);
+    if (decodedPath === null) {
+      return { kind: "invalid" };
+    }
+    pathPart = decodedPath;
     fragment = rawFragment === null ? null : decodeURIComponent(rawFragment);
     if (rawQuery !== null && hasMalformedPercentEncoding(rawQuery)) {
       return { kind: "invalid" };
@@ -151,9 +172,10 @@ async function resolveReference(
     return { kind: "invalid" };
   }
 
-  const candidate = isHref && pathPart.length === 0
-    ? resolve(root, sourceFile)
-    : resolve(root, dirname(sourceFile), pathPart || ".");
+  const candidate =
+    isHref && pathPart.length === 0
+      ? resolve(root, sourceFile)
+      : resolve(root, dirname(sourceFile), pathPart || ".");
   if (!isWithin(root, candidate)) {
     return { kind: "invalid" };
   }
@@ -178,6 +200,26 @@ async function resolveReference(
   };
 }
 
+function decodeLocalPath(rawPath: string): string | null {
+  if (rawPath.length === 0) {
+    return "";
+  }
+  const decodedSegments: string[] = [];
+  for (const rawSegment of rawPath.split("/")) {
+    const segment = decodeURIComponent(rawSegment);
+    if (
+      segment.length === 0 ||
+      segment.includes("\0") ||
+      segment.includes("/") ||
+      segment.includes("\\")
+    ) {
+      return null;
+    }
+    decodedSegments.push(segment);
+  }
+  return decodedSegments.join("/");
+}
+
 function hasMalformedPercentEncoding(value: string): boolean {
   return /%(?![\da-f]{2})/i.test(value);
 }
@@ -193,10 +235,9 @@ function isValidExternalUrl(value: string): boolean {
 
 function isWithin(root: string, target: string): boolean {
   const path = relative(root, target);
-  return path.length === 0 || (
-    !isAbsolute(path) &&
-    !path.startsWith(`..${sep}`) &&
-    path !== ".."
+  return (
+    path.length === 0 ||
+    (!isAbsolute(path) && !path.startsWith(`..${sep}`) && path !== "..")
   );
 }
 
@@ -209,5 +250,11 @@ function referenceDiagnostic(
   reference: LocalReference,
   rule: "REF002" | "REF003",
 ): LintDiagnostic {
-  return createDiagnostic(file, reference.line, reference.column, rule, reference.value);
+  return createDiagnostic(
+    file,
+    reference.line,
+    reference.column,
+    rule,
+    reference.value,
+  );
 }

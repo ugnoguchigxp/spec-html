@@ -12,7 +12,11 @@ async function createProject(): Promise<string> {
   return root;
 }
 
-async function writeDocument(root: string, path: string, body: string): Promise<void> {
+async function writeDocument(
+  root: string,
+  path: string,
+  body: string,
+): Promise<void> {
   const target = join(root, path);
   await mkdir(dirname(target), { recursive: true });
   await writeFile(target, body, "utf8");
@@ -22,14 +26,29 @@ const ARTICLE = (title: string, body = "") =>
   `<article lang="en"><h1>${title}</h1>${body}</article>`;
 
 afterEach(async () => {
-  await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  await Promise.all(
+    temporaryRoots
+      .splice(0)
+      .map((root) => rm(root, { recursive: true, force: true })),
+  );
 });
 
 describe("lintProject", () => {
   it("resolves local assets and cross-document fragments", async () => {
     const root = await createProject();
-    await writeDocument(root, "a.html", ARTICLE("A", '<a href="b.html#target">B</a><img src="assets/pixel.svg" alt="Pixel">'));
-    await writeDocument(root, "b.html", '<article id="target" lang="en"><h1>B</h1></article>');
+    await writeDocument(
+      root,
+      "a.html",
+      ARTICLE(
+        "A",
+        '<a href="b.html#target">B</a><img src="assets/pixel.svg" alt="Pixel">',
+      ),
+    );
+    await writeDocument(
+      root,
+      "b.html",
+      '<article id="target" lang="en"><h1>B</h1></article>',
+    );
     await mkdir(join(root, "assets"), { recursive: true });
     await writeFile(join(root, "assets", "pixel.svg"), "<svg></svg>", "utf8");
 
@@ -59,17 +78,36 @@ describe("lintProject", () => {
 
   it("reports unresolved fragments and local files at the URL attribute", async () => {
     const root = await createProject();
-    await writeDocument(root, "a.html", ARTICLE("A", '<a href="b.html#missing">B</a><img src="missing.svg" alt="Missing">'));
+    await writeDocument(
+      root,
+      "a.html",
+      ARTICLE(
+        "A",
+        '<a href="b.html#missing">B</a><img src="missing.svg" alt="Missing">',
+      ),
+    );
     await writeDocument(root, "b.html", ARTICLE("B"));
 
     const result = await lintProject(root);
-    expect(result.diagnostics.map((diagnostic) => diagnostic.rule)).toEqual(["REF002", "REF003"]);
-    expect(result.diagnostics.every((diagnostic) => diagnostic.file === "a.html")).toBe(true);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.rule)).toEqual([
+      "REF002",
+      "REF003",
+    ]);
+    expect(
+      result.diagnostics.every((diagnostic) => diagnostic.file === "a.html"),
+    ).toBe(true);
   });
 
   it("allows external URLs but rejects unsafe and malformed local references", async () => {
     const root = await createProject();
-    await writeDocument(root, "a.html", ARTICLE("A", '<a href="https://example.com">External</a><a href="https://[invalid">Invalid external</a><a href="../outside.html">Outside</a><a href="broken%ZZ.html">Broken</a><a href="b.html?bad=%ZZ">Query</a><a href="?bad=%ZZ">Current query</a>'));
+    await writeDocument(
+      root,
+      "a.html",
+      ARTICLE(
+        "A",
+        '<a href="https://example.com">External</a><a href="https://[invalid">Invalid external</a><a href="../outside.html">Outside</a><a href="broken%ZZ.html">Broken</a><a href="b.html?bad=%ZZ">Query</a><a href="?bad=%ZZ">Current query</a>',
+      ),
+    );
     await writeDocument(root, "b.html", ARTICLE("B"));
 
     const result = await lintProject(root);
@@ -82,13 +120,40 @@ describe("lintProject", () => {
     ]);
   });
 
+  it("rejects separators that the viewer cannot serve", async () => {
+    const root = await createProject();
+    await writeDocument(
+      root,
+      "a.html",
+      ARTICLE(
+        "A",
+        '<img src="assets%2Fpixel.svg" alt="Encoded slash"><img src="assets//pixel.svg" alt="Empty segment"><img src="assets/../assets/pixel.svg" alt="Parent segment"><img src="assets\\pixel.svg" alt="Backslash">',
+      ),
+    );
+    await mkdir(join(root, "assets"), { recursive: true });
+    await writeFile(join(root, "assets", "pixel.svg"), "<svg></svg>", "utf8");
+
+    const result = await lintProject(root);
+
+    expect(result.diagnostics).toHaveLength(3);
+    expect(
+      result.diagnostics.every((diagnostic) => diagnostic.rule === "REF003"),
+    ).toBe(true);
+  });
+
   it("does not report a missing fragment in a document with a syntax error", async () => {
     const root = await createProject();
-    await writeDocument(root, "a.html", ARTICLE("A", '<a href="b.html#missing">B</a>'));
+    await writeDocument(
+      root,
+      "a.html",
+      ARTICLE("A", '<a href="b.html#missing">B</a>'),
+    );
     await writeDocument(root, "b.html", '<article lang="en');
 
     const result = await lintProject(root);
-    expect(result.diagnostics.map((diagnostic) => diagnostic.rule)).toEqual(["HTML001"]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.rule)).toEqual([
+      "HTML001",
+    ]);
   });
 
   it("rejects references that escape through a symlink", async () => {
@@ -97,10 +162,16 @@ describe("lintProject", () => {
     try {
       await writeFile(outside, ARTICLE("Outside"), "utf8");
       await symlink(outside, join(root, "outside.html"));
-      await writeDocument(root, "a.html", ARTICLE("A", '<a href="outside.html">Outside</a>'));
+      await writeDocument(
+        root,
+        "a.html",
+        ARTICLE("A", '<a href="outside.html">Outside</a>'),
+      );
 
       const result = await lintProject(root);
-      expect(result.diagnostics.map((diagnostic) => diagnostic.rule)).toEqual(["REF003"]);
+      expect(result.diagnostics.map((diagnostic) => diagnostic.rule)).toEqual([
+        "REF003",
+      ]);
     } finally {
       await rm(outside, { force: true });
     }
@@ -117,7 +188,11 @@ describe("lintProject", () => {
   it("rejects missing paths and files", async () => {
     const root = await createProject();
     await writeFile(join(root, "not-a-directory"), "x", "utf8");
-    await expect(lintProject(join(root, "missing"))).rejects.toThrow("対象ディレクトリが見つかりません");
-    await expect(lintProject(join(root, "not-a-directory"))).rejects.toThrow("ディレクトリではありません");
+    await expect(lintProject(join(root, "missing"))).rejects.toThrow(
+      "対象ディレクトリが見つかりません",
+    );
+    await expect(lintProject(join(root, "not-a-directory"))).rejects.toThrow(
+      "ディレクトリではありません",
+    );
   });
 });

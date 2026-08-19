@@ -15,7 +15,7 @@ export function createLayout(container: HTMLElement): ViewerElements {
   menuButton.className = "menu-button";
   menuButton.type = "button";
   menuButton.textContent = "☰";
-  menuButton.setAttribute("aria-label", "メニュー");
+  menuButton.setAttribute("aria-label", "Menu");
   menuButton.setAttribute("aria-controls", "viewer-sidebar");
   menuButton.setAttribute("aria-expanded", "false");
 
@@ -91,7 +91,7 @@ export function createLayout(container: HTMLElement): ViewerElements {
 
   const frame = document.createElement("iframe");
   frame.className = "viewer-document";
-  frame.title = "設計書";
+  frame.title = "Document";
   frame.hidden = true;
 
   const documentActions = document.createElement("div");
@@ -135,8 +135,8 @@ export function createLayout(container: HTMLElement): ViewerElements {
   documentModeButton.className = "document-mode-button";
   documentModeButton.type = "button";
   documentModeButton.textContent = "</>";
-  documentModeButton.setAttribute("aria-label", "ソースHTMLを表示");
-  documentModeButton.title = "ソースHTMLを表示";
+  documentModeButton.setAttribute("aria-label", "View source HTML");
+  documentModeButton.title = "View source HTML";
   documentModeButton.hidden = true;
 
   const sourceDialog = document.createElement("dialog");
@@ -148,7 +148,7 @@ export function createLayout(container: HTMLElement): ViewerElements {
 
   const sourceDialogTitle = document.createElement("h2");
   sourceDialogTitle.id = "source-dialog-title";
-  sourceDialogTitle.textContent = "ソースHTML";
+  sourceDialogTitle.textContent = "Source HTML";
 
   const sourceDialogCloseButton = document.createElement("button");
   sourceDialogCloseButton.className = "source-dialog-close";
@@ -225,7 +225,7 @@ export function renderLoadState(
       elements.documentModeButton.hidden = true;
       break;
     case "loading":
-      elements.status.textContent = "読み込み中…";
+      elements.status.textContent = "Loading…";
       elements.status.setAttribute("role", "status");
       elements.status.hidden = false;
       elements.frame.hidden = true;

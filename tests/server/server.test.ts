@@ -1,5 +1,5 @@
 import { request } from "node:http";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -78,6 +78,7 @@ describe("local content server", () => {
 
     expect(shell.status).toBe(200);
     const shellBody = await shell.text();
+    expect(shellBody).toContain('<html lang="en">');
     expect(shellBody).toContain('id="app"');
     expect(shellBody).toContain('data-chart-js="true"');
     expect(shellBody).toContain('data-mermaid="true"');
@@ -190,7 +191,21 @@ describe("local content server", () => {
       await (await fetch(`${origin}/_content/nested/page.html`)).text(),
     ).toContain("Nested");
     expect(
-      (await fetch(`${origin}/_content/.spec-html/archive.json`)).status,
+      (
+        await fetch(`${origin}/_content/nested/.archived/page.html`)
+      ).status,
+    ).toBe(404);
+    await expect(
+      readFile(join(contentRoot, "nested", ".archived", "page.html"), "utf8"),
+    ).resolves.toContain("Nested");
+
+    await mkdir(join(contentRoot, "nested", ".archived", ".archived"));
+    await writeFile(
+      join(contentRoot, "nested", ".archived", ".archived", "deep.html"),
+      "<h1>Deep archive</h1>",
+    );
+    expect(
+      (await fetch(`${origin}/_content/nested/deep.html`)).status,
     ).toBe(404);
 
     const restored = await fetch(stateUrl, {
@@ -203,6 +218,9 @@ describe("local content server", () => {
       doc: "nested/page.html",
       archived: false,
     });
+    await expect(
+      readFile(join(contentRoot, "nested", "page.html"), "utf8"),
+    ).resolves.toContain("Nested");
   });
 
   it("validates document state requests and navigation views", async () => {
@@ -230,6 +248,13 @@ describe("local content server", () => {
     expect(
       (await fetch(`${origin}/_spec-html/navigation?view=unknown`)).status,
     ).toBe(400);
+
+    await mkdir(join(contentRoot, "nested", ".archived"));
+    await writeFile(
+      join(contentRoot, "nested", ".archived", "page.html"),
+      "<h1>Conflicting page</h1>",
+    );
+    expect((await fetch(validState)).status).toBe(409);
   });
 
   it("returns useful HTTP errors", async () => {

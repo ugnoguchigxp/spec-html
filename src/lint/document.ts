@@ -1,6 +1,6 @@
 import {
   HtmlValidate,
-  Node,
+  NodeType,
   Rule,
   StaticConfigLoader,
   type DOMReadyEvent,
@@ -8,7 +8,11 @@ import {
   type Location,
   type Message,
 } from "html-validate";
-import { createDiagnostic, type LintDiagnostic, type RuleId } from "./diagnostics.js";
+import {
+  createDiagnostic,
+  type LintDiagnostic,
+  type RuleId,
+} from "./diagnostics.js";
 import { BUILTIN_RULES, ruleForBuiltin } from "./rules.js";
 
 export interface LocalReference {
@@ -35,7 +39,8 @@ interface SpecRuleContext {
   detail?: string;
 }
 
-const DIRECTIVE = /<!--[\s\S]*?html-validate-(?:enable|disable(?:-next|-block)?)[\s\S]*?-->/gi;
+const DIRECTIVE =
+  /<!--[\s\S]*?html-validate-(?:enable|disable(?:-next|-block)?)[\s\S]*?-->/gi;
 const URL_ATTRIBUTES: ReadonlyMap<string, readonly string[]> = new Map([
   ["a", ["href"]],
   ["link", ["href"]],
@@ -68,7 +73,9 @@ export async function lintDocument(
   });
   const report = await validator.validateString(source, absolutePath);
   const messages = report.results.flatMap((result) => result.messages);
-  const parserMessages = messages.filter((message) => message.ruleId === "parser-error");
+  const parserMessages = messages.filter(
+    (message) => message.ruleId === "parser-error",
+  );
 
   if (parserMessages.length > 0) {
     return {
@@ -171,7 +178,9 @@ function reportDocumentErrors(
   }
 
   for (const figure of document.querySelectorAll("figure")) {
-    const caption = figure.childElements.find((child) => child.is("figcaption"));
+    const caption = figure.childElements.find((child) =>
+      child.is("figcaption"),
+    );
     if (caption === undefined || !hasText(caption)) {
       report(rule, figure, "FIG001");
     }
@@ -292,7 +301,9 @@ function hasCanvasName(
     return false;
   }
   const references = labelledBy.split(/\s+/);
-  return references.length > 0 && references.every((id) => hasText(ids.get(id)));
+  return (
+    references.length > 0 && references.every((id) => hasText(ids.get(id)))
+  );
 }
 
 function hasSectionHeading(section: HtmlElement): boolean {
@@ -307,8 +318,12 @@ function hasDirectH2(element: HtmlElement): boolean {
 
 function hasDirectHeading(element: HtmlElement): boolean {
   return element.childElements.some(
-    (child) => /^h[1-6]$/.test(child.tagName) ||
-      (child.is("header") && child.childElements.some((headerChild) => /^h[1-6]$/.test(headerChild.tagName))),
+    (child) =>
+      /^h[1-6]$/.test(child.tagName) ||
+      (child.is("header") &&
+        child.childElements.some((headerChild) =>
+          /^h[1-6]$/.test(headerChild.tagName),
+        )),
   );
 }
 
@@ -321,14 +336,18 @@ function getRootArticle(
 ): HtmlElement | null {
   const roots = document.root.childElements;
   const hasRootText = document.root.childNodes.some(
-    (node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0,
+    (node) =>
+      node.nodeType === NodeType.TEXT_NODE &&
+      node.textContent.trim().length > 0,
   );
   return !hasRootText && roots.length === 1 && roots[0]?.is("article")
     ? roots[0]
     : null;
 }
 
-function elementsInDocument(document: DOMReadyEvent["document"]): HtmlElement[] {
+function elementsInDocument(
+  document: DOMReadyEvent["document"],
+): HtmlElement[] {
   return document.root.childElements.flatMap((element) => [
     element,
     ...element.querySelectorAll("*"),
@@ -371,7 +390,9 @@ function convertMessage(message: Message, file: string): LintDiagnostic | null {
   if (message.ruleId.startsWith("spec-html/")) {
     const context = message.context;
     if (!isSpecRuleContext(context)) {
-      throw new Error(`Internal lint rule did not provide context: ${message.ruleId}`);
+      throw new Error(
+        `Internal lint rule did not provide context: ${message.ruleId}`,
+      );
     }
     return createDiagnostic(
       file,
@@ -398,7 +419,7 @@ function convertMessage(message: Message, file: string): LintDiagnostic | null {
 }
 
 /**
- * html-validate 11.3.0's html5 metadata omits these standard attributes even
+ * html-validate's html5 metadata omits these standard attributes even
  * though its own accessibility rules require them. Keep unknown-attribute
  * checking enabled while avoiding diagnostics for those upstream gaps.
  */
@@ -414,7 +435,8 @@ function isMetadataGap(message: Message): boolean {
   const attribute = context.attr.toLowerCase();
   return (
     (tagName === "img" && attribute === "alt") ||
-    (tagName === "canvas" && (attribute === "width" || attribute === "height")) ||
+    (tagName === "canvas" &&
+      (attribute === "width" || attribute === "height")) ||
     tagName === "svg"
   );
 }
@@ -446,12 +468,17 @@ function findDirectives(source: string, file: string): LintDiagnostic[] {
   for (const match of source.matchAll(DIRECTIVE)) {
     const offset = match.index ?? 0;
     const location = locationAt(source, offset);
-    diagnostics.push(createDiagnostic(file, location.line, location.column, "HTML004"));
+    diagnostics.push(
+      createDiagnostic(file, location.line, location.column, "HTML004"),
+    );
   }
   return diagnostics;
 }
 
-function locationAt(source: string, offset: number): Pick<Location, "line" | "column"> {
+function locationAt(
+  source: string,
+  offset: number,
+): Pick<Location, "line" | "column"> {
   const preceding = source.slice(0, offset);
   const lines = preceding.split(/\r\n|\r|\n/);
   return { line: lines.length, column: (lines.at(-1)?.length ?? 0) + 1 };

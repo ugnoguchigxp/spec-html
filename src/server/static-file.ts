@@ -9,16 +9,25 @@ export class InvalidRequestPathError extends Error {
   override name = "InvalidRequestPathError";
 }
 
+export interface ResolveRequestFileOptions {
+  readonly denyDotSegments?: boolean;
+}
+
 export async function resolveRequestFile(
   root: string,
   encodedRelativePath: string,
+  options: ResolveRequestFileOptions = {},
 ): Promise<string | null> {
   const encodedSegments = encodedRelativePath.split("/");
-  if (encodedSegments.length === 0 || encodedSegments.some((segment) => segment.length === 0)) {
+  if (
+    encodedSegments.length === 0 ||
+    encodedSegments.some((segment) => segment.length === 0)
+  ) {
     throw new InvalidRequestPathError("空のpath segmentは使用できません");
   }
 
-  const segments = encodedSegments.map((segment) => {
+  const segments: string[] = [];
+  for (const segment of encodedSegments) {
     let decoded: string;
     try {
       decoded = decodeURIComponent(segment);
@@ -37,8 +46,12 @@ export async function resolveRequestFile(
       throw new InvalidRequestPathError("path segmentが不正です");
     }
 
-    return decoded;
-  });
+    if (options.denyDotSegments === true && decoded.startsWith(".")) {
+      return null;
+    }
+
+    segments.push(decoded);
+  }
 
   const resolvedRoot = await realpath(root);
   const resolvedPath = resolve(resolvedRoot, ...segments);
@@ -97,6 +110,8 @@ function isNotFoundError(error: unknown): boolean {
     error instanceof Error &&
     "code" in error &&
     typeof error.code === "string" &&
-    (error.code === "ENOENT" || error.code === "ENOTDIR" || error.code === "ELOOP")
+    (error.code === "ENOENT" ||
+      error.code === "ENOTDIR" ||
+      error.code === "ELOOP")
   );
 }

@@ -33,7 +33,7 @@ function createFrameDocument(
   themePreference: ThemePreference,
 ): Document {
   const frameDocument = document.implementation.createHTMLDocument("");
-  frameDocument.documentElement.lang = "ja";
+  frameDocument.documentElement.lang = "en";
   frameDocument.documentElement.dataset.theme = themePreference;
   frameDocument.head.querySelector("title")?.remove();
 

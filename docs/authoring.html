@@ -1,74 +1,118 @@
-<article lang="ja">
+<article lang="en">
+  <p>English | <a href="./authoring.ja.html" hreflang="ja">日本語</a></p>
   <header>
     <h1>Authoring guide</h1>
     <p>
-      これは、Spec HTMLの文書を生成・編集するLLM向けの最小ルールです。本文は標準のsemantic
-      HTMLで直接書き、細かな誤りはLinterの診断に従って直します。
+      These are the minimum rules for an LLM that generates or edits Spec HTML documents. Write the
+      content directly in standard semantic HTML, then use the linter diagnostics to correct smaller
+      mistakes.
     </p>
   </header>
 
   <section id="rules">
-    <h2>ルール</h2>
+    <h2>Rules</h2>
     <ol>
       <li>
-        各fileは、主言語を示す<code>lang</code>属性を持つ1つの<code>article</code>をrootにしたHTML
-        fragmentにする。<code>html</code>、<code>head</code>、<code>body</code>は書かない。
+        Make each file an HTML fragment with one root <code>article</code>. Set its
+        <code>lang</code> attribute to the document's primary language. Do not add
+        <code>html</code>, <code>head</code>, or <code>body</code> elements.
       </li>
       <li>
-        文書の題名として<code>h1</code>を1つ置き、内容に合う標準HTML要素を選ぶ。独自要素や独自componentは作らない。
+        Add exactly one <code>h1</code> for the document title and choose standard HTML elements
+        that match the content. Do not invent custom elements or components.
       </li>
       <li>
-        要件、結論、数値などの重要な情報はHTML本文に書く。scriptやcanvasなどは、本文を補強するためだけに使う。
+        Put important information—requirements, conclusions, and values—in the HTML text. Use
+        scripts and canvases only to support that content.
       </li>
-      <li>文書間linkとassetは、content directory内のfileを指す相対URLで書く。</li>
+      <li>
+        Write document links and asset URLs as relative URLs that remain inside the content
+        directory.
+      </li>
     </ol>
   </section>
 
-  <section id="format">
-    <h2>Formatterで整える</h2>
+  <section id="fix">
+    <h2>Fix HTML typos</h2>
     <p>
-      作成後のHTMLはFormatterでインデントと改行を統一します。<code>--check</code>は変更せずに差分の有無を確認し、<code>--write</code>は変更fileだけを書き換えます。
+      Use the fixer for unambiguous mistakes in tag names, attribute names, quotes, closing tags,
+      closed attribute values, IDs, and local paths. It changes only HTML surface syntax and never
+      rewrites prose, <code>script</code> content, or JavaScript in event-handler values.
+    </p>
+    <pre><code class="language-sh">spec-html fix ./specs --check
+spec-html fix ./specs --write
+</code></pre>
+  </section>
+
+  <section id="format">
+    <h2>Format the document</h2>
+    <p>
+      After authoring, use the formatter to normalize indentation and line breaks.
+      <code>--check</code> reports whether files differ without changing them;
+      <code>--write</code> updates only files that need formatting.
     </p>
     <pre><code class="language-sh">spec-html format ./specs --check
 spec-html format ./specs --write
 </code></pre>
     <p>
-      full HTML documentも入力できます。安全なdocument
-      wrapperとmetadataはfragmentへ正規化されますが、headにstyle、script、link、baseがある場合やwrapperに表示・動作へ影響する属性がある場合は変換されません。Formatterはalt、caption、見出し、semantic
-      elementなど、内容の意味を選ぶ修正を行いません。
+      Full HTML documents are also accepted. Safe document wrappers and metadata are normalized to
+      fragments, but conversion is refused when the head contains
+      <code>style</code>, <code>script</code>, <code>link</code>, or <code>base</code>
+      content, or when wrapper attributes affect rendering or behavior. The formatter does not
+      invent semantic choices such as alt text, captions, headings, or elements.
     </p>
   </section>
 
   <section id="lint">
-    <h2>Lintで確認する</h2>
+    <h2>Lint the document</h2>
     <p>
-      詳細な禁止事項や要素ごとの規約を覚える必要はありません。作成・編集の後にLinterを実行し、errorを修正します。warningも必要に応じて改善し、CIではerrorとして扱えます。
+      You do not need to memorize every element rule. Run the linter after creating or editing a
+      document and fix its errors. Improve warnings where appropriate, or treat them as errors in
+      CI.
     </p>
     <pre><code class="language-sh">spec-html lint ./specs
 spec-html lint ./specs --warnings-as-errors
 </code></pre>
-    <p>診断の修正方法が分からない場合だけ、rule IDを指定して確認します。</p>
+    <p>When a diagnostic is unclear, request the explanation for its rule ID:</p>
     <pre><code class="language-sh">spec-html lint --explain DOC001
 </code></pre>
   </section>
 
+  <section id="check">
+    <h2>Run all checks together</h2>
+    <p>
+      Use <code>check</code> to run the fixer, formatter, and linter in that order. The default run
+      reports every stage without changing files. Add <code>--fix</code> to apply safe fixer and
+      formatter changes before linting the result.
+    </p>
+    <pre><code class="language-sh">spec-html check ./specs
+spec-html check ./specs --fix
+</code></pre>
+    <p>
+      Stage selectors run only the requested combination. For example, use
+      <code>--fixer --lint</code> for the fixer and linter, or <code>--fixer --format</code> for the
+      fixer and formatter.
+    </p>
+  </section>
+
   <section id="template">
-    <h2>最小テンプレート</h2>
-    <pre><code class="language-html">&lt;article lang=&quot;ja&quot;&gt;
-  &lt;h1&gt;文書の題名&lt;/h1&gt;
+    <h2>Minimal template</h2>
+    <pre><code class="language-html">&lt;article lang=&quot;en&quot;&gt;
+  &lt;h1&gt;Document title&lt;/h1&gt;
 
   &lt;section id=&quot;overview&quot;&gt;
-    &lt;h2&gt;概要&lt;/h2&gt;
-    &lt;p&gt;文書の要点です。&lt;/p&gt;
+    &lt;h2&gt;Overview&lt;/h2&gt;
+    &lt;p&gt;The main point of the document.&lt;/p&gt;
   &lt;/section&gt;
 &lt;/article&gt;
 </code></pre>
   </section>
 
   <section id="mermaid">
-    <h2>Mermaidの例</h2>
+    <h2>Mermaid example</h2>
     <p>
-      Mermaidを使う場合だけ、図のsourceを<code>pre.mermaid</code>へ書き、<code>figure</code>と<code>figcaption</code>で説明を付けます。
+      When a diagram is useful, put its source in <code>pre.mermaid</code> and describe it with a
+      <code>figure</code> and <code>figcaption</code>.
     </p>
     <pre><code class="language-html">&lt;figure&gt;
   &lt;pre class=&quot;mermaid&quot;&gt;

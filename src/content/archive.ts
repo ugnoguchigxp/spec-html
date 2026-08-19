@@ -1,156 +1,240 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { findContentDocuments } from "./documents.js";
+import { lstat, mkdir, readdir, rename, rmdir } from "node:fs/promises";
+import { basename, dirname, extname, join } from "node:path";
+import { findContentDocuments, type ContentDocument } from "./documents.js";
 import { normalizeDocumentPath } from "./document-path.js";
 
-export const ARCHIVE_STATE_DIRECTORY = ".spec-html";
-const ARCHIVE_FILENAME = "archive.json";
-const ARCHIVE_VERSION = 1;
-
-interface ArchiveManifest {
-  version: typeof ARCHIVE_VERSION;
-  documents: string[];
-}
+export const ARCHIVED_DIRECTORY = ".archived";
 
 export class ContentDocumentNotFoundError extends Error {
   override name = "ContentDocumentNotFoundError";
 }
 
-const updateQueues = new Map<string, Promise<void>>();
+export class DocumentArchiveConflictError extends Error {
+  override name = "DocumentArchiveConflictError";
+}
 
-export async function readArchivedDocuments(
+const operationQueues = new Map<string, Promise<void>>();
+
+export interface DocumentArchiveSnapshot {
+  readonly active: readonly ContentDocument[];
+  readonly archived: readonly ContentDocument[];
+}
+
+export async function findArchivedDocuments(
   contentRoot: string,
-): Promise<Set<string>> {
-  const path = archiveManifestPath(contentRoot);
-  let source: string;
-  try {
-    source = await readFile(path, "utf8");
-  } catch (error: unknown) {
-    if (isNotFoundError(error)) {
-      return new Set();
-    }
-    throw error;
-  }
+): Promise<ContentDocument[]> {
+  return enqueueArchiveOperation(contentRoot, () =>
+    findArchivedDocumentsUnlocked(contentRoot),
+  );
+}
 
-  return new Set(parseArchiveManifest(source).documents);
+export function withDocumentArchiveSnapshot<T>(
+  contentRoot: string,
+  read: (snapshot: DocumentArchiveSnapshot) => Promise<T>,
+): Promise<T> {
+  return enqueueArchiveOperation(contentRoot, async () =>
+    read(await findDocumentArchiveSnapshotUnlocked(contentRoot)),
+  );
+}
+
+async function findArchivedDocumentsUnlocked(
+  contentRoot: string,
+): Promise<ContentDocument[]> {
+  const documents: ContentDocument[] = [];
+  await visitArchivedDirectories(contentRoot, "", documents);
+  return documents.sort((left, right) =>
+    left.path.localeCompare(right.path, "en"),
+  );
 }
 
 export async function getDocumentArchived(
   contentRoot: string,
   documentPath: string,
 ): Promise<boolean> {
-  await assertContentDocumentExists(contentRoot, documentPath);
-  return (await readArchivedDocuments(contentRoot)).has(documentPath);
+  assertDocumentPath(documentPath);
+  return enqueueArchiveOperation(contentRoot, () =>
+    getDocumentArchivedUnlocked(contentRoot, documentPath),
+  );
+}
+
+async function getDocumentArchivedUnlocked(
+  contentRoot: string,
+  documentPath: string,
+): Promise<boolean> {
+  const documents = await findDocumentArchiveSnapshotUnlocked(contentRoot);
+  const active = documents.active.some(
+    (document) => document.path === documentPath,
+  );
+  const archived = documents.archived.some(
+    (document) => document.path === documentPath,
+  );
+  if (active && archived) {
+    throw new DocumentArchiveConflictError(documentPath);
+  }
+  if (!active && !archived) {
+    throw new ContentDocumentNotFoundError(documentPath);
+  }
+  return archived;
 }
 
 export async function setDocumentArchived(
   contentRoot: string,
   documentPath: string,
   archived: boolean,
-): Promise<void> {
-  const previous = updateQueues.get(contentRoot) ?? Promise.resolve();
-  const update = previous.catch(() => undefined).then(async () => {
-    await assertContentDocumentExists(contentRoot, documentPath);
-    const documents = await readArchivedDocuments(contentRoot);
+): Promise<boolean> {
+  assertDocumentPath(documentPath);
+  return enqueueArchiveOperation(contentRoot, async () => {
+    const currentArchived = await getDocumentArchivedUnlocked(
+      contentRoot,
+      documentPath,
+    );
+    if (currentArchived === archived) {
+      return archived;
+    }
+
+    const activePath = join(contentRoot, ...documentPath.split("/"));
+    const archiveDirectory = join(
+      contentRoot,
+      ...dirname(documentPath)
+        .split("/")
+        .filter((segment) => segment !== "."),
+      ARCHIVED_DIRECTORY,
+    );
+    const archivedPath = join(archiveDirectory, basename(documentPath));
+    const sourcePath = archived ? activePath : archivedPath;
+    const targetPath = archived ? archivedPath : activePath;
+    if (await pathExists(targetPath)) {
+      throw new DocumentArchiveConflictError(documentPath);
+    }
+
     if (archived) {
-      documents.add(documentPath);
-    } else {
-      documents.delete(documentPath);
+      await mkdir(archiveDirectory, { recursive: true });
     }
-    await writeArchiveManifest(contentRoot, documents);
+    await rename(sourcePath, targetPath);
+    if (!archived) {
+      await removeEmptyArchiveDirectory(archiveDirectory);
+    }
+    return archived;
   });
-  updateQueues.set(contentRoot, update);
+}
 
-  try {
-    await update;
-  } finally {
-    if (updateQueues.get(contentRoot) === update) {
-      updateQueues.delete(contentRoot);
+async function findDocumentArchiveSnapshotUnlocked(
+  contentRoot: string,
+): Promise<DocumentArchiveSnapshot> {
+  const [active, archived] = await Promise.all([
+    findContentDocuments(contentRoot),
+    findArchivedDocumentsUnlocked(contentRoot),
+  ]);
+  return { active, archived };
+}
+
+async function visitArchivedDirectories(
+  directory: string,
+  relativeDirectory: string,
+  documents: ContentDocument[],
+): Promise<void> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  entries.sort((left, right) => left.name.localeCompare(right.name, "en"));
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
     }
+    if (entry.name === ARCHIVED_DIRECTORY) {
+      await collectArchivedDocuments(
+        join(directory, entry.name),
+        relativeDirectory,
+        documents,
+      );
+      continue;
+    }
+    if (entry.name.startsWith(".") || entry.name === "node_modules") {
+      continue;
+    }
+    const childRelativeDirectory = relativeDirectory
+      ? `${relativeDirectory}/${entry.name}`
+      : entry.name;
+    await visitArchivedDirectories(
+      join(directory, entry.name),
+      childRelativeDirectory,
+      documents,
+    );
   }
 }
 
-async function assertContentDocumentExists(
-  contentRoot: string,
-  documentPath: string,
+async function collectArchivedDocuments(
+  archiveDirectory: string,
+  relativeDirectory: string,
+  documents: ContentDocument[],
 ): Promise<void> {
-  const normalized = normalizeDocumentPath(documentPath);
-  if (normalized === null || normalized !== documentPath) {
+  const entries = await readdir(archiveDirectory, { withFileTypes: true });
+  for (const entry of entries) {
+    if (
+      !entry.isFile() ||
+      extname(entry.name).toLowerCase() !== ".html" ||
+      entry.name.toLowerCase() === "nav.html"
+    ) {
+      continue;
+    }
+    documents.push({
+      absolutePath: join(archiveDirectory, entry.name),
+      path: relativeDirectory
+        ? `${relativeDirectory}/${entry.name}`
+        : entry.name,
+    });
+  }
+}
+
+function assertDocumentPath(documentPath: string): void {
+  if (normalizeDocumentPath(documentPath) !== documentPath) {
     throw new ContentDocumentNotFoundError(documentPath);
   }
-  const documents = await findContentDocuments(contentRoot);
-  if (!documents.some((document) => document.path === documentPath)) {
-    throw new ContentDocumentNotFoundError(documentPath);
-  }
 }
 
-function parseArchiveManifest(source: string): ArchiveManifest {
-  let parsed: unknown;
+async function pathExists(path: string): Promise<boolean> {
   try {
-    parsed = JSON.parse(source);
-  } catch {
-    throw new Error("Archive manifestのJSONが不正です");
-  }
-  if (
-    !isRecord(parsed) ||
-    parsed.version !== ARCHIVE_VERSION ||
-    !isDocumentPathArray(parsed.documents)
-  ) {
-    throw new Error("Archive manifestの形式が不正です");
-  }
-  return {
-    version: ARCHIVE_VERSION,
-    documents: [...new Set(parsed.documents)].sort((left, right) =>
-      left.localeCompare(right, "en"),
-    ),
-  };
-}
-
-async function writeArchiveManifest(
-  contentRoot: string,
-  documents: ReadonlySet<string>,
-): Promise<void> {
-  const directory = join(contentRoot, ARCHIVE_STATE_DIRECTORY);
-  const path = join(directory, ARCHIVE_FILENAME);
-  const temporaryPath = join(
-    directory,
-    `${ARCHIVE_FILENAME}.${process.pid}.${randomUUID()}.tmp`,
-  );
-  const manifest: ArchiveManifest = {
-    version: ARCHIVE_VERSION,
-    documents: [...documents].sort((left, right) =>
-      left.localeCompare(right, "en"),
-    ),
-  };
-
-  await mkdir(directory, { recursive: true });
-  try {
-    await writeFile(temporaryPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-    await rename(temporaryPath, path);
+    await lstat(path);
+    return true;
   } catch (error: unknown) {
-    await rm(temporaryPath, { force: true });
+    if (isNotFoundError(error)) {
+      return false;
+    }
     throw error;
   }
 }
 
-function archiveManifestPath(contentRoot: string): string {
-  return join(contentRoot, ARCHIVE_STATE_DIRECTORY, ARCHIVE_FILENAME);
+async function removeEmptyArchiveDirectory(directory: string): Promise<void> {
+  try {
+    await rmdir(directory);
+  } catch (error: unknown) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "ENOENT" || error.code === "ENOTEMPTY")
+    ) {
+      return;
+    }
+    throw error;
+  }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isDocumentPathArray(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (document: unknown) =>
-        typeof document === "string" &&
-        normalizeDocumentPath(document) === document,
-    )
+function enqueueArchiveOperation<T>(
+  contentRoot: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = operationQueues.get(contentRoot) ?? Promise.resolve();
+  const result = previous.catch(() => undefined).then(operation);
+  const tail = result.then(
+    () => undefined,
+    () => undefined,
   );
+  operationQueues.set(contentRoot, tail);
+  void tail.then(() => {
+    if (operationQueues.get(contentRoot) === tail) {
+      operationQueues.delete(contentRoot);
+    }
+  });
+  return result;
 }
 
 function isNotFoundError(error: unknown): boolean {

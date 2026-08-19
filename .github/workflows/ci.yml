@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   check:
+    name: Node 24 / Ubuntu / full check
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -18,8 +19,48 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium firefox webkit
       - run: npm run check
+
+  node-compatibility:
+    name: Node ${{ matrix.node-version }} / compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20.19.0, 22.16.0]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run test:pack
+
+  bun-compatibility:
+    name: Bun 1.3 / compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: npm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: npm ci
+      - run: bun --bun run typecheck
+      - run: bun --bun run test
+      - run: bun ./scripts/build.mjs
+      - run: bun ./dist/cli.js --version
+      - run: bun ./scripts/test-pack.mjs
 
   platform:
     name: Node 24 / ${{ matrix.os }}

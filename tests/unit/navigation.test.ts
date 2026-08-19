@@ -1,4 +1,11 @@
-import { mkdtemp, mkdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -26,9 +33,12 @@ describe("createNavigationHtml", () => {
     await Promise.all([
       writeFile(
         join(root, "overview.html"),
-        "<article><h1>Overview &amp; <em>goals</em></h1></article>",
+        '<!-- <h1>Comment</h1> --><script>const template = "<h1>Script</h1>";</script><article><h1>Overview &amp; <em>goals</em></h1></article>',
       ),
-      writeFile(join(root, "release-notes.html"), "<article>No title</article>"),
+      writeFile(
+        join(root, "release-notes.html"),
+        "<article>No title</article>",
+      ),
       writeFile(
         join(root, "api", "end points.html"),
         "<article><h1>API &#x3c;endpoints&#x3e;</h1></article>",
@@ -89,7 +99,7 @@ describe("createNavigationHtml", () => {
     );
   });
 
-  it("separates current and archived documents without moving source files", async () => {
+  it("separates current and physically archived documents", async () => {
     await Promise.all([
       writeFile(join(root, "current.html"), "<h1>Current</h1>"),
       writeFile(join(root, "archived.html"), "<h1>Archived</h1>"),
@@ -102,11 +112,11 @@ describe("createNavigationHtml", () => {
     expect(documents).toContain('aria-label="Documents"');
     expect(documents).toContain("Current");
     expect(documents).not.toContain("Archived");
-    expect(archive).toContain('aria-label="Archive"');
+    expect(archive).toContain('aria-label="Archived"');
     expect(archive).toContain("Archived");
     expect(archive).not.toContain("Current");
-    await expect(readFile(join(root, "archived.html"), "utf8")).resolves.toContain(
-      "Archived",
-    );
+    await expect(
+      readFile(join(root, ".archived", "archived.html"), "utf8"),
+    ).resolves.toContain("Archived");
   });
 });

@@ -1,6 +1,11 @@
 import { stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { formatFormatCompact, formatFormatJson } from "../format/diagnostics.js";
+import { formatFixCompact, formatFixJson } from "../fix/diagnostics.js";
+import { fixProject, writeFixProject } from "../fix/project.js";
+import {
+  formatFormatCompact,
+  formatFormatJson,
+} from "../format/diagnostics.js";
 import { formatProject, writeFormatProject } from "../format/project.js";
 import { formatCompact, formatJson } from "../lint/diagnostics.js";
 import { lintProject } from "../lint/project.js";
@@ -10,6 +15,9 @@ import { openViewer } from "./open-browser.js";
 import {
   CliUsageError,
   parseCliCommand,
+  type CliCheckOptions,
+  type CliCheckStage,
+  type CliFixOptions,
   type CliFormatOptions,
   type CliLintOptions,
   type CliRunOptions,
@@ -20,18 +28,25 @@ import { startServer } from "../server/start.js";
 export const HELP_TEXT = `使い方: spec-html [directory] [options]
 
 Options:
-  --host <host>    listenするhost（既定: 127.0.0.1）
-  --port <port>    listenするport（既定: 4173、0で自動割り当て）
-  --open           起動後にbrowserを開く（既定）
-  --no-open        browserを開かない
-  --help           このhelpを表示
-  --version        versionを表示
+  --host <host>                  listenするhost（既定: 127.0.0.1）
+  --allowed-host <hostname>      非loopbackで許可するHost（repeat可、wildcardでは必須）
+  --port <port>                  listenするport（既定: 4173、0で自動割り当て）
+  --open                         起動後にbrowserを開く（既定）
+  --no-open                      browserを開かない
+  --help                         このhelpを表示
+  --version                      versionを表示
 
 Lint:
   spec-html lint [directory] [options]
 
 Format:
-  spec-html format [path] --check|--write [options]`;
+  spec-html format [path] --check|--write [options]
+
+Fix:
+  spec-html fix [path] --check|--write [options]
+
+Check:
+  spec-html check [directory] [--fix] [options]`;
 
 export const LINT_HELP_TEXT = `使い方: spec-html lint [directory] [options]
 
@@ -50,6 +65,29 @@ Options:
   --reporter <compact|json>    report形式（既定: compact）
   --help                       このhelpを表示`;
 
+export const FIX_HELP_TEXT = `使い方: spec-html fix [path] --check|--write [options]
+
+Options:
+  --check                      安全に修正できるTypoがあるか確認する
+  --write                      修正結果をfileへ書き込む
+  --reporter <compact|json>    report形式（既定: compact）
+  --help                       このhelpを表示`;
+
+export const CHECK_HELP_TEXT = `使い方: spec-html check [directory] [--fix] [options]
+
+実行対象を省略するとfixer、formatter、linterをこの順で全て実行します。
+--fixer、--format、--lintを1つ以上指定すると、指定した処理だけを実行します。
+
+Options:
+  --fix                        fixerとformatterの変更をfileへ書き込む
+  --fixer                      fixerを実行対象にする
+  --format                     formatterを実行対象にする
+  --lint                       linterを実行対象にする
+  --reporter <compact|json>    report形式（既定: compact）
+  --warnings-as-errors         lint warningも終了code 1にする
+  --max-issues <number>        lintの最大表示件数（既定: 50、0で全件）
+  --help                       このhelpを表示`;
+
 /** Dispatch a parsed command without an import-time process side effect. */
 export async function main(args: readonly string[]): Promise<number> {
   try {
@@ -64,6 +102,12 @@ export async function main(args: readonly string[]): Promise<number> {
       case "format-help":
         console.log(FORMAT_HELP_TEXT);
         return 0;
+      case "fix-help":
+        console.log(FIX_HELP_TEXT);
+        return 0;
+      case "check-help":
+        console.log(CHECK_HELP_TEXT);
+        return 0;
       case "version":
         console.log(__SPEC_HTML_VERSION__);
         return 0;
@@ -74,6 +118,10 @@ export async function main(args: readonly string[]): Promise<number> {
         return await runLint(command.options);
       case "format":
         return await runFormat(command.options);
+      case "fix":
+        return await runFix(command.options);
+      case "check":
+        return await runCheck(command.options);
       case "run":
         return await runViewer(command.options);
     }
@@ -86,8 +134,120 @@ export async function main(args: readonly string[]): Promise<number> {
     ) {
       console.error(error.stack);
     }
-    return args[0] === "lint" || args[0] === "format" ? 2 : 1;
+    return args[0] === "lint" ||
+      args[0] === "format" ||
+      args[0] === "fix" ||
+      args[0] === "check"
+      ? 2
+      : 1;
   }
+}
+
+interface CheckStageReport {
+  stage: CliCheckStage;
+  compact: string;
+  json: string;
+}
+
+export async function runCheck(options: CliCheckOptions): Promise<number> {
+  const reports: CheckStageReport[] = [];
+  let exitCode = 0;
+
+  for (const stage of options.stages) {
+    let stop = false;
+    if (stage === "fixer") {
+      const result = await fixProject(options.targetPath);
+      if (options.mode === "fix" && result.summary.blocked === 0) {
+        await writeFixProject(options.targetPath, result);
+      }
+      reports.push({
+        stage,
+        compact: formatFixCompact(result),
+        json: formatFixJson(result, options.mode === "fix" ? "write" : "check"),
+      });
+      if (
+        result.summary.blocked > 0 ||
+        (options.mode === "check" && result.summary.changed > 0)
+      ) {
+        exitCode = 1;
+      }
+      stop = options.mode === "fix" && result.summary.blocked > 0;
+    } else if (stage === "formatter") {
+      const result = await formatProject(options.targetPath);
+      if (options.mode === "fix" && result.summary.blocked === 0) {
+        await writeFormatProject(options.targetPath, result);
+      }
+      reports.push({
+        stage,
+        compact: formatFormatCompact(result),
+        json: formatFormatJson(
+          result,
+          options.mode === "fix" ? "write" : "check",
+        ),
+      });
+      if (
+        result.summary.blocked > 0 ||
+        (options.mode === "check" && result.summary.changed > 0)
+      ) {
+        exitCode = 1;
+      }
+      stop = options.mode === "fix" && result.summary.blocked > 0;
+    } else {
+      const result = await lintProject(options.targetPath);
+      reports.push({
+        stage,
+        compact: formatCompact(result, options.maxIssues),
+        json: formatJson(result, options.maxIssues),
+      });
+      if (
+        result.summary.errors > 0 ||
+        (options.warningsAsErrors && result.summary.warnings > 0)
+      ) {
+        exitCode = 1;
+      }
+    }
+    if (stop) {
+      break;
+    }
+  }
+
+  console.log(formatCheckReport(reports, options));
+  return exitCode;
+}
+
+function formatCheckReport(
+  reports: readonly CheckStageReport[],
+  options: CliCheckOptions,
+): string {
+  if (options.reporter === "json") {
+    const stages = Object.fromEntries(
+      reports.map((report) => [report.stage, parseJsonReport(report.json)]),
+    );
+    return JSON.stringify({ version: 1, mode: options.mode, stages }, null, 2);
+  }
+  return reports
+    .map((report) => `== ${report.stage} ==\n${report.compact.trimEnd()}`)
+    .join("\n\n");
+}
+
+function parseJsonReport(report: string): unknown {
+  return JSON.parse(report) as unknown;
+}
+
+export async function runFix(options: CliFixOptions): Promise<number> {
+  const result = await fixProject(options.targetPath);
+  if (options.mode === "write" && result.summary.blocked === 0) {
+    await writeFixProject(options.targetPath, result);
+  }
+  const output =
+    options.reporter === "json"
+      ? formatFixJson(result, options.mode)
+      : formatFixCompact(result);
+  console.log(output.trimEnd());
+  if (result.summary.blocked > 0) {
+    return 1;
+  }
+  return options.mode === "check" && result.summary.changed > 0 ? 1 : 0;
 }
 
 export async function runFormat(options: CliFormatOptions): Promise<number> {
@@ -95,9 +255,10 @@ export async function runFormat(options: CliFormatOptions): Promise<number> {
   if (options.mode === "write" && result.summary.blocked === 0) {
     await writeFormatProject(options.targetPath, result);
   }
-  const output = options.reporter === "json"
-    ? formatFormatJson(result, options.mode)
-    : formatFormatCompact(result);
+  const output =
+    options.reporter === "json"
+      ? formatFormatJson(result, options.mode)
+      : formatFormatCompact(result);
   console.log(output.trimEnd());
   if (result.summary.blocked > 0) {
     return 1;
@@ -107,12 +268,13 @@ export async function runFormat(options: CliFormatOptions): Promise<number> {
 
 export async function runLint(options: CliLintOptions): Promise<number> {
   const result = await lintProject(options.contentRoot);
-  const output = options.format === "json"
-    ? formatJson(result, options.maxIssues)
-    : formatCompact(result, options.maxIssues);
+  const output =
+    options.format === "json"
+      ? formatJson(result, options.maxIssues)
+      : formatCompact(result, options.maxIssues);
   console.log(output.trimEnd());
   return result.summary.errors > 0 ||
-      (options.warningsAsErrors && result.summary.warnings > 0)
+    (options.warningsAsErrors && result.summary.warnings > 0)
     ? 1
     : 0;
 }

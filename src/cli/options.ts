@@ -6,6 +6,7 @@ import type { RuleId } from "../lint/diagnostics.js";
 export interface CliRunOptions {
   contentRoot: string;
   host: string;
+  allowedHosts: readonly string[];
   port: number;
   openBrowser: boolean;
 }
@@ -23,14 +24,35 @@ export interface CliFormatOptions {
   reporter: "compact" | "json";
 }
 
+export interface CliFixOptions {
+  targetPath: string;
+  mode: "check" | "write";
+  reporter: "compact" | "json";
+}
+
+export type CliCheckStage = "fixer" | "formatter" | "linter";
+
+export interface CliCheckOptions {
+  targetPath: string;
+  stages: readonly CliCheckStage[];
+  mode: "check" | "fix";
+  reporter: "compact" | "json";
+  warningsAsErrors: boolean;
+  maxIssues: number;
+}
+
 export type CliCommand =
   | { kind: "run"; options: CliRunOptions }
   | { kind: "lint"; options: CliLintOptions }
   | { kind: "format"; options: CliFormatOptions }
+  | { kind: "fix"; options: CliFixOptions }
+  | { kind: "check"; options: CliCheckOptions }
   | { kind: "explain"; rule: RuleId }
   | { kind: "help" }
   | { kind: "lint-help" }
   | { kind: "format-help" }
+  | { kind: "fix-help" }
+  | { kind: "check-help" }
   | { kind: "version" };
 
 export class CliUsageError extends Error {
@@ -47,8 +69,124 @@ export function parseCliCommand(
   if (args[0] === "format") {
     return parseFormatCommand(args.slice(1), cwd);
   }
+  if (args[0] === "fix") {
+    return parseFixCommand(args.slice(1), cwd);
+  }
+  if (args[0] === "check") {
+    return parseCheckCommand(args.slice(1), cwd);
+  }
 
   return parseRunCommand(args, cwd);
+}
+
+function parseCheckCommand(args: readonly string[], cwd: string): CliCommand {
+  let parsed: ReturnType<typeof parseCheckArgs>;
+  try {
+    parsed = parseCheckArgs([...args]);
+  } catch (error: unknown) {
+    throw new CliUsageError(messageForParseArgsError(error));
+  }
+
+  if (parsed.positionals.length > 1) {
+    throw new CliUsageError("pathは1つだけ指定してください");
+  }
+  const hasOptions =
+    parsed.values.fix === true ||
+    parsed.values.lint === true ||
+    parsed.values.format === true ||
+    parsed.values.fixer === true ||
+    parsed.values.reporter !== undefined ||
+    parsed.values["warnings-as-errors"] === true ||
+    parsed.values["max-issues"] !== undefined;
+  if (parsed.values.help === true) {
+    if (parsed.positionals.length > 0 || hasOptions) {
+      throw new CliUsageError(
+        "--helpはpathやcheck optionと同時に指定できません",
+      );
+    }
+    return { kind: "check-help" };
+  }
+
+  const selectedStages: CliCheckStage[] = [];
+  if (parsed.values.fixer === true) {
+    selectedStages.push("fixer");
+  }
+  if (parsed.values.format === true) {
+    selectedStages.push("formatter");
+  }
+  if (parsed.values.lint === true) {
+    selectedStages.push("linter");
+  }
+  const stages =
+    selectedStages.length === 0
+      ? (["fixer", "formatter", "linter"] as const)
+      : selectedStages;
+  if (
+    parsed.values.fix === true &&
+    !stages.some((stage) => stage === "fixer" || stage === "formatter")
+  ) {
+    throw new CliUsageError("--fixには--fixerまたは--formatが必要です");
+  }
+  const reporter = parsed.values.reporter ?? "compact";
+  if (reporter !== "compact" && reporter !== "json") {
+    throw new CliUsageError("reporterはcompactまたはjsonで指定してください");
+  }
+  const target = parsed.positionals[0] ?? "./specs";
+  return {
+    kind: "check",
+    options: {
+      targetPath: resolve(cwd, target),
+      stages,
+      mode: parsed.values.fix === true ? "fix" : "check",
+      reporter,
+      warningsAsErrors: parsed.values["warnings-as-errors"] === true,
+      maxIssues: parseMaxIssues(parsed.values["max-issues"]),
+    },
+  };
+}
+
+function parseFixCommand(args: readonly string[], cwd: string): CliCommand {
+  let parsed: ReturnType<typeof parseFixArgs>;
+  try {
+    parsed = parseFixArgs([...args]);
+  } catch (error: unknown) {
+    throw new CliUsageError(messageForParseArgsError(error));
+  }
+
+  if (parsed.positionals.length > 1) {
+    throw new CliUsageError("pathは1つだけ指定してください");
+  }
+  if (parsed.values.help === true) {
+    if (
+      parsed.positionals.length > 0 ||
+      parsed.values.check === true ||
+      parsed.values.write === true ||
+      parsed.values.reporter !== undefined
+    ) {
+      throw new CliUsageError("--helpはpathやfix optionと同時に指定できません");
+    }
+    return { kind: "fix-help" };
+  }
+  const check = parsed.values.check === true;
+  const write = parsed.values.write === true;
+  if (check === write) {
+    throw new CliUsageError(
+      "--checkまたは--writeのどちらか1つを指定してください",
+    );
+  }
+  const reporter = parsed.values.reporter ?? "compact";
+  if (reporter !== "compact" && reporter !== "json") {
+    throw new CliUsageError("reporterはcompactまたはjsonで指定してください");
+  }
+  const target = parsed.positionals[0] ?? "./specs";
+  return {
+    kind: "fix",
+    options: {
+      targetPath: resolve(cwd, target),
+      mode: check ? "check" : "write",
+      reporter,
+    },
+  };
 }
 
 function parseFormatCommand(args: readonly string[], cwd: string): CliCommand {
@@ -69,14 +207,18 @@ function parseFormatCommand(args: readonly string[], cwd: string): CliCommand {
       parsed.values.write === true ||
       parsed.values.reporter !== undefined
     ) {
-      throw new CliUsageError("--helpはpathやformat optionと同時に指定できません");
+      throw new CliUsageError(
+        "--helpはpathやformat optionと同時に指定できません",
+      );
     }
     return { kind: "format-help" };
   }
   const check = parsed.values.check === true;
   const write = parsed.values.write === true;
   if (check === write) {
-    throw new CliUsageError("--checkまたは--writeのどちらか1つを指定してください");
+    throw new CliUsageError(
+      "--checkまたは--writeのどちらか1つを指定してください",
+    );
   }
   const reporter = parsed.values.reporter ?? "compact";
   if (reporter !== "compact" && reporter !== "json") {
@@ -137,12 +279,20 @@ function parseRunCommand(args: readonly string[], cwd: string): CliCommand {
   }
 
   const directory = parsed.positionals[0] ?? "./specs";
+  const allowedHosts = (parsed.values["allowed-host"] ?? []).map((value) => {
+    const hostValue = value.trim();
+    if (hostValue.length === 0) {
+      throw new CliUsageError("allowed-hostを空にすることはできません");
+    }
+    return hostValue;
+  });
 
   return {
     kind: "run",
     options: {
       contentRoot: resolve(cwd, directory),
       host,
+      allowedHosts,
       port,
       openBrowser: parsed.values["no-open"] !== true,
     },
@@ -167,7 +317,9 @@ function parseLintCommand(args: readonly string[], cwd: string): CliCommand {
     parsed.values["warnings-as-errors"] === true ||
     parsed.values["max-issues"] !== undefined;
   if (hasExplain && (parsed.positionals.length > 0 || hasLintOptions)) {
-    throw new CliUsageError("--explainはdirectoryやlint optionと同時に指定できません");
+    throw new CliUsageError(
+      "--explainはdirectoryやlint optionと同時に指定できません",
+    );
   }
   if (parsed.values.help === true && hasExplain) {
     throw new CliUsageError("--helpと--explainは同時に指定できません");
@@ -245,6 +397,7 @@ function parseCommandArgs(args: string[]) {
     strict: true,
     options: {
       host: { type: "string" },
+      "allowed-host": { type: "string", multiple: true },
       port: { type: "string" },
       open: { type: "boolean" },
       "no-open": { type: "boolean" },
@@ -278,6 +431,38 @@ function parseFormatArgs(args: string[]) {
       check: { type: "boolean" },
       write: { type: "boolean" },
       reporter: { type: "string" },
+      help: { type: "boolean" },
+    },
+  });
+}
+
+function parseFixArgs(args: string[]) {
+  return parseArgs({
+    args,
+    allowPositionals: true,
+    strict: true,
+    options: {
+      check: { type: "boolean" },
+      write: { type: "boolean" },
+      reporter: { type: "string" },
+      help: { type: "boolean" },
+    },
+  });
+}
+
+function parseCheckArgs(args: string[]) {
+  return parseArgs({
+    args,
+    allowPositionals: true,
+    strict: true,
+    options: {
+      fix: { type: "boolean" },
+      lint: { type: "boolean" },
+      format: { type: "boolean" },
+      fixer: { type: "boolean" },
+      reporter: { type: "string" },
+      "warnings-as-errors": { type: "boolean" },
+      "max-issues": { type: "string" },
       help: { type: "boolean" },
     },
   });

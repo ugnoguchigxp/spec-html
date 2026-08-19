@@ -1,5 +1,5 @@
 import {
-  Node,
+  NodeType,
   Parser,
   StaticConfigLoader,
   type DOMNode,
@@ -66,7 +66,8 @@ const loader = new StaticConfigLoader({
   rules: {},
 });
 const config = Promise.resolve(loader.getConfigFor("spec-html-formatter.html"));
-const HTML_VALIDATE_DIRECTIVE = /html-validate-(?:enable|disable(?:-next|-block)?)/i;
+const HTML_VALIDATE_DIRECTIVE =
+  /html-validate-(?:enable|disable(?:-next|-block)?)/i;
 const ALLOWED_WRAPPER_ATTRIBUTES = new Set(["lang", "dir"]);
 
 export async function parseHtmlSource(
@@ -92,7 +93,8 @@ export async function parseHtmlSource(
       return;
     }
     record.ready = data.location;
-    record.explicit = data.location.offset >= record.start.offset + record.start.size;
+    record.explicit =
+      data.location.offset >= record.start.offset + record.start.size;
   });
   parser.on("tag:end", (_event: string, data: TagEndEvent) => {
     if (data.target === null || data.target.tagName !== data.previous.tagName) {
@@ -113,13 +115,15 @@ export async function parseHtmlSource(
   parser.on("parse:error", (_event: string, data: unknown) => {
     const error = parseErrorLike(data);
     const location = error.location;
-    problems.push(createFormatProblem(
-      displayFile,
-      location?.line ?? 1,
-      location?.column ?? 1,
-      "FMT001",
-      error.message,
-    ));
+    problems.push(
+      createFormatProblem(
+        displayFile,
+        location?.line ?? 1,
+        location?.column ?? 1,
+        "FMT001",
+        error.message,
+      ),
+    );
   });
 
   let root: HtmlElement;
@@ -135,13 +139,15 @@ export async function parseHtmlSource(
   } catch (error: unknown) {
     const parsed = parseErrorLike(error);
     const location = parsed.location;
-    problems.push(createFormatProblem(
-      displayFile,
-      location?.line ?? 1,
-      location?.column ?? 1,
-      "FMT001",
-      parsed.message ?? messageOf(error),
-    ));
+    problems.push(
+      createFormatProblem(
+        displayFile,
+        location?.line ?? 1,
+        location?.column ?? 1,
+        "FMT001",
+        parsed.message ?? messageOf(error),
+      ),
+    );
     root = new Parser(await config).parseHtml("");
   }
 
@@ -154,9 +160,10 @@ export async function parseHtmlSource(
       start: record.start.offset,
       end: record.ready.offset + record.ready.size,
     };
-    const content = record.endTag === undefined
-      ? null
-      : { start: startTag.end, end: record.endTag.start };
+    const content =
+      record.endTag === undefined
+        ? null
+        : { start: startTag.end, end: record.endTag.start };
     elements.set(record.element, {
       element: record.element,
       startTag,
@@ -189,12 +196,10 @@ export async function normalizeEnvelope(
   }
 
   const records = [...parsed.elements.values()];
-  const htmlRecords = records.filter((record) =>
-    record.element.is("html")
-  );
+  const htmlRecords = records.filter((record) => record.element.is("html"));
   if (htmlRecords.length === 0) {
-    const documentOnlyElement = [...parsed.elements.values()].find((record) =>
-      record.element.is("head") || record.element.is("body")
+    const documentOnlyElement = [...parsed.elements.values()].find(
+      (record) => record.element.is("head") || record.element.is("body"),
     );
     if (parsed.doctypes.length > 0 || documentOnlyElement !== undefined) {
       return blockedEnvelope(
@@ -207,7 +212,12 @@ export async function normalizeEnvelope(
     return { kind: "fragment", source, changes: [], problems: [] };
   }
   if (htmlRecords.length !== 1 || parsed.doctypes.length > 1) {
-    return blockedEnvelope(source, relativePath, htmlRecords[0]?.element.location, "htmlまたはDOCTYPEが複数ある");
+    return blockedEnvelope(
+      source,
+      relativePath,
+      htmlRecords[0]?.element.location,
+      "htmlまたはDOCTYPEが複数ある",
+    );
   }
   const headRecords = records.filter((record) => record.element.is("head"));
   const bodyRecords = records.filter((record) => record.element.is("body"));
@@ -228,7 +238,12 @@ export async function normalizeEnvelope(
     htmlRecord.endTag === null ||
     htmlRecord.element.parent !== parsed.root
   ) {
-    return blockedEnvelope(source, relativePath, htmlRecord?.element.location, "htmlの開始tagと終了tagを明示する");
+    return blockedEnvelope(
+      source,
+      relativePath,
+      htmlRecord?.element.location,
+      "htmlの開始tagと終了tagを明示する",
+    );
   }
   const html = htmlRecord.element;
   const body = html.childElements.find((element) => element.is("body"));
@@ -239,132 +254,169 @@ export async function normalizeEnvelope(
     bodyRecord.content === null ||
     bodyRecord.endTag === null
   ) {
-    return blockedEnvelope(source, relativePath, body?.location ?? html.location, "bodyの開始tagと終了tagを明示する");
+    return blockedEnvelope(
+      source,
+      relativePath,
+      body?.location ?? html.location,
+      "bodyの開始tagと終了tagを明示する",
+    );
   }
 
   const problems: FormatProblem[] = [];
-  const misplacedDoctype = parsed.doctypes.find((doctype) =>
-    doctype.offset >= htmlRecord.startTag.start
+  const misplacedDoctype = parsed.doctypes.find(
+    (doctype) => doctype.offset >= htmlRecord.startTag.start,
   );
   if (misplacedDoctype !== undefined) {
-    problems.push(createFormatProblem(
-      relativePath,
-      misplacedDoctype.line,
-      misplacedDoctype.column,
-      "FMT004",
-      "DOCTYPEがhtml開始tagより後にある",
-    ));
+    problems.push(
+      createFormatProblem(
+        relativePath,
+        misplacedDoctype.line,
+        misplacedDoctype.column,
+        "FMT004",
+        "DOCTYPEがhtml開始tagより後にある",
+      ),
+    );
   }
   problems.push(...wrapperAttributeProblems(html, relativePath));
   problems.push(...wrapperAttributeProblems(body, relativePath));
   const head = html.childElements.find((element) => element.is("head"));
   const article = singleRootArticle(body);
-  const articleRecord = article === null ? undefined : parsed.elements.get(article);
+  const articleRecord =
+    article === null ? undefined : parsed.elements.get(article);
   if (article === null) {
-    problems.push(...untransferableWrapperAttributeProblems(html, relativePath));
-    problems.push(...untransferableWrapperAttributeProblems(body, relativePath));
+    problems.push(
+      ...untransferableWrapperAttributeProblems(html, relativePath),
+    );
+    problems.push(
+      ...untransferableWrapperAttributeProblems(body, relativePath),
+    );
   } else if (
     articleRecord === undefined ||
     articleRecord.startTag.start < bodyRecord.content.start ||
-    (articleRecord.endTag?.end ?? articleRecord.startTag.end) > bodyRecord.content.end
+    (articleRecord.endTag?.end ?? articleRecord.startTag.end) >
+      bodyRecord.content.end
   ) {
-    problems.push(createFormatProblem(
-      relativePath,
-      article.location.line,
-      article.location.column,
-      "FMT004",
-      "root articleのsource rangeがbody外にある",
-    ));
+    problems.push(
+      createFormatProblem(
+        relativePath,
+        article.location.line,
+        article.location.column,
+        "FMT004",
+        "root articleのsource rangeがbody外にある",
+      ),
+    );
   }
   if (head !== undefined) {
     problems.push(...attributeProblems(head, relativePath, new Set()));
     if (hasMeaningfulDirectText(head)) {
-      problems.push(createFormatProblem(
-        relativePath,
-        head.location.line,
-        head.location.column,
-        "FMT002",
-        "head直下のtext",
-      ));
+      problems.push(
+        createFormatProblem(
+          relativePath,
+          head.location.line,
+          head.location.column,
+          "FMT002",
+          "head直下のtext",
+        ),
+      );
     }
     for (const element of head.childElements) {
       if (!element.is("title") && !element.is("meta")) {
-        problems.push(createFormatProblem(
-          relativePath,
-          element.location.line,
-          element.location.column,
-          "FMT002",
-          `<${element.tagName}>`,
-        ));
+        problems.push(
+          createFormatProblem(
+            relativePath,
+            element.location.line,
+            element.location.column,
+            "FMT002",
+            `<${element.tagName}>`,
+          ),
+        );
       }
     }
   }
-  const beforeBody = source.slice(htmlRecord.startTag.end, bodyRecord.startTag.start);
-  const afterBody = source.slice(bodyRecord.endTag.end, htmlRecord.endTag.start);
+  const beforeBody = source.slice(
+    htmlRecord.startTag.end,
+    bodyRecord.startTag.start,
+  );
+  const afterBody = source.slice(
+    bodyRecord.endTag.end,
+    htmlRecord.endTag.start,
+  );
   const before = source.slice(0, htmlRecord.startTag.start);
   const after = source.slice(htmlRecord.endTag.end);
   if (HTML_VALIDATE_DIRECTIVE.test(beforeBody)) {
-    problems.push(createFormatProblem(
-      relativePath,
-      head?.location.line ?? html.location.line,
-      head?.location.column ?? html.location.column,
-      "FMT002",
-      "head内のHTML Validate directive",
-    ));
+    problems.push(
+      createFormatProblem(
+        relativePath,
+        head?.location.line ?? html.location.line,
+        head?.location.column ?? html.location.column,
+        "FMT002",
+        "head内のHTML Validate directive",
+      ),
+    );
   }
   if (
     HTML_VALIDATE_DIRECTIVE.test(before) ||
     HTML_VALIDATE_DIRECTIVE.test(afterBody) ||
     HTML_VALIDATE_DIRECTIVE.test(after)
   ) {
-    problems.push(createFormatProblem(
-      relativePath,
-      html.location.line,
-      html.location.column,
-      "FMT004",
-      "削除されるdocument envelope内のHTML Validate directive",
-    ));
+    problems.push(
+      createFormatProblem(
+        relativePath,
+        html.location.line,
+        html.location.column,
+        "FMT004",
+        "削除されるdocument envelope内のHTML Validate directive",
+      ),
+    );
   }
 
-  const unexpectedChildren = html.childElements.filter((element) =>
-    !element.is("head") && !element.is("body")
+  const unexpectedChildren = html.childElements.filter(
+    (element) => !element.is("head") && !element.is("body"),
   );
   for (const element of unexpectedChildren) {
-    problems.push(createFormatProblem(
-      relativePath,
-      element.location.line,
-      element.location.column,
-      "FMT004",
-      `<${element.tagName}>がhtml直下にある`,
-    ));
+    problems.push(
+      createFormatProblem(
+        relativePath,
+        element.location.line,
+        element.location.column,
+        "FMT004",
+        `<${element.tagName}>がhtml直下にある`,
+      ),
+    );
   }
   if (hasMeaningfulDirectText(html)) {
-    problems.push(createFormatProblem(
-      relativePath,
-      html.location.line,
-      html.location.column,
-      "FMT004",
-      "headまたはbody外にtextがある",
-    ));
+    problems.push(
+      createFormatProblem(
+        relativePath,
+        html.location.line,
+        html.location.column,
+        "FMT004",
+        "headまたはbody外にtextがある",
+      ),
+    );
   }
 
   if (!isDocumentTrivia(before, true) || !isDocumentTrivia(after, false)) {
-    problems.push(createFormatProblem(
-      relativePath,
-      1,
-      1,
-      "FMT004",
-      "html外にDOCTYPE、comment、空白以外がある",
-    ));
+    problems.push(
+      createFormatProblem(
+        relativePath,
+        1,
+        1,
+        "FMT004",
+        "html外にDOCTYPE、comment、空白以外がある",
+      ),
+    );
   }
   if (!isDocumentTrivia(afterBody, false)) {
-    problems.push(createFormatProblem(
-      relativePath,
-      body.location.line,
-      body.location.column,
-      "FMT004",
-      "body終了後かつhtml終了前にcomment、空白以外がある",
-    ));
+    problems.push(
+      createFormatProblem(
+        relativePath,
+        body.location.line,
+        body.location.column,
+        "FMT004",
+        "body終了後かつhtml終了前にcomment、空白以外がある",
+      ),
+    );
   }
   if (problems.length > 0) {
     return {
@@ -381,16 +433,21 @@ export async function normalizeEnvelope(
     const titles = head.childElements.filter((element) => element.is("title"));
     const metas = head.childElements.filter((element) => element.is("meta"));
     const headRecord = parsed.elements.get(head);
-    const haveComment = headRecord?.content !== null &&
+    const haveComment =
+      headRecord?.content !== null &&
       headRecord?.content !== undefined &&
-      source.slice(headRecord.content.start, headRecord.content.end).includes("<!--");
+      source
+        .slice(headRecord.content.start, headRecord.content.end)
+        .includes("<!--");
     if (titles.length > 0 || metas.length > 0 || haveComment) {
       const title = titles[0]?.textContent.trim();
-      const detail = normalizeDetail([
-        ...(title ? [`title=${title}`] : []),
-        ...(metas.length > 0 ? [`meta=${metas.length}`] : []),
-        ...(haveComment ? ["comment"] : []),
-      ].join(" "));
+      const detail = normalizeDetail(
+        [
+          ...(title ? [`title=${title}`] : []),
+          ...(metas.length > 0 ? [`meta=${metas.length}`] : []),
+          ...(haveComment ? ["comment"] : []),
+        ].join(" "),
+      );
       changes.push({
         kind: "head-metadata-removed",
         ...(detail ? { detail } : {}),
@@ -410,7 +467,8 @@ export async function normalizeEnvelope(
       if (attribute === null) {
         continue;
       }
-      const relativeOffset = articleRecord.startTag.end - bodyRecord.content.start - 1;
+      const relativeOffset =
+        articleRecord.startTag.end - bodyRecord.content.start - 1;
       const slashOffset = fragment[relativeOffset - 1] === "/" ? 1 : 0;
       const insertAt = relativeOffset - slashOffset;
       fragment = `${fragment.slice(0, insertAt)} ${attribute}${fragment.slice(insertAt)}`;
@@ -439,7 +497,9 @@ function untransferableWrapperAttributeProblems(
   file: string,
 ): FormatProblem[] {
   return element.attributes
-    .filter((attribute) => ALLOWED_WRAPPER_ATTRIBUTES.has(attribute.key.toLowerCase()))
+    .filter((attribute) =>
+      ALLOWED_WRAPPER_ATTRIBUTES.has(attribute.key.toLowerCase()),
+    )
     .map((attribute) =>
       createFormatProblem(
         file,
@@ -447,7 +507,7 @@ function untransferableWrapperAttributeProblems(
         attribute.keyLocation.column,
         "FMT003",
         `<${element.tagName}>の${attribute.key}をroot articleへ移せない`,
-      )
+      ),
     );
 }
 
@@ -461,13 +521,15 @@ function attributeProblems(
   for (const attribute of element.attributes) {
     const key = attribute.key.toLowerCase();
     if (!allowed.has(key) || seen.has(key)) {
-      problems.push(createFormatProblem(
-        file,
-        attribute.keyLocation.line,
-        attribute.keyLocation.column,
-        "FMT003",
-        `<${element.tagName}>の${attribute.key}`,
-      ));
+      problems.push(
+        createFormatProblem(
+          file,
+          attribute.keyLocation.line,
+          attribute.keyLocation.column,
+          "FMT003",
+          `<${element.tagName}>の${attribute.key}`,
+        ),
+      );
     }
     seen.add(key);
   }
@@ -483,8 +545,10 @@ function singleRootArticle(body: HtmlElement): HtmlElement | null {
 }
 
 function hasMeaningfulDirectText(element: HtmlElement): boolean {
-  return element.childNodes.some((node: DOMNode) =>
-    node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0
+  return element.childNodes.some(
+    (node: DOMNode) =>
+      node.nodeType === NodeType.TEXT_NODE &&
+      node.textContent.trim().length > 0,
   );
 }
 
@@ -525,13 +589,15 @@ function blockedEnvelope(
     kind: "document",
     source,
     changes: [],
-    problems: [createFormatProblem(
-      file,
-      location?.line ?? 1,
-      location?.column ?? 1,
-      "FMT004",
-      detail,
-    )],
+    problems: [
+      createFormatProblem(
+        file,
+        location?.line ?? 1,
+        location?.column ?? 1,
+        "FMT004",
+        detail,
+      ),
+    ],
   };
 }
 
@@ -539,12 +605,14 @@ function parseErrorLike(value: unknown): ParseErrorLike {
   if (typeof value !== "object" || value === null) {
     return {};
   }
-  const location = "location" in value && isLocation(value.location)
-    ? value.location
-    : undefined;
-  const message = "message" in value && typeof value.message === "string"
-    ? value.message
-    : undefined;
+  const location =
+    "location" in value && isLocation(value.location)
+      ? value.location
+      : undefined;
+  const message =
+    "message" in value && typeof value.message === "string"
+      ? value.message
+      : undefined;
   return {
     ...(location === undefined ? {} : { location }),
     ...(message === undefined ? {} : { message }),
@@ -552,12 +620,20 @@ function parseErrorLike(value: unknown): ParseErrorLike {
 }
 
 function isLocation(value: unknown): value is Location {
-  return typeof value === "object" && value !== null &&
-    "line" in value && typeof value.line === "number" &&
-    "column" in value && typeof value.column === "number" &&
-    "offset" in value && typeof value.offset === "number" &&
-    "size" in value && typeof value.size === "number" &&
-    "filename" in value && typeof value.filename === "string";
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "line" in value &&
+    typeof value.line === "number" &&
+    "column" in value &&
+    typeof value.column === "number" &&
+    "offset" in value &&
+    typeof value.offset === "number" &&
+    "size" in value &&
+    typeof value.size === "number" &&
+    "filename" in value &&
+    typeof value.filename === "string"
+  );
 }
 
 function attributeSource(

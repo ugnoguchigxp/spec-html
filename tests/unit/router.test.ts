@@ -34,22 +34,28 @@ describe("route URLs", () => {
       kind: "missing",
       route: { doc: null, hash: "", view: "documents" },
     });
-    expect(parseRoute(new URL("http://localhost/?doc=nested%2Fpage.html#section"))).toEqual({
+    expect(
+      parseRoute(new URL("http://localhost/?doc=nested%2Fpage.html#section")),
+    ).toEqual({
       kind: "valid",
       route: { doc: "nested/page.html", hash: "#section", view: "documents" },
     });
-    expect(parseRoute(new URL("http://localhost/?doc=../secret.html"))).toEqual({
-      kind: "invalid",
-      rawDoc: "../secret.html",
-      hash: "",
-      view: "documents",
-    });
-    expect(parseRoute(new URL("http://localhost/?doc=%2Fnested.html"))).toEqual({
-      kind: "invalid",
-      rawDoc: "/nested.html",
-      hash: "",
-      view: "documents",
-    });
+    expect(parseRoute(new URL("http://localhost/?doc=../secret.html"))).toEqual(
+      {
+        kind: "invalid",
+        rawDoc: "../secret.html",
+        hash: "",
+        view: "documents",
+      },
+    );
+    expect(parseRoute(new URL("http://localhost/?doc=%2Fnested.html"))).toEqual(
+      {
+        kind: "invalid",
+        rawDoc: "/nested.html",
+        hash: "",
+        view: "documents",
+      },
+    );
     expect(
       parseRoute(
         new URL("http://localhost/?doc=nested%2Fpage.html&view=archive"),
@@ -93,7 +99,14 @@ describe("route URLs", () => {
       ),
     ).toBe("日本語.html");
     expect(
-      documentPathFromContentUrl(new URL("http://localhost/_content/assets/pixel.svg")),
+      documentPathFromContentUrl(
+        new URL("http://localhost/_content/nested%2Fpage.html"),
+      ),
+    ).toBeNull();
+    expect(
+      documentPathFromContentUrl(
+        new URL("http://localhost/_content/assets/pixel.svg"),
+      ),
     ).toBeNull();
   });
 });

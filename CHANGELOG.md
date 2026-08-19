@@ -1,30 +1,40 @@
 # Changelog
 
-LLM生成ドキュメントをMarkdownから構造的なHTMLへ置き換え、Markdown以上の表現力を持つ読みやすい設計書・仕様書としてローカルで活用するためのこのprojectの変更を記録します。このversionはローカル成果物の識別用であり、npm registryへの公開versionを意味しません。
+Notable changes to Spec HTML are recorded here. The project follows [Semantic Versioning](https://semver.org/).
 
 ## 0.1.0 - Unreleased
 
 ### Added
 
-- HTML fragmentを表示し、content directoryからnavigationを構成するローカルViewer CLI
-- content directory内の変更だけを監視するbrowser自動reload
-- 文書間navigation、browser history、画像と相対linkの解決
-- optional Chart.js integration
-- 公式ES moduleを遅延読み込みするoptional Mermaid integration
-- desktop・mobile navigationとkeyboard accessibility
-- 上部タイトルバーを省いた全高layoutとSidebar上部のtheme controls
-- Tokyo Night Stormを参考にしたlight／darkの表示切り替え、初回表示でのOS設定反映、選択内容の保存、文書印刷、theme変更時の図表再描画
-- semantic HTMLの既定styleとアクセシブルなcallout pattern
-- HTML fragmentの構文、構造、参照、accessibilityを検査する`spec-html lint` CLI
-- HTML fragmentと安全なfull HTML documentを決定的なfragmentへ整形する`spec-html format` CLI
-- unit、server、Chromium、consumer package test
-- GitHub Actionsによるcross-platform CI
-- 公開npm packageや公開serviceを対象外とするlocal-only方針
+- Local viewer CLI that renders HTML fragments and builds navigation from a content directory
+- Browser reloads scoped to changes within the content directory
+- Cross-document navigation, browser history, images, and relative-link resolution
+- Optional Chart.js integration
+- Optional Mermaid integration with lazy-loaded official ES modules
+- Desktop and mobile navigation with keyboard accessibility
+- Full-height layout, theme controls, and title display
+- Light and dark themes inspired by Tokyo Night Storm, OS-preference detection, persisted selection, document printing, and diagram redraws on theme changes
+- Default styles for semantic HTML and accessible callout patterns
+- `spec-html lint` for document syntax, structure, references, and accessibility
+- `spec-html format` for deterministic formatting of HTML fragments and safe full documents
+- `spec-html fix` for unambiguous HTML tag, attribute, quote, closing-tag, and local-reference typos without rewriting JavaScript
+- `spec-html check` for running the fixer, formatter, and linter together or in selected combinations, with optional safe writes
+- Unit, server, Chromium, Firefox/WebKit smoke, and consumer-package tests with enforced Node coverage thresholds
+- Compatibility checks for Node.js 20.19+, Node.js 22.16+, Node.js 24+, and Bun 1.3+
+- Cross-platform CI with GitHub Actions
+- English documentation with maintained Japanese counterparts
 
 ### Security
 
-- 既定のloopback binding
-- content root外へのpath traversalとsymbolic link escapeの拒否
+- Loopback-only binding by default
+- Rejection of path traversal and symbolic-link escapes outside the content root
+- Host allowlisting for every request, with explicit allowed hosts required for wildcard binds
+- Rejection of dot-prefixed content paths and cross-origin document-state updates
+
+### Fixed
+
+- Fixer writes now reject invalid UTF-8 and concurrent file changes and use the same snapshot-checked atomic replacement as the formatter
+- HTTP Host and Origin validation now works on Bun without weakening duplicate-header rejection
 
 ### License
 

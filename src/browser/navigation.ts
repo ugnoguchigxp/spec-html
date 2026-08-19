@@ -14,33 +14,34 @@ export function mountNavigation(
   const parsedDocument = new DOMParser().parseFromString(html, "text/html");
   const navigation = parsedDocument.querySelector("nav");
   if (navigation === null) {
-    throw new Error("Navigationにnav要素がありません");
+    throw new Error("Navigation does not contain a nav element");
   }
 
   container.replaceChildren(navigation);
   const items: NavigationItem[] = [];
 
   let navigationOrder = 0;
-  for (const anchor of navigation.querySelectorAll<HTMLAnchorElement>("a[href]")) {
+  for (const anchor of navigation.querySelectorAll<HTMLAnchorElement>(
+    "a[href]",
+  )) {
     anchor.dataset.navigationOrder = String(navigationOrder);
     navigationOrder += 1;
     const href = anchor.getAttribute("href")?.trim();
     if (href === undefined || href.length === 0) {
-      console.warn("Spec HTML: Navigation内の空のhrefを無視しました");
+      console.warn("Spec HTML: Ignored an empty href in navigation");
       continue;
     }
-    if (href.toLowerCase().startsWith("javascript:")) {
-      anchor.dataset.specHtmlBlocked = "javascript";
-      anchor.removeAttribute("href");
-      console.warn("Spec HTML: Navigation内のjavascript: URLを無効化しました");
-      continue;
-    }
-
     let url: URL;
     try {
       url = new URL(href, contentBaseUrl);
     } catch {
-      console.warn(`Spec HTML: Navigation内のURLを解釈できません: ${href}`);
+      console.warn(`Spec HTML: Could not parse navigation URL: ${href}`);
+      continue;
+    }
+    if (url.protocol === "javascript:") {
+      anchor.dataset.specHtmlBlocked = "javascript";
+      anchor.removeAttribute("href");
+      console.warn("Spec HTML: Disabled a javascript: URL in navigation");
       continue;
     }
 
@@ -106,13 +107,13 @@ function compareNavigationAnchors(
   const originalOrder =
     Number(left.dataset.navigationOrder) -
     Number(right.dataset.navigationOrder);
-  const comparison = preference === "name"
-    ? originalOrder
-    : Date.parse(left.querySelector("time")?.dateTime ?? "") -
-      Date.parse(right.querySelector("time")?.dateTime ?? "");
-  const directedComparison = direction === "ascending"
-    ? comparison
-    : -comparison;
+  const comparison =
+    preference === "name"
+      ? originalOrder
+      : Date.parse(left.querySelector("time")?.dateTime ?? "") -
+        Date.parse(right.querySelector("time")?.dateTime ?? "");
+  const directedComparison =
+    direction === "ascending" ? comparison : -comparison;
   return directedComparison || originalOrder;
 }
 

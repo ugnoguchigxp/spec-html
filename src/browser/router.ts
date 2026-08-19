@@ -6,9 +6,8 @@ export { normalizeDocumentPath } from "../content/document-path.js";
 
 export function parseRoute(url: URL): RouteParseResult {
   const hash = url.hash;
-  const view = url.searchParams.get("view") === "archive"
-    ? "archive"
-    : "documents";
+  const view =
+    url.searchParams.get("view") === "archive" ? "archive" : "documents";
   if (!url.searchParams.has("doc")) {
     return { kind: "missing", route: { doc: null, hash, view } };
   }
@@ -37,7 +36,7 @@ export function createShellUrl(route: RouteState, base: URL): URL {
 export function createContentUrl(doc: string, base: URL): URL {
   const normalized = normalizeDocumentPath(doc);
   if (normalized === null) {
-    throw new Error(`不正な文書pathです: ${doc}`);
+    throw new Error(`Invalid document path: ${doc}`);
   }
   const encodedPath = normalized
     .split("/")
@@ -56,15 +55,18 @@ export function documentPathFromContentUrl(url: URL): string | null {
     return null;
   }
 
-  let decodedPath: string;
+  const decodedSegments: string[] = [];
   try {
-    decodedPath = encodedPath
-      .split("/")
-      .map((segment) => decodeURIComponent(segment))
-      .join("/");
+    for (const segment of encodedPath.split("/")) {
+      const decoded = decodeURIComponent(segment);
+      if (decoded.includes("/") || decoded.includes("\\")) {
+        return null;
+      }
+      decodedSegments.push(decoded);
+    }
   } catch {
     return null;
   }
 
-  return normalizeDocumentPath(decodedPath);
+  return normalizeDocumentPath(decodedSegments.join("/"));
 }

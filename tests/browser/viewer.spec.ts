@@ -1,8 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { rm, writeFile } from "node:fs/promises";
+import { access, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-test("reloads only when the content directory changes", async ({ page }, testInfo) => {
+test("reloads only when the content directory changes", async ({
+  page,
+}, testInfo) => {
   await page.addInitScript(() => {
     if (window.top !== window) {
       return;
@@ -13,7 +15,8 @@ test("reloads only when the content directory changes", async ({ page }, testInf
     sessionStorage.setItem("spec-html-test-load-count", String(count + 1));
   });
   const liveReloadResponse = page.waitForResponse(
-    (response) => new URL(response.url()).pathname === "/_spec-html/live-reload",
+    (response) =>
+      new URL(response.url()).pathname === "/_spec-html/live-reload",
   );
   await page.goto("/");
   await liveReloadResponse;
@@ -42,24 +45,27 @@ test("reloads only when the content directory changes", async ({ page }, testInf
   }
 });
 
-test("shows the first navigation document and updates active navigation", async ({
+test("@smoke shows the first navigation document and updates active navigation", async ({
   page,
 }) => {
   await page.goto("/");
 
   const frame = page.frameLocator("iframe.viewer-document");
   await expect(frame.locator("h1")).toHaveText("Overview");
-  await expect(page.locator(".viewer-sidebar a", { hasText: "Overview" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(frame.locator("html")).toHaveAttribute("lang", "en");
+  await expect(
+    page.locator(".viewer-sidebar a", { hasText: "Overview" }),
+  ).toHaveAttribute("aria-current", "page");
   await expect(page).toHaveTitle("Overview — Spec HTML");
   await expect(page.locator(".viewer-header")).toHaveCount(0);
   await expect
     .poll(() =>
-      page.locator(".viewer-sidebar, .viewer-main").evaluateAll((elements) =>
-        elements.map((element) => element.getBoundingClientRect().top),
-      ),
+      page
+        .locator(".viewer-sidebar, .viewer-main")
+        .evaluateAll((elements) =>
+          elements.map((element) => element.getBoundingClientRect().top),
+        ),
     )
     .toEqual([0, 0]);
   await expect(page.locator(".viewer-brand")).toHaveCount(0);
@@ -93,24 +99,24 @@ test("shows the first navigation document and updates active navigation", async 
     .toBe(true);
   await expect
     .poll(() =>
-      page.locator(".viewer-sidebar").evaluate(
-        (sidebar) => sidebar.scrollWidth <= sidebar.clientWidth,
-      ),
+      page
+        .locator(".viewer-sidebar")
+        .evaluate((sidebar) => sidebar.scrollWidth <= sidebar.clientWidth),
     )
     .toBe(true);
-
 });
 
-test("archives and restores the current document from the actions menu", async ({
+test("@smoke archives and restores the current document from the actions menu", async ({
   page,
 }) => {
-  const archiveStateDirectory = resolve("tests/fixtures/browser/.spec-html");
-  await rm(archiveStateDirectory, { recursive: true, force: true });
+  await restoreOverviewFixture();
 
   try {
     await page.goto("/");
     const frame = page.frameLocator("iframe.viewer-document");
-    const actionsButton = page.getByRole("button", { name: "Document actions" });
+    const actionsButton = page.getByRole("button", {
+      name: "Document actions",
+    });
     const navigationViewButton = page.locator(".navigation-view-button");
 
     await expect(frame.locator("h1")).toHaveText("Overview");
@@ -132,9 +138,11 @@ test("archives and restores the current document from the actions menu", async (
 
     await actionsButton.click();
     await page.getByRole("menuitem", { name: "Archive" }).click();
-    await expect.poll(() => new URL(page.url()).searchParams.get("view")).toBe(
-      "archive",
-    );
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get("view"))
+      .toBe("archive");
+    await expect.poll(() => pathExists(archivedOverviewPath())).toBe(true);
+    await expect.poll(() => pathExists(activeOverviewPath())).toBe(false);
     await expect(frame.locator("h1")).toHaveText("Overview");
     await expect(page.locator(".viewer-navigation a")).toHaveCount(1);
     await expect(page.locator(".viewer-navigation a")).toHaveText(/Overview/);
@@ -149,7 +157,11 @@ test("archives and restores the current document from the actions menu", async (
     await actionsButton.click();
     await expect(page.getByRole("menuitem", { name: "Restore" })).toBeVisible();
     await page.getByRole("menuitem", { name: "Restore" }).click();
-    await expect.poll(() => new URL(page.url()).searchParams.get("view")).toBeNull();
+    await expect
+      .poll(() => new URL(page.url()).searchParams.get("view"))
+      .toBeNull();
+    await expect.poll(() => pathExists(activeOverviewPath())).toBe(true);
+    await expect.poll(() => pathExists(archivedOverviewPath())).toBe(false);
     await expect(frame.locator("h1")).toHaveText("Overview");
     await expect(navigationViewButton).toHaveText("Archived");
 
@@ -158,27 +170,26 @@ test("archives and restores the current document from the actions menu", async (
     await page.setViewportSize({ width: 375, height: 700 });
     await expect(page.locator(".document-actions")).toHaveCSS("top", "12px");
     await expect(page.locator(".document-actions")).toHaveCSS("right", "60px");
-    await expect(page.getByRole("button", { name: "メニュー" })).toHaveCSS(
+    await expect(page.getByRole("button", { name: "Menu" })).toHaveCSS(
       "right",
       "12px",
     );
   } finally {
-    await rm(archiveStateDirectory, { recursive: true, force: true });
+    await restoreOverviewFixture();
   }
 });
 
 test("switches between Documents and an empty Archive from the sidebar", async ({
   page,
 }) => {
-  const archiveStateDirectory = resolve("tests/fixtures/browser/.spec-html");
-  await rm(archiveStateDirectory, { recursive: true, force: true });
+  await restoreOverviewFixture();
 
   await page.goto("/");
   const navigationViewButton = page.locator(".navigation-view-button");
   await navigationViewButton.click();
 
   await expect(page.locator(".viewer-status")).toHaveText(
-    "アーカイブされた設計書がありません",
+    "No archived documents.",
   );
   await expect(page).toHaveURL(/\?view=archive$/);
   await expect(navigationViewButton).toHaveText("Documents");
@@ -191,11 +202,62 @@ test("switches between Documents and an empty Archive from the sidebar", async (
   await expect(navigationViewButton).toHaveText("Archived");
 });
 
-test("opens source HTML in a modal without replacing the document preview", async ({ page }) => {
+function activeOverviewPath(): string {
+  return resolve("tests/fixtures/browser/overview.html");
+}
+
+function archivedOverviewPath(): string {
+  return resolve("tests/fixtures/browser/.archived/overview.html");
+}
+
+async function restoreOverviewFixture(): Promise<void> {
+  const activePath = activeOverviewPath();
+  const archivedPath = archivedOverviewPath();
+  const [activeExists, archivedExists] = await Promise.all([
+    pathExists(activePath),
+    pathExists(archivedPath),
+  ]);
+  if (activeExists && archivedExists) {
+    throw new Error(
+      "Browser fixture has conflicting active and archived copies",
+    );
+  }
+  if (archivedExists) {
+    await rename(archivedPath, activePath);
+  }
+  try {
+    await rmdir(resolve("tests/fixtures/browser/.archived"));
+  } catch (error: unknown) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "ENOENT" || error.code === "ENOTEMPTY")
+    ) {
+      return;
+    }
+    throw error;
+  }
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch (error: unknown) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+test("opens source HTML in a modal without replacing the document preview", async ({
+  page,
+}) => {
   await page.goto("/");
 
   const frame = page.frameLocator("iframe.viewer-document");
-  const modeButton = page.getByRole("button", { name: "ソースHTMLを表示" });
+  const modeButton = page.getByRole("button", { name: "View source HTML" });
   await expect(modeButton).toBeVisible();
   await expect(modeButton).toHaveCSS("position", "absolute");
   await expect(modeButton).toHaveCSS("right", "16px");
@@ -204,21 +266,22 @@ test("opens source HTML in a modal without replacing the document preview", asyn
   await page.getByRole("link", { name: "Chart" }).click();
   await expect(frame.locator("h1")).toHaveText("Chart");
   await page.evaluate(() => {
-    const frame = document.querySelector<HTMLIFrameElement>("iframe.viewer-document");
+    const frame = document.querySelector<HTMLIFrameElement>(
+      "iframe.viewer-document",
+    );
     if (frame === null || frame.contentDocument === null) {
       throw new Error("Document frame not found");
     }
     const frameDocument = frame.contentDocument;
     Object.assign(window, {
       chartDocumentBeforeSourceDialog: frameDocument,
-      chartCanvasBeforeSourceDialog: frameDocument.querySelector(
-        "#latency-chart",
-      ),
+      chartCanvasBeforeSourceDialog:
+        frameDocument.querySelector("#latency-chart"),
     });
   });
 
   await modeButton.click();
-  const sourceDialog = page.getByRole("dialog", { name: "ソースHTML" });
+  const sourceDialog = page.getByRole("dialog", { name: "Source HTML" });
   await expect(sourceDialog).toBeVisible();
   await expect(sourceDialog.locator("pre")).toContainText("<h1>Chart</h1>");
   await expect(frame.locator("h1")).toHaveText("Chart");
@@ -235,9 +298,11 @@ test("opens source HTML in a modal without replacing the document preview", asyn
         if (frame === null || frame.contentDocument === null) {
           return false;
         }
-        return frame.contentDocument === stored.chartDocumentBeforeSourceDialog &&
+        return (
+          frame.contentDocument === stored.chartDocumentBeforeSourceDialog &&
           frame.contentDocument.querySelector("#latency-chart") ===
-            stored.chartCanvasBeforeSourceDialog;
+            stored.chartCanvasBeforeSourceDialog
+        );
       }),
     )
     .toBe(true);
@@ -251,7 +316,9 @@ test("opens source HTML in a modal without replacing the document preview", asyn
   const diagram = frame.locator(".mermaid svg");
   await expect(diagram).toBeVisible();
   await page.evaluate(() => {
-    const frame = document.querySelector<HTMLIFrameElement>("iframe.viewer-document");
+    const frame = document.querySelector<HTMLIFrameElement>(
+      "iframe.viewer-document",
+    );
     if (frame === null || frame.contentDocument === null) {
       throw new Error("Document frame not found");
     }
@@ -273,7 +340,9 @@ test("opens source HTML in a modal without replacing the document preview", asyn
         const stored = window as Window & {
           diagramDocumentBeforeSourceDialog?: Document;
         };
-        return frame?.contentDocument === stored.diagramDocumentBeforeSourceDialog;
+        return (
+          frame?.contentDocument === stored.diagramDocumentBeforeSourceDialog
+        );
       }),
     )
     .toBe(true);
@@ -285,9 +354,9 @@ test("opens source HTML in a modal without replacing the document preview", asyn
 test("wraps long source HTML lines inside the modal", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("button", { name: "ソースHTMLを表示" }).click();
+  await page.getByRole("button", { name: "View source HTML" }).click();
   const sourceCode = page
-    .getByRole("dialog", { name: "ソースHTML" })
+    .getByRole("dialog", { name: "Source HTML" })
     .locator("pre");
   await sourceCode.evaluate((element) => {
     element.textContent = `  <p data-value="${"x".repeat(400)}">\n    content\n  </p>`;
@@ -297,7 +366,9 @@ test("wraps long source HTML lines inside the modal", async ({ page }) => {
   await expect(sourceCode).toHaveCSS("overflow-wrap", "anywhere");
   await expect
     .poll(() =>
-      sourceCode.evaluate((element) => element.scrollWidth <= element.clientWidth),
+      sourceCode.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
     )
     .toBe(true);
 });
@@ -360,23 +431,23 @@ test("applies theme-aware document styles on desktop and mobile", async ({
   const frame = page.frameLocator("iframe.viewer-document");
   await expect
     .poll(() =>
-      page.locator(".viewer").evaluate((element) =>
-        getComputedStyle(element).backgroundColor,
-      ),
+      page
+        .locator(".viewer")
+        .evaluate((element) => getComputedStyle(element).backgroundColor),
     )
     .toBe("rgb(255, 255, 255)");
   await expect
     .poll(() =>
-      frame.locator("body").evaluate((element) =>
-        getComputedStyle(element).backgroundColor,
-      ),
+      frame
+        .locator("body")
+        .evaluate((element) => getComputedStyle(element).backgroundColor),
     )
     .toBe("rgb(255, 255, 255)");
   await expect
     .poll(() =>
-      frame.locator('aside[data-type="warning"]').evaluate((element) =>
-        getComputedStyle(element).backgroundColor,
-      ),
+      frame
+        .locator('aside[data-type="warning"]')
+        .evaluate((element) => getComputedStyle(element).backgroundColor),
     )
     .toBe("rgb(255, 248, 197)");
   await expect
@@ -389,9 +460,9 @@ test("applies theme-aware document styles on desktop and mobile", async ({
     .toEqual({ display: "inline", width: "16px" });
   await expect
     .poll(() =>
-      frame.locator("#small-canvas").evaluate((element) =>
-        getComputedStyle(element).width,
-      ),
+      frame
+        .locator("#small-canvas")
+        .evaluate((element) => getComputedStyle(element).width),
     )
     .toBe("120px");
 
@@ -401,9 +472,9 @@ test("applies theme-aware document styles on desktop and mobile", async ({
     .click();
   await expect
     .poll(() =>
-      page.locator(".viewer").evaluate((element) =>
-        getComputedStyle(element).backgroundColor,
-      ),
+      page
+        .locator(".viewer")
+        .evaluate((element) => getComputedStyle(element).backgroundColor),
     )
     .toBe("rgb(36, 40, 59)");
   await expect(frame.locator("body")).toHaveCSS(
@@ -418,9 +489,9 @@ test("applies theme-aware document styles on desktop and mobile", async ({
   await page.setViewportSize({ width: 375, height: 700 });
   await expect
     .poll(() =>
-      frame.locator("body").evaluate((element) =>
-        getComputedStyle(element).paddingLeft,
-      ),
+      frame
+        .locator("body")
+        .evaluate((element) => getComputedStyle(element).paddingLeft),
     )
     .toBe("16px");
 });
@@ -519,9 +590,11 @@ test("uses print colors and expands the document frame for printing", async ({
   await expect(frame.locator("details p")).toBeVisible();
   await expect
     .poll(() =>
-      page.locator("iframe.viewer-document").evaluate((element) =>
-        Number.parseFloat((element as HTMLIFrameElement).style.height),
-      ),
+      page
+        .locator("iframe.viewer-document")
+        .evaluate((element) =>
+          Number.parseFloat((element as HTMLIFrameElement).style.height),
+        ),
     )
     .toBeGreaterThan(1_200);
   await page.evaluate(() => dispatchEvent(new Event("afterprint")));
@@ -540,11 +613,15 @@ test("opens a document from its query URL and resolves a nested asset", async ({
   const frame = page.frameLocator("iframe.viewer-document");
   await expect(frame.locator("h1")).toHaveText("Nested document");
   await expect
-    .poll(() => frame.locator("img").evaluate((image) => (image as HTMLImageElement).src))
+    .poll(() =>
+      frame.locator("img").evaluate((image) => (image as HTMLImageElement).src),
+    )
     .toMatch(/\/_content\/assets\/pixel\.svg$/);
   await expect
     .poll(() =>
-      frame.locator("img").evaluate((image) => (image as HTMLImageElement).naturalWidth),
+      frame
+        .locator("img")
+        .evaluate((image) => (image as HTMLImageElement).naturalWidth),
     )
     .toBeGreaterThan(0);
 });
@@ -566,7 +643,11 @@ test("routes sidebar and iframe document links, then restores browser history", 
   await expect(frame.locator("h1")).toHaveText("Overview");
   await expect(page).toHaveURL(/\?doc=overview\.html#details$/);
   await expect
-    .poll(() => frame.locator("body").evaluate((body) => body.ownerDocument.defaultView?.scrollY))
+    .poll(() =>
+      frame
+        .locator("body")
+        .evaluate((body) => body.ownerDocument.defaultView?.scrollY),
+    )
     .toBeGreaterThan(0);
 
   await page.goBack();
@@ -584,6 +665,29 @@ test("routes sidebar and iframe document links, then restores browser history", 
   await expect(frame.locator("h1")).toHaveText("Overview");
 });
 
+test("blocks targeted javascript links inside a document", async ({ page }) => {
+  await page.goto("/");
+  const frame = page.frameLocator("iframe.viewer-document");
+  await expect(frame.locator("h1")).toHaveText("Overview");
+
+  const prevented = await frame.locator("article").evaluate((article) => {
+    const anchor = article.ownerDocument.createElement("a");
+    anchor.href = "javascript:void(0)";
+    anchor.target = "_blank";
+    anchor.textContent = "Unsafe";
+    article.append(anchor);
+    const event = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    });
+    anchor.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+
+  expect(prevented).toBe(true);
+});
+
 test("renders Chart.js and Mermaid when optional integrations are installed", async ({
   page,
 }) => {
@@ -599,15 +703,18 @@ test("renders Chart.js and Mermaid when optional integrations are installed", as
     const visibleCanvasWidths: number[] = [];
     Object.assign(window, { visibleCanvasWidths });
     const sampleCanvasWidth = (): void => {
-      const canvas = frame.contentDocument?.querySelector<HTMLCanvasElement>(
-        "#latency-chart",
-      );
+      const canvas =
+        frame.contentDocument?.querySelector<HTMLCanvasElement>(
+          "#latency-chart",
+        );
       if (
         canvas !== null &&
         canvas !== undefined &&
         getComputedStyle(frame).visibility === "visible"
       ) {
-        visibleCanvasWidths.push(Math.round(canvas.getBoundingClientRect().width));
+        visibleCanvasWidths.push(
+          Math.round(canvas.getBoundingClientRect().width),
+        );
       }
       if (visibleCanvasWidths.length < 20) {
         requestAnimationFrame(sampleCanvasWidth);
@@ -642,22 +749,25 @@ test("renders Chart.js and Mermaid when optional integrations are installed", as
     .poll(() =>
       page.evaluate(() => {
         return (
-          window as Window & { visibleCanvasWidths?: number[] }
-        ).visibleCanvasWidths?.filter((width) => width > 0).length ?? 0;
+          (
+            window as Window & { visibleCanvasWidths?: number[] }
+          ).visibleCanvasWidths?.filter((width) => width > 0).length ?? 0
+        );
       }),
     )
     .toBeGreaterThan(10);
   const canvasWidths = await page.evaluate(() => {
-    const widths = (
-      window as Window & { visibleCanvasWidths?: number[] }
-    ).visibleCanvasWidths ?? [];
+    const widths =
+      (window as Window & { visibleCanvasWidths?: number[] })
+        .visibleCanvasWidths ?? [];
     const canvas = document
       .querySelector<HTMLIFrameElement>("iframe.viewer-document")
       ?.contentDocument?.querySelector<HTMLCanvasElement>("#latency-chart");
     return {
-      final: canvas === null || canvas === undefined
-        ? 0
-        : Math.round(canvas.getBoundingClientRect().width),
+      final:
+        canvas === null || canvas === undefined
+          ? 0
+          : Math.round(canvas.getBoundingClientRect().width),
       visible: [...new Set(widths.filter((width) => width > 0))],
     };
   });
@@ -669,16 +779,17 @@ test("renders Chart.js and Mermaid when optional integrations are installed", as
   await expect(diagramFrame.locator(".mermaid svg")).toBeVisible();
   await expect
     .poll(() =>
-      diagramFrame.locator(".mermaid").evaluate((element) =>
-        getComputedStyle(element).backgroundColor,
-      ),
+      diagramFrame
+        .locator(".mermaid")
+        .evaluate((element) => getComputedStyle(element).backgroundColor),
     )
     .toBe("rgba(0, 0, 0, 0)");
   await expect
     .poll(() =>
-      diagramFrame.locator(".mermaid text.messageText").first().evaluate((element) =>
-        getComputedStyle(element).fill,
-      ),
+      diagramFrame
+        .locator(".mermaid text.messageText")
+        .first()
+        .evaluate((element) => getComputedStyle(element).fill),
     )
     .toBe("rgb(51, 51, 51)");
 });
@@ -690,17 +801,25 @@ test("keeps canvas names and non-JavaScript fallbacks available", async ({
 }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Chart" }).click();
-  const canvas = page.frameLocator("iframe.viewer-document").locator("#latency-chart");
+  const canvas = page
+    .frameLocator("iframe.viewer-document")
+    .locator("#latency-chart");
   expect(await canvas.ariaSnapshot()).toContain("P95 latency chart");
 
-  const fallbackContext = await browser.newContext({ javaScriptEnabled: false });
+  const fallbackContext = await browser.newContext({
+    javaScriptEnabled: false,
+  });
   try {
     const fallbackPage = await fallbackContext.newPage();
     await fallbackPage.goto(`${baseURL}/_content/chart.html`);
     await expect(fallbackPage.getByRole("table")).toContainText("180 ms");
-    await expect(fallbackPage.locator("figcaption")).toContainText("P95 latency");
+    await expect(fallbackPage.locator("figcaption")).toContainText(
+      "P95 latency",
+    );
     await fallbackPage.goto(`${baseURL}/_content/diagram.html`);
-    await expect(fallbackPage.locator("pre.mermaid")).toContainText("Browser->>API: Login");
+    await expect(fallbackPage.locator("pre.mermaid")).toContainText(
+      "Browser->>API: Login",
+    );
   } finally {
     await fallbackContext.close();
   }
@@ -748,15 +867,20 @@ test("uses the operating system theme initially without an Auto option", async (
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
-test("shows an in-viewer error for a missing document and supports the mobile menu", async ({
+test("@smoke shows an in-viewer error for a missing document and supports the mobile menu", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 375, height: 700 });
   await page.goto("/?doc=missing.html");
 
-  await expect(page.locator(".viewer-status")).toContainText("設計書が見つかりません");
+  await expect(page.locator(".viewer-status")).toContainText(
+    "Document not found",
+  );
   await expect(page.locator("iframe.viewer-document")).toBeHidden();
-  await expect(page.locator(".viewer-sidebar")).toHaveAttribute("aria-hidden", "true");
+  await expect(page.locator(".viewer-sidebar")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
   await expect
     .poll(() =>
       page
@@ -765,12 +889,21 @@ test("shows an in-viewer error for a missing document and supports the mobile me
     )
     .toBe(true);
 
-  await page.getByRole("button", { name: "メニュー" }).click();
-  await expect(page.locator(".viewer")).toHaveAttribute("data-sidebar-open", "true");
-  await expect(page.locator(".viewer-sidebar")).not.toHaveAttribute("aria-hidden", "true");
+  await page.getByRole("button", { name: "Menu" }).click();
+  await expect(page.locator(".viewer")).toHaveAttribute(
+    "data-sidebar-open",
+    "true",
+  );
+  await expect(page.locator(".viewer-sidebar")).not.toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
   await page.keyboard.press("Escape");
-  await expect(page.locator(".viewer")).toHaveAttribute("data-sidebar-open", "false");
-  await expect(page.getByRole("button", { name: "メニュー" })).toBeFocused();
+  await expect(page.locator(".viewer")).toHaveAttribute(
+    "data-sidebar-open",
+    "false",
+  );
+  await expect(page.getByRole("button", { name: "Menu" })).toBeFocused();
 });
 
 test("shows a useful message when navigation has no document links", async ({
@@ -786,7 +919,7 @@ test("shows a useful message when navigation has no document links", async ({
   await page.goto("/");
 
   await expect(page.locator(".viewer-status")).toHaveText(
-    "表示可能な設計書がありません",
+    "No documents are available.",
   );
 });
 
@@ -799,6 +932,7 @@ test("reports malformed navigation and disables javascript links", async ({
       body: [
         '<nav aria-label="Test">',
         '<a href="javascript:alert(1)">Unsafe</a>',
+        '<a href="java&#9;script:alert(1)" target="_blank">Obfuscated</a>',
         '<a href="./overview.html">Overview</a>',
         "</nav>",
       ].join(""),
@@ -807,8 +941,19 @@ test("reports malformed navigation and disables javascript links", async ({
   await page.goto("/");
 
   const unsafeLink = page.locator(".viewer-sidebar a", { hasText: "Unsafe" });
-  await expect(unsafeLink).toHaveAttribute("data-spec-html-blocked", "javascript");
+  await expect(unsafeLink).toHaveAttribute(
+    "data-spec-html-blocked",
+    "javascript",
+  );
   await expect(unsafeLink).not.toHaveAttribute("href", /.+/);
+  const obfuscatedLink = page.locator(".viewer-sidebar a", {
+    hasText: "Obfuscated",
+  });
+  await expect(obfuscatedLink).toHaveAttribute(
+    "data-spec-html-blocked",
+    "javascript",
+  );
+  await expect(obfuscatedLink).not.toHaveAttribute("href", /.+/);
 
   await page.unroute("**/_spec-html/navigation");
   await page.route("**/_spec-html/navigation", async (route) => {
@@ -819,7 +964,7 @@ test("reports malformed navigation and disables javascript links", async ({
   });
   await page.reload();
   await expect(page.locator(".viewer-status")).toHaveText(
-    "Navigationを読み込めません",
+    "Navigation could not be loaded",
   );
 });
 
@@ -855,7 +1000,7 @@ test("keeps the latest document after a slow request is aborted", async ({
   await expect(page.locator(".viewer")).toHaveAttribute("data-state", "ready");
   await expect(page.locator("iframe.viewer-document")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "ソースHTMLを表示" }),
+    page.getByRole("button", { name: "View source HTML" }),
   ).toBeVisible();
   await page.waitForTimeout(300);
   await expect(frame.locator("h1")).toHaveText("Overview");
@@ -870,8 +1015,12 @@ test("clears the previous document state when a linked document is missing", asy
 
   await frame.getByRole("link", { name: "Open a missing document" }).click();
 
-  await expect(page.locator(".viewer-status")).toContainText("設計書が見つかりません");
+  await expect(page.locator(".viewer-status")).toContainText(
+    "Document not found",
+  );
   await expect(page.locator(".viewer-header, .viewer-title")).toHaveCount(0);
   await expect(page).toHaveTitle("Spec HTML");
-  await expect(page.locator(".viewer-sidebar a[aria-current='page']")).toHaveCount(0);
+  await expect(
+    page.locator(".viewer-sidebar a[aria-current='page']"),
+  ).toHaveCount(0);
 });

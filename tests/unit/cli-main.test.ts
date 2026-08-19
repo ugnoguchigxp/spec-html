@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   main,
+  runCheck,
+  runFix,
   runFormat,
   runLint,
   waitForShutdownSignal,
@@ -78,6 +80,151 @@ describe("format CLI execution", () => {
   it("returns exit code 2 for a format operational failure", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     await expect(main(["format", join(tmpdir(), "missing-spec-html-project"), "--check"])).resolves.toBe(2);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("spec-html:"));
+  });
+});
+
+describe("fix CLI execution", () => {
+  it("returns one for check changes without writing", async () => {
+    const source = '<article lang="en"><h1>Changed</h1><sectoin>Text</sectoin></article>';
+    const root = await project(source);
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(runFix({ targetPath: root, mode: "check", reporter: "compact" })).resolves.toBe(1);
+    expect(output).toHaveBeenCalledWith(expect.stringContaining("fixes=1"));
+    await expect(readFile(join(root, "document.html"), "utf8")).resolves.toBe(source);
+  });
+
+  it("writes fixes and returns zero without changing script content", async () => {
+    const javascript = 'const teh = "<div>";';
+    const root = await project(
+      `<article lang="en"><h1>Changed</h1><scritp>${javascript}</scritp></article>`,
+    );
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(runFix({ targetPath: root, mode: "write", reporter: "json" })).resolves.toBe(0);
+    await expect(readFile(join(root, "document.html"), "utf8")).resolves.toContain(
+      `<script>${javascript}</script>`,
+    );
+  });
+
+  it("returns one and writes nothing for ambiguous syntax", async () => {
+    const source = '<article lang="en"><h1>X</h1><img src="x alt="X" broken="y></article>';
+    const root = await project(source);
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(runFix({ targetPath: root, mode: "write", reporter: "compact" })).resolves.toBe(1);
+    await expect(readFile(join(root, "document.html"), "utf8")).resolves.toBe(source);
+  });
+
+  it("returns exit code 2 for a fix operational failure", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await expect(main(["fix", join(tmpdir(), "missing-spec-html-project"), "--check"])).resolves.toBe(2);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("spec-html:"));
+  });
+});
+
+describe("check CLI execution", () => {
+  it("checks every stage without writing and reports every result", async () => {
+    const source = '<article lang="en"><h1>Changed</h1><p>Text</p></article>';
+    const root = await project(source);
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(runCheck({
+      targetPath: root,
+      stages: ["fixer", "formatter", "linter"],
+      mode: "check",
+      reporter: "compact",
+      warningsAsErrors: false,
+      maxIssues: 50,
+    })).resolves.toBe(1);
+    expect(output).toHaveBeenCalledWith(expect.stringContaining("== fixer =="));
+    expect(output).toHaveBeenCalledWith(expect.stringContaining("== formatter =="));
+    expect(output).toHaveBeenCalledWith(expect.stringContaining("== linter =="));
+    await expect(readFile(join(root, "document.html"), "utf8")).resolves.toBe(source);
+  });
+
+  it("fixes, formats, and then lints the resulting files", async () => {
+    const root = await project(
+      '<article lang="en"><h1>Changed</h1><sectoin><h2>Section</h2><p>Text</p></sectoin></article>',
+    );
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(runCheck({
+      targetPath: root,
+      stages: ["fixer", "formatter", "linter"],
+      mode: "fix",
+      reporter: "compact",
+      warningsAsErrors: false,
+      maxIssues: 50,
+    })).resolves.toBe(0);
+    const written = await readFile(join(root, "document.html"), "utf8");
+    expect(written).toContain("<section>");
+    expect(written).toContain("\n  <h1>");
+  });
+
+  it("supports formatter and fixer without running the linter", async () => {
+    const root = await project(
+      '<article lang="en"><h1>Changed</h1><sectoin><p>Text</p></sectoin></article>',
+    );
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(runCheck({
+      targetPath: root,
+      stages: ["fixer", "formatter"],
+      mode: "fix",
+      reporter: "json",
+      warningsAsErrors: false,
+      maxIssues: 50,
+    })).resolves.toBe(0);
+    const report = JSON.parse(String(output.mock.calls[0]?.[0])) as {
+      stages: Record<string, unknown>;
+    };
+    expect(Object.keys(report.stages)).toEqual(["fixer", "formatter"]);
+  });
+
+  it("supports linter and fixer without running the formatter", async () => {
+    const root = await project(
+      '<article lang="en"><h1>Changed</h1><sectoin><h2>Section</h2></sectoin></article>',
+    );
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(runCheck({
+      targetPath: root,
+      stages: ["fixer", "linter"],
+      mode: "fix",
+      reporter: "compact",
+      warningsAsErrors: false,
+      maxIssues: 50,
+    })).resolves.toBe(0);
+    expect(output).toHaveBeenCalledWith(expect.stringContaining("== linter =="));
+    expect(output).toHaveBeenCalledWith(expect.not.stringContaining("== formatter =="));
+    const written = await readFile(join(root, "document.html"), "utf8");
+    expect(written).toContain("<section>");
+    expect(written).not.toContain("\n");
+  });
+
+  it("stops fix mode before later stages when the fixer is blocked", async () => {
+    const source = '<article lang="en"><h1>X</h1><img src="x alt="X" broken="y></article>';
+    const root = await project(source);
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(runCheck({
+      targetPath: root,
+      stages: ["fixer", "formatter", "linter"],
+      mode: "fix",
+      reporter: "compact",
+      warningsAsErrors: false,
+      maxIssues: 50,
+    })).resolves.toBe(1);
+    expect(output).toHaveBeenCalledWith(expect.not.stringContaining("== formatter =="));
+    expect(output).toHaveBeenCalledWith(expect.not.stringContaining("== linter =="));
+    await expect(readFile(join(root, "document.html"), "utf8")).resolves.toBe(source);
+  });
+
+  it("returns exit code 2 for a check operational failure", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await expect(main(["check", join(tmpdir(), "missing-spec-html-project")])).resolves.toBe(2);
     expect(error).toHaveBeenCalledWith(expect.stringContaining("spec-html:"));
   });
 });

@@ -28,7 +28,7 @@ await build({
   outfile: resolve(distRoot, "cli.js"),
   platform: "node",
   format: "esm",
-  target: "node24",
+  target: "node20",
   external: ["open", "html-validate", "prettier"],
   banner: { js: "#!/usr/bin/env node" },
   define: {

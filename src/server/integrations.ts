@@ -49,7 +49,8 @@ async function resolveMermaidRoot(): Promise<string | undefined> {
 
 function isMissingOptionalDependency(error: unknown): boolean {
   return (
-    error instanceof Error &&
+    typeof error === "object" &&
+    error !== null &&
     "code" in error &&
     typeof error.code === "string" &&
     (error.code === "MODULE_NOT_FOUND" || error.code === "ENOENT")

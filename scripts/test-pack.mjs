@@ -48,11 +48,47 @@ try {
   if (installedPackageJson.bin?.["spec-html"] !== "dist/cli.js") {
     throw new Error("packしたpackageでspec-html CLIが公開されていません");
   }
+  if (installedPackageJson.private === true) {
+    throw new Error("packしたpackageに公開禁止設定が残っています");
+  }
+  if (
+    installedPackageJson.publishConfig?.access !== "public" ||
+    installedPackageJson.publishConfig?.registry !== "https://registry.npmjs.org/"
+  ) {
+    throw new Error("packしたpackageの公開先設定が不正です");
+  }
   if (installedPackageJson.dependencies?.prettier !== "3.9.6") {
     throw new Error("packしたpackageのPrettier versionが固定されていません");
   }
-  if (!packagedPaths.includes("docs/formatter-implementation-plan.html")) {
-    throw new Error("Formatter実装計画がpackageへ含まれていません");
+  const expectedDocumentation = [
+    "README.md",
+    "README.ja.md",
+    "CONTRIBUTING.md",
+    "CONTRIBUTING.ja.md",
+    "RELEASING.md",
+    "RELEASING.ja.md",
+    "CHANGELOG.md",
+    "docs/authoring.html",
+    "docs/authoring.ja.html",
+    "docs/charts-showcase.html",
+    "docs/mermaid-showcase.html",
+    "assets/LightMode.webp",
+    "assets/darkMode.webp",
+    "assets/source.webp",
+  ];
+  const missingDocumentation = expectedDocumentation.filter(
+    (path) => !packagedPaths.includes(path),
+  );
+  if (missingDocumentation.length > 0) {
+    throw new Error(
+      `公開用documentがpackageに含まれていません: ${missingDocumentation.join(", ")}`,
+    );
+  }
+  if (
+    packagedPaths.includes("docs/charts-showcase.ja.html") ||
+    packagedPaths.includes("docs/mermaid-showcase.ja.html")
+  ) {
+    throw new Error("英語版だけを提供するshowcaseに日本語版が含まれています");
   }
   if (
     installedPackageJson.peerDependenciesMeta?.["chart.js"]?.optional !== true ||
@@ -83,6 +119,35 @@ try {
   );
   await expectExitCode(
     npmCommand,
+    ["exec", "--", "spec-html", "fix", "./fixable", "--check"],
+    temporaryRoot,
+    1,
+  );
+  await run(
+    npmCommand,
+    ["exec", "--", "spec-html", "fix", "./fixable", "--write"],
+    temporaryRoot,
+  );
+  await run(
+    npmCommand,
+    ["exec", "--", "spec-html", "fix", "./fixable", "--check"],
+    temporaryRoot,
+  );
+  const fixedDocument = await readFile(join(temporaryRoot, "fixable", "document.html"), "utf8");
+  if (
+    !fixedDocument.includes('<script>const teh = "<div>";</script>') ||
+    !fixedDocument.includes('onclick="if (teh) run()"')
+  ) {
+    throw new Error("installしたFixerがHTML名だけを修正してJavaScriptを保持していません");
+  }
+  await expectExitCode(
+    npmCommand,
+    ["exec", "--", "spec-html", "fix", "./missing", "--check"],
+    temporaryRoot,
+    2,
+  );
+  await expectExitCode(
+    npmCommand,
     ["exec", "--", "spec-html", "format", "./specs", "--check"],
     temporaryRoot,
     1,
@@ -95,6 +160,11 @@ try {
   await run(
     npmCommand,
     ["exec", "--", "spec-html", "format", "./specs", "--check"],
+    temporaryRoot,
+  );
+  await run(
+    npmCommand,
+    ["exec", "--", "spec-html", "check", "./specs"],
     temporaryRoot,
   );
   await run(
@@ -133,6 +203,8 @@ try {
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
+  viewerProcess.stderr.setEncoding("utf8");
+  viewerProcess.stderr.on("data", (chunk) => process.stderr.write(chunk));
   const origin = await waitForViewerUrl(viewerProcess);
 
   const [shell, navigation, overview, asset, viewer] = await Promise.all([
@@ -196,6 +268,7 @@ async function writeConsumerFixture(root) {
   await mkdir(join(root, "invalid"), { recursive: true });
   await mkdir(join(root, "full"), { recursive: true });
   await mkdir(join(root, "blocked"), { recursive: true });
+  await mkdir(join(root, "fixable"), { recursive: true });
   await Promise.all([
     writeFile(
       join(specsRoot, "overview.html"),
@@ -216,6 +289,10 @@ async function writeConsumerFixture(root) {
     writeFile(
       join(root, "blocked", "document.html"),
       '<html><head><style>body { color: red }</style></head><body><article lang="en"><h1>Blocked</h1></article></body></html>',
+    ),
+    writeFile(
+      join(root, "fixable", "document.html"),
+      '<article lang="en"><h1>Fixable</h1><button onclik="if (teh) run()">Run</button><scritp>const teh = "<div>";</scritp></article>',
     ),
   ]);
 }

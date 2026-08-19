@@ -139,8 +139,11 @@
         </tr>
         <tr>
           <th scope="row">Fixer</th>
-          <td>将来、ruleごとに安全性を証明できるsource editを適用する。</td>
-          <td>初期releaseには実装しない。</td>
+          <td>
+            tag名、attribute名、引用符、閉じtag、閉集合の値、local参照へ安全で一意なsource
+            editを適用する。
+          </td>
+          <td>文章やJavaScriptを修正せず、意味的な要素や本文を生成しない。</td>
         </tr>
         <tr>
           <th scope="row">Linter</th>
@@ -474,21 +477,20 @@
       </tbody>
     </table>
 
-    <h3>6.1 将来Fixerを追加する条件</h3>
+    <h3>6.1 Fixerとの接続条件</h3>
     <p>
-      将来のFixerはFormatter moduleへ直接if文を追加せず、rule
-      ID単位のregistryにする。各fixは、入力のtext、comment、attribute値、node順、local
-      URLを失わないこと、同じ入力から同じeditを返すこと、適用後に対象diagnosticが減り新しいdiagnosticが増えないこと、2回目にeditを返さないことをtestで証明する。
+      FixerはFormatter moduleへif文を追加せず、独立した<code>src/fix</code>
+      moduleで診断種別ごとの修正候補を生成する。各fixは、対象外のtext、comment、JavaScript、node順、local
+      URLを失わないこと、同じ入力から同じeditを返すこと、適用後に対象diagnosticが減ること、2回目にeditを返さないことをtestで証明する。
     </p>
-    <pre><code class="language-typescript">interface FixDefinition {
-  rule: RuleId;
-  safety: &quot;mechanical&quot; | &quot;safe&quot; | &quot;semantic&quot;;
-  createEdits(context: FixContext): readonly TextEdit[] | null;
+    <pre><code class="language-typescript">interface FixCandidate extends AppliedFix {
+  edits: readonly TextEdit[];
+  verifyRule?: string;
 }
 </code></pre>
     <p>
-      <code>semantic</code>はsource
-      editを生成せず、LinterのdiagnosticをLLMへ返すだけにする。<code>div</code>から<code>section</code>への一括置換、単一子wrapperの削除、空element削除は将来もdefault
+      修正候補が複数ある場合はsource
+      editを生成しない。<code>div</code>から<code>section</code>への一括置換、単一子wrapperの削除、空element削除、captionやaltの生成はdefault
       fixへ含めない。
     </p>
   </section>

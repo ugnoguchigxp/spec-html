@@ -5,7 +5,7 @@ export interface ViewerFeatures {
 
 export function createShellHtml(features: ViewerFeatures): string {
   return `<!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">

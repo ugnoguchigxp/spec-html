@@ -4,6 +4,7 @@ export interface StartServerOptions {
   contentRoot: string;
   runtimeRoot: string;
   host: string;
+  allowedHosts?: readonly string[];
   port: number;
   integrations?: OptionalIntegrations;
 }

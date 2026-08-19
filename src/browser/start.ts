@@ -51,13 +51,13 @@ interface DocumentStateResponse {
 }
 
 void initializeViewer().catch((error: unknown) => {
-  console.error("Spec HTMLの初期化に失敗しました", error);
+  console.error("Spec HTML failed to initialize", error);
 });
 
 async function initializeViewer(): Promise<void> {
   const app = document.querySelector<HTMLElement>("#app");
   if (app === null) {
-    throw new Error("Viewerのmount要素が見つかりません");
+    throw new Error("Viewer mount element was not found");
   }
 
   installLiveReload();
@@ -71,9 +71,10 @@ async function initializeViewer(): Promise<void> {
   let sortPreference: SortPreference = "name";
   let sortDirection: SortDirection = "ascending";
   const initialRoute = parseRoute(new URL(window.location.href));
-  let navigationView = initialRoute.kind === "invalid"
-    ? initialRoute.view
-    : initialRoute.route.view;
+  let navigationView =
+    initialRoute.kind === "invalid"
+      ? initialRoute.view
+      : initialRoute.route.view;
   applyThemePreference(document.documentElement, themePreference);
   const elements = createLayout(app);
   updateThemeButtons(elements, themePreference);
@@ -140,7 +141,7 @@ async function initializeViewer(): Promise<void> {
     closeSourceDialog();
     closeDocumentActionsMenu();
     clearDocumentActionStatus();
-    elements.frame.title = "設計書";
+    elements.frame.title = "Document";
     resetDocumentTitle();
     updateActiveNavigation(navigationItems, {
       doc: null,
@@ -159,7 +160,7 @@ async function initializeViewer(): Promise<void> {
     const navigationResponse = await fetch(navigationUrl);
     if (!navigationResponse.ok) {
       throw new Error(
-        `Navigationの取得に失敗しました: HTTP ${navigationResponse.status}`,
+        `Failed to load navigation: HTTP ${navigationResponse.status}`,
       );
     }
     const items = mountNavigation(
@@ -218,7 +219,7 @@ async function initializeViewer(): Promise<void> {
       renderLoadState(elements, {
         kind: "error",
         doc: requestedRoute.doc,
-        message: "文書パスが不正です",
+        message: "Invalid document path",
       });
       return;
     }
@@ -310,7 +311,7 @@ async function initializeViewer(): Promise<void> {
       updateActiveNavigation(navigationItems, route);
       const frameDocument = elements.frame.contentDocument;
       if (frameDocument === null) {
-        throw new Error("iframe documentを取得できません");
+        throw new Error("iframe document is unavailable");
       }
       installFrameLinkHandler(frameDocument, navigate, () => navigationView);
       updateDocumentArchiveButton(elements, archived);
@@ -327,7 +328,7 @@ async function initializeViewer(): Promise<void> {
         doc,
         message: messageForDocumentError(error, doc),
       });
-      console.error("Spec HTML: 設計書を表示できません", error);
+      console.error("Spec HTML: Could not display document", error);
     }
   };
 
@@ -402,19 +403,15 @@ async function initializeViewer(): Promise<void> {
   });
 
   elements.navigationViewButton.addEventListener("click", () => {
-    const requestedView: NavigationView = navigationView === "documents"
-      ? "archive"
-      : "documents";
+    const requestedView: NavigationView =
+      navigationView === "documents" ? "archive" : "documents";
     elements.navigationViewButton.disabled = true;
     void (async () => {
       try {
         const items = await loadNavigation(requestedView);
         const firstItem = items[0];
         if (firstItem === undefined) {
-          await navigate(
-            { doc: null, hash: "", view: requestedView },
-            "push",
-          );
+          await navigate({ doc: null, hash: "", view: requestedView }, "push");
           renderEmptyNavigation(elements, requestedView);
           return;
         }
@@ -427,13 +424,13 @@ async function initializeViewer(): Promise<void> {
           "push",
         );
       } catch (error: unknown) {
-        elements.navigation.textContent = "Navigationを読み込めません";
+        elements.navigation.textContent = "Navigation could not be loaded";
         renderLoadState(elements, {
           kind: "error",
           doc: null,
-          message: "Navigationを読み込めません",
+          message: "Navigation could not be loaded",
         });
-        console.error("Spec HTML: Navigationを読み込めません", error);
+        console.error("Spec HTML: Navigation could not be loaded", error);
       } finally {
         elements.navigationViewButton.disabled = false;
       }
@@ -441,7 +438,10 @@ async function initializeViewer(): Promise<void> {
   });
 
   elements.documentModeButton.addEventListener("click", () => {
-    if (currentDocumentSource === null || elements.root.dataset.state !== "ready") {
+    if (
+      currentDocumentSource === null ||
+      elements.root.dataset.state !== "ready"
+    ) {
       return;
     }
     elements.sourceDialogCode.textContent = currentDocumentSource;
@@ -451,10 +451,7 @@ async function initializeViewer(): Promise<void> {
 
   document.addEventListener("pointerdown", (event) => {
     const target = event.target;
-    if (
-      target instanceof Node &&
-      !elements.documentActions.contains(target)
-    ) {
+    if (target instanceof Node && !elements.documentActions.contains(target)) {
       closeDocumentActionsMenu();
     }
   });
@@ -462,9 +459,8 @@ async function initializeViewer(): Promise<void> {
   for (const preference of ["name", "date"] as const) {
     elements.sortButtons[preference].addEventListener("click", () => {
       if (sortPreference === preference) {
-        sortDirection = sortDirection === "ascending"
-          ? "descending"
-          : "ascending";
+        sortDirection =
+          sortDirection === "ascending" ? "descending" : "ascending";
       } else {
         sortPreference = preference;
         sortDirection = preference === "date" ? "descending" : "ascending";
@@ -481,7 +477,9 @@ async function initializeViewer(): Promise<void> {
     }
     if (detailsOpenedForPrint.length === 0) {
       detailsOpenedForPrint = Array.from(
-        frameDocument.querySelectorAll<HTMLDetailsElement>("details:not([open])"),
+        frameDocument.querySelectorAll<HTMLDetailsElement>(
+          "details:not([open])",
+        ),
       );
       for (const details of detailsOpenedForPrint) {
         details.open = true;
@@ -522,9 +520,8 @@ async function initializeViewer(): Promise<void> {
   window.addEventListener("popstate", () => {
     void (async () => {
       const parsed = parseRoute(new URL(window.location.href));
-      const requestedView = parsed.kind === "invalid"
-        ? parsed.view
-        : parsed.route.view;
+      const requestedView =
+        parsed.kind === "invalid" ? parsed.view : parsed.route.view;
       if (requestedView !== navigationView) {
         await loadNavigation(requestedView);
       }
@@ -540,7 +537,7 @@ async function initializeViewer(): Promise<void> {
         renderLoadState(elements, {
           kind: "error",
           doc: parsed.rawDoc,
-          message: "文書パスが不正です",
+          message: "Invalid document path",
         });
       } else {
         const firstItem = navigationItems[0];
@@ -559,7 +556,10 @@ async function initializeViewer(): Promise<void> {
         }
       }
     })().catch((error: unknown) => {
-      console.error("Spec HTML: 履歴から画面を復元できません", error);
+      console.error(
+        "Spec HTML: Could not restore view from browser history",
+        error,
+      );
     });
   });
 
@@ -576,13 +576,13 @@ async function initializeViewer(): Promise<void> {
     renderLoadState(elements, { kind: "loading", doc: "Navigation" });
     await loadNavigation(navigationView);
   } catch (error: unknown) {
-    elements.navigation.textContent = "Navigationを読み込めません";
+    elements.navigation.textContent = "Navigation could not be loaded";
     renderLoadState(elements, {
       kind: "error",
       doc: null,
-      message: "Navigationを読み込めません",
+      message: "Navigation could not be loaded",
     });
-    console.error("Spec HTML: Navigationを読み込めません", error);
+    console.error("Spec HTML: Navigation could not be loaded", error);
     return;
   }
 
@@ -675,9 +675,7 @@ function updateNavigationViewButton(
   elements.navigationViewButton.textContent = label;
   elements.navigationViewButton.setAttribute(
     "aria-label",
-    view === "documents"
-      ? "Show archived documents"
-      : "Show documents",
+    view === "documents" ? "Show archived documents" : "Show documents",
   );
 }
 
@@ -688,15 +686,16 @@ function renderEmptyNavigation(
   renderLoadState(elements, {
     kind: "error",
     doc: null,
-    message: view === "archive"
-      ? "アーカイブされた設計書がありません"
-      : "表示可能な設計書がありません",
+    message:
+      view === "archive"
+        ? "No archived documents."
+        : "No documents are available.",
   });
 }
 
 function messageForArchiveError(error: unknown, archived: boolean): string {
   console.error(
-    `Spec HTML: 文書を${archived ? "Archive" : "Restore"}できません`,
+    `Spec HTML: Could not ${archived ? "archive" : "restore"} document`,
     error,
   );
   return archived
@@ -718,7 +717,7 @@ async function showInitialRoute(
     renderLoadState(elements, {
       kind: "error",
       doc: parsedRoute.rawDoc,
-      message: "文書パスが不正です",
+      message: "Invalid document path",
     });
     return;
   }
@@ -760,10 +759,6 @@ function installSidebarLinkHandler(
       event.preventDefault();
       return;
     }
-    if (anchor.hasAttribute("target") || anchor.hasAttribute("download")) {
-      return;
-    }
-
     let url: URL;
     try {
       url = new URL(anchor.href, window.location.href);
@@ -772,6 +767,9 @@ function installSidebarLinkHandler(
     }
     if (url.protocol === "javascript:") {
       event.preventDefault();
+      return;
+    }
+    if (anchor.hasAttribute("target") || anchor.hasAttribute("download")) {
       return;
     }
     const doc =
@@ -808,9 +806,6 @@ function installFrameLinkHandler(
     if (anchor === null) {
       return;
     }
-    if (anchor.hasAttribute("target") || anchor.hasAttribute("download")) {
-      return;
-    }
 
     let url: URL;
     try {
@@ -820,6 +815,9 @@ function installFrameLinkHandler(
     }
     if (url.protocol === "javascript:") {
       event.preventDefault();
+      return;
+    }
+    if (anchor.hasAttribute("target") || anchor.hasAttribute("download")) {
       return;
     }
     const doc =
@@ -853,12 +851,12 @@ function isCurrentRequest(
 
 function messageForDocumentError(error: unknown, doc: string): string {
   if (error instanceof DocumentHttpError && error.status === 404) {
-    return `設計書が見つかりません: ${doc}`;
+    return `Document not found: ${doc}`;
   }
   if (error instanceof DocumentHttpError) {
-    return `設計書を取得できません: HTTP ${error.status}。ページを再読み込みしてください`;
+    return `Could not load document: HTTP ${error.status}. Reload the page and try again.`;
   }
-  return "設計書を表示できません";
+  return "Document could not be displayed";
 }
 
 function updateSortButtons(
