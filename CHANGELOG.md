@@ -2,7 +2,7 @@
 
 Notable changes to Spec HTML are recorded here. The project follows [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.1.2 - 2026-08-19
 
 ### Added
 
