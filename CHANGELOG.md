@@ -12,6 +12,7 @@ Notable changes to Spec HTML are recorded here. The project follows [Semantic Ve
 
 ### Fixed
 
+- Packed consumer validation now skips redundant npm lifecycle scripts after the explicit build, avoiding duplicate Vitest worker startup on Windows
 - Markdown conversion now keeps numeric GitHub-compatible heading IDs without treating valid HTML5 IDs as lint errors and gives punctuation-only headings deterministic fallback IDs
 - GFM table alignment now uses viewer CSS classes instead of deprecated HTML `align` attributes
 - GFM tables now receive real captions copied from their nearest preceding Markdown heading

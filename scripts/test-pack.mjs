@@ -28,7 +28,7 @@ let viewerProcess;
 try {
   const packOutput = await run(
     npmCommand,
-    ["pack", "--json", "--silent"],
+    ["pack", "--json", "--silent", "--ignore-scripts"],
     projectRoot,
   );
   const packedFiles = parsePackOutput(packOutput.stdout);
