@@ -7,6 +7,7 @@ import {
   documentFormatFromPath,
   isHtmlDocumentPath,
 } from "../content/document-format.js";
+import { normalizeMigrationTargetDirectory } from "../migrate/selection.js";
 
 export interface CliRunOptions {
   contentRoot: string;
@@ -62,6 +63,7 @@ export type CliMigrateOptions =
       warningsAsErrors: boolean;
       allowLossy?: boolean;
       languageMapPath?: string;
+      targetDirectories?: readonly string[];
     }
   | {
       contentRoot: string;
@@ -135,6 +137,7 @@ function parseMigrateCommand(args: readonly string[], cwd: string): CliCommand {
     parsed.values.finalize !== undefined ||
     parsed.values.lang !== undefined ||
     parsed.values["language-map"] !== undefined ||
+    parsed.values.target !== undefined ||
     parsed.values.reporter !== undefined ||
     parsed.values["warnings-as-errors"] === true ||
     parsed.values["allow-lossy"] === true;
@@ -170,6 +173,15 @@ function parseMigrateCommand(args: readonly string[], cwd: string): CliCommand {
     if (parsed.values.lang === undefined) {
       throw new CliUsageError("Specify --lang");
     }
+    const targetDirectories = (parsed.values.target ?? []).map((target) => {
+      const normalized = normalizeMigrationTargetDirectory(target);
+      if (normalized === null) {
+        throw new CliUsageError(
+          `--target must be a content-root-relative directory: ${target}`,
+        );
+      }
+      return normalized;
+    });
     return {
       kind: "migrate",
       options: {
@@ -184,17 +196,19 @@ function parseMigrateCommand(args: readonly string[], cwd: string): CliCommand {
         ...(parsed.values["language-map"] === undefined
           ? {}
           : { languageMapPath: resolve(cwd, parsed.values["language-map"]) }),
+        ...(targetDirectories.length === 0 ? {} : { targetDirectories }),
       },
     };
   }
   if (
     parsed.values.lang !== undefined ||
     parsed.values["language-map"] !== undefined ||
+    parsed.values.target !== undefined ||
     parsed.values["warnings-as-errors"] === true ||
     parsed.values["allow-lossy"] === true
   ) {
     throw new CliUsageError(
-      "--lang, --language-map, --allow-lossy, and --warnings-as-errors are only valid with --check or --write",
+      "--lang, --language-map, --target, --allow-lossy, and --warnings-as-errors are only valid with --check or --write",
     );
   }
   const migrationId = action === "rollback"
@@ -679,6 +693,7 @@ function parseMigrateArgs(args: string[]) {
       finalize: { type: "string" },
       lang: { type: "string" },
       "language-map": { type: "string" },
+      target: { type: "string", multiple: true },
       reporter: { type: "string" },
       "warnings-as-errors": { type: "boolean" },
       "allow-lossy": { type: "boolean" },

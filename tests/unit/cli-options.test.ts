@@ -241,6 +241,29 @@ describe("parseCliCommand", () => {
         [
           "migrate",
           "docs",
+          "--target",
+          "./architecture/",
+          "--target",
+          "concepts",
+          "--lang",
+          "en",
+          "--check",
+        ],
+        CWD,
+      ),
+    ).toMatchObject({
+      kind: "migrate",
+      options: {
+        action: "check",
+        contentRoot: resolve(CWD, "docs"),
+        targetDirectories: ["architecture", "concepts"],
+      },
+    });
+    expect(
+      parseCliCommand(
+        [
+          "migrate",
+          "docs",
           "--lang",
           "en",
           "--language-map",
@@ -378,7 +401,10 @@ describe("parseCliCommand", () => {
     ["migrate", "--check"],
     ["migrate", "--lang", "en", "--check", "--write"],
     ["migrate", "--rollback", "id", "--lang", "en"],
+    ["migrate", "--rollback", "id", "--target", "concepts"],
     ["migrate", "--finalize", "id", "--warnings-as-errors"],
+    ["migrate", "--check", "--lang", "en", "--target", "../outside"],
+    ["migrate", "--check", "--lang", "en", "--target", "/absolute"],
     ["migrate", "--check", "--lang", "en", "--reporter", "other"],
     ["migrate", "docs", "--help"],
   ])("rejects invalid arguments: %j", (...args: string[]) => {

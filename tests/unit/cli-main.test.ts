@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import {
   access,
   mkdtemp,
+  mkdir,
   readFile,
   realpath,
   rm,
@@ -460,6 +461,51 @@ describe("migrate CLI execution", () => {
       ]),
     ).resolves.toBe(0);
     expect(output).toHaveBeenCalledWith(expect.stringContaining('"language": "ja-JP"'));
+  });
+
+  it("checks only repeated target directories and reports protected Markdown", async () => {
+    const root = await mkdtemp(join(tmpdir(), "spec-html-cli-targets-"));
+    roots.push(root);
+    await Promise.all([
+      mkdir(join(root, "architecture")),
+      mkdir(join(root, "concepts")),
+      mkdir(join(root, "evidence")),
+    ]);
+    await Promise.all([
+      writeFile(join(root, "README.md"), "# Index\n"),
+      writeFile(join(root, "architecture", "overview.md"), "# Architecture\n"),
+      writeFile(join(root, "concepts", "model.md"), "# Model\n"),
+      writeFile(join(root, "evidence", "report.md"), "# Report\n"),
+    ]);
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await expect(
+      main([
+        "migrate",
+        root,
+        "--target",
+        "architecture",
+        "--target",
+        "concepts",
+        "--lang",
+        "en",
+        "--reporter",
+        "json",
+        "--check",
+      ]),
+    ).resolves.toBe(0);
+    expect(output).toHaveBeenCalledWith(
+      expect.stringContaining('"protectedMarkdown": [\n    "README.md"'),
+    );
+    expect(output).toHaveBeenCalledWith(
+      expect.stringContaining('"path": "architecture/overview.md"'),
+    );
+    expect(output).toHaveBeenCalledWith(
+      expect.stringContaining('"path": "concepts/model.md"'),
+    );
+    expect(output).not.toHaveBeenCalledWith(
+      expect.stringContaining('"path": "evidence/report.md"'),
+    );
   });
 
   it("returns exit code 2 for migrate usage errors", async () => {

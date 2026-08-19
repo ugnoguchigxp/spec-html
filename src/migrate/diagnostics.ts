@@ -21,6 +21,9 @@ export function formatMigrationPlanReport(
         mode,
         ready,
         migrationId,
+        targetDirectories: plan.targetDirectories,
+        protectedMarkdown: plan.protectedMarkdown,
+        retainedMarkdown: plan.retainedMarkdown,
         summary: plan.summary,
         issues: plan.issues,
         sources: plan.sources.map((source) => ({
@@ -53,7 +56,7 @@ export function formatMigrationPlanReport(
   }
   const summary = plan.summary;
   lines.push(
-    `summary markdown=${summary.markdown} creates=${summary.creates} captions=${summary.captions} html-rewrites=${summary.htmlRewrites} archives=${summary.archives} parity=${summary.parityMatched}/${summary.markdown} errors=${summary.errors} warnings=${summary.warnings} ready=${String(ready)} input-bytes=${summary.inputBytes} source-bytes=${summary.sourceBytes} output-bytes=${summary.outputBytes} backup-bytes=${summary.backupBytes} required-bytes=${summary.requiredBytes} available-bytes=${summary.availableBytes} max-path-bytes=${summary.maxPathLength}`,
+    `summary markdown=${summary.markdown} creates=${summary.creates} captions=${summary.captions} html-rewrites=${summary.htmlRewrites} archives=${summary.archives} parity=${summary.parityMatched}/${summary.markdown} errors=${summary.errors} warnings=${summary.warnings} ready=${String(ready)} input-bytes=${summary.inputBytes} source-bytes=${summary.sourceBytes} output-bytes=${summary.outputBytes} backup-bytes=${summary.backupBytes} required-bytes=${summary.requiredBytes} available-bytes=${summary.availableBytes} max-path-bytes=${summary.maxPathLength} protected-markdown=${summary.protectedMarkdown} retained-markdown=${summary.retainedMarkdown} targets=${plan.targetDirectories.length === 0 ? "." : plan.targetDirectories.join(",")}`,
   );
   return lines.join("\n");
 }

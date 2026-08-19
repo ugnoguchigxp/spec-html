@@ -1,0 +1,117 @@
+<article lang="ja">
+  <h1>選択的Markdown migration実装計画</h1>
+
+  <section id="decision">
+    <h2>決定</h2>
+    <p>
+      <code>migrate</code
+      >は、OSSで慣例的にMarkdownとして維持する文書を組み込みで保護し、 content
+      root相対の対象directoryをCLIから選択できるようにする。専用manifestは追加しない。
+      対象directoryを省略した場合は、従来どおりcontent root全体から保護文書だけを除いて移行する。
+    </p>
+    <table>
+      <caption>
+        組み込み保護対象
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">basename</th>
+          <th scope="col">扱い</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>README</code></td>
+          <td>常にactive Markdownとして維持する</td>
+        </tr>
+        <tr>
+          <td><code>CONTRIBUTING</code></td>
+          <td>常にactive Markdownとして維持する</td>
+        </tr>
+        <tr>
+          <td><code>CHANGELOG</code></td>
+          <td>常にactive Markdownとして維持する</td>
+        </tr>
+        <tr>
+          <td><code>SECURITY</code></td>
+          <td>常にactive Markdownとして維持する</td>
+        </tr>
+        <tr>
+          <td><code>AGENTS</code></td>
+          <td>常にactive Markdownとして維持する</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      判定は大文字小文字を区別せず、<code>.md</code>と<code>.markdown</code>、および
+      <code>README.ja.md</code
+      >のようなbasename直後のvariantを含む。directory位置には依存しないため、
+      <code>spec/README.md</code>も保護される。
+    </p>
+  </section>
+
+  <section id="cli-contract">
+    <h2>CLI contract</h2>
+    <pre><code>spec-html migrate ./spec --target architecture --target concepts --lang ja --check
+spec-html migrate ./spec --target architecture --target concepts --lang ja --write</code></pre>
+    <ul>
+      <li>
+        <code>--target</code>はcontent
+        root相対のdirectoryであり、複数回指定できる。
+      </li>
+      <li>指定directoryとその子孫にある、保護対象ではないMarkdownだけを移行する。</li>
+      <li>
+        絶対path、<code>..</code>、空segment、backslash、content
+        root外、symbolic link、通常directory以外は拒否する。
+      </li>
+      <li>
+        <code>--target</code
+        >は<code>--check</code>と<code>--write</code>だけで使用できる。
+      </li>
+      <li>
+        rollbackとfinalizeはjournalが対象集合を保持するため、対象directoryの再指定を必要としない。
+      </li>
+    </ul>
+  </section>
+
+  <section id="link-safety">
+    <h2>link安全性</h2>
+    <figure>
+      <pre class="mermaid">
+flowchart TD
+  A[全active documentを探索] --> B{Markdownは保護対象か}
+  B -- yes --> C[active Markdownとして維持]
+  B -- no --> D{target directory内か}
+  D -- no --> C
+  D -- yes --> E[HTML生成とArchive対象]
+  E --> F[virtual post-state lint]
+  C --> F
+  F -- retained Markdownから移行sourceへの参照 --> G[REF003でblock]
+  F -- 参照整合 --> H[write可能]
+      </pre>
+      <figcaption>選択とvirtual post-state検証の流れ</figcaption>
+    </figure>
+    <p>
+      生成HTML内と既存HTML内の通常navigation linkは従来どおり安全に書き換える。
+      保護対象または対象外のMarkdownは編集しない。そのMarkdownからArchive予定sourceへのlinkが残る場合、
+      virtual post-state lintが壊れた参照としてblockする。利用者は対象範囲の見直し、linkの明示更新、
+      または元Markdown維持のいずれかを選ぶ。
+    </p>
+  </section>
+
+  <section id="acceptance">
+    <h2>完了条件</h2>
+    <ol>
+      <li>保護basenameとvariantがtarget内でもArchiveされない。</li>
+      <li>複数targetの和集合だけが生成・Archive対象になる。</li>
+      <li>
+        target外または保護Markdownから移行対象へのlinkが自動編集されず、write前にblockされる。
+      </li>
+      <li>遅れてtarget内へ追加された非保護Markdownをcommit直前に検出して全体rollbackする。</li>
+      <li>
+        保護・target外Markdownを残した状態でも、期待済みdiagnosticを含む最終project lintが一致する。
+      </li>
+      <li>従来のtarget未指定migration、journal、rollback、finalizeが成立する。</li>
+    </ol>
+  </section>
+</article>

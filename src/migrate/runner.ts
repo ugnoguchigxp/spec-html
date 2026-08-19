@@ -41,6 +41,7 @@ import {
   type MigrationJournal,
 } from "./storage.js";
 import { resolveMigrationContentRoot } from "./content-root.js";
+import { isSelectedMigrationMarkdown } from "./selection.js";
 
 export class MigrationBlockedError extends Error {
   override name = "MigrationBlockedError";
@@ -52,6 +53,7 @@ export interface ApplyMigrationOptions {
   readonly warningsAsErrors: boolean;
   readonly allowLossy?: boolean;
   readonly languages?: ReadonlyMap<string, string>;
+  readonly targetDirectories?: readonly string[];
   readonly createId?: () => string;
   readonly operationHook?: (operation: {
     kind: "create" | "replace" | "archive" | "journal";
@@ -82,6 +84,9 @@ export async function applyMigration(
       language: options.language,
       allowLossy: options.allowLossy ?? false,
       ...(options.languages === undefined ? {} : { languages: options.languages }),
+      ...(options.targetDirectories === undefined
+        ? {}
+        : { targetDirectories: options.targetDirectories }),
     });
     if (migrationPlanHasBlockers(plan, options.warningsAsErrors)) {
       return { plan, migrationId: null };
@@ -246,7 +251,11 @@ async function verifyFinalProjectState(
   plan: MigrationPlan,
 ): Promise<void> {
   const activeMarkdown = (await findViewerDocuments(contentRoot))
-    .filter((document) => document.format === "markdown")
+    .filter(
+      (document) =>
+        document.format === "markdown" &&
+        isSelectedMigrationMarkdown(document.path, plan.targetDirectories),
+    )
     .map((document) => document.path);
   if (activeMarkdown.length > 0) {
     throw new Error(

@@ -42,6 +42,7 @@ spec-html convert ./specs/design.md --lang ja --output ./specs/design.html
 spec-html migrate ./specs --lang ja --check
 spec-html migrate ./specs --lang ja --write
 spec-html migrate ./specs --lang ja --language-map ./specs.languages.json --check
+spec-html migrate ./specs --target architecture --target concepts --lang ja --check
 </code></pre>
     <p>
       <code>--output</code
@@ -55,12 +56,17 @@ spec-html migrate ./specs --lang ja --language-map ./specs.languages.json --chec
       errorのままにします。
     </p>
     <p>
-      正本を一括切替する場合は<code>migrate</code>を使います。check
-      modeはfileを変更しません。write modeは同じdirectoryへHTMLを作成し、対象document
-      linkを書き換え、Lintとcontent
+      journal付きで正本を切り替える場合は<code>migrate</code>を使います。content
+      root相対のdirectoryは<code>--target</code>を繰り返して選択でき、省略時はcontent
+      root全体を選択します。check modeはfileを変更しません。write
+      modeは同じdirectoryへHTMLを作成し、対象document linkを書き換え、Lintとcontent
       parityを検証し、全preflight成功後だけMarkdownをArchiveへ移します。変更していない移行全体はmigration
       IDで<code>--rollback</code>できます。HTMLの採用確定後は<code>--finalize</code>で現在の内容を保持し、rollback
       backupだけを削除します。migration管理下のMarkdownはArchiveで閲覧できますが、個別Restoreできません。
+    </p>
+    <p>
+      basenameが<code>README</code>、<code>CONTRIBUTING</code>、<code>CHANGELOG</code>、<code>SECURITY</code>、<code>AGENTS</code>のMarkdownは、<code>README.ja.md</code>のようなvariantを含め常にactiveのまま維持します。選択target外のMarkdownも維持します。維持するMarkdownは自動編集せず、そこから移行対象sourceへのincoming
+      linkがある場合はvirtual post-stateをblockします。
     </p>
     <p>
       raw
@@ -74,16 +80,15 @@ spec-html migrate ./specs --lang ja --language-map ./specs.languages.json --chec
       <p>
         preflightは既存Archive copyと安全でないArchive directoryを拒否し、容量とportable
         path長を確認し、form、download、media属性、CSS、script、data属性に残る非navigation
-        Markdown参照を報告します。write modeはcommit直前にも全documentとlinkを再走査し、active
-        Markdownが残れば移行全体をrollbackします。
+        Markdown参照を報告します。write
+        modeはcommit直前にも全documentとlinkを再走査し、選択された非保護Markdownが残れば移行全体をrollbackします。
       </p>
     </aside>
     <aside>
       <p>
         <code>lint</code
-        >、<code>fix</code>、<code>format</code>、<code>check</code>が処理するのはHTMLだけです。mixed
-        directoryのcheck成功はMarkdown
-        sourceの検査を意味しません。正本切替前に<code>migrate --check</code>でMarkdownからHTMLへのplan全体を検証してください。
+        >はHTMLとMarkdownを検証します。<code>fix</code>と<code>format</code>が変更するのはHTMLだけで、<code>check</code>はlint
+        stageでMarkdownも検証します。正本切替前に<code>migrate --check</code>でMarkdownからHTMLへのplan全体を検証してください。
       </p>
     </aside>
   </section>

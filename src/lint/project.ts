@@ -27,6 +27,10 @@ export interface HtmlProjectDocument {
   readonly source: string;
 }
 
+export interface ProjectSourceDocument extends HtmlProjectDocument {
+  readonly format: "html" | "markdown";
+}
+
 export interface LintProjectSourcesOptions {
   /** Paths that will not exist in the virtual post-operation filesystem. */
   readonly unavailablePaths?: readonly string[];
@@ -47,24 +51,26 @@ export async function lintProject(
       source: await readFile(document.absolutePath, "utf8"),
     })),
   );
-  return lintProjectDocuments(root, sources);
+  return lintProjectDocuments(root, sources, new Set());
 }
 
-/** Lint an explicit post-operation HTML view without requiring files to exist. */
+/** Lint an explicit post-operation document view without requiring files to exist. */
 export async function lintProjectSources(
   contentRoot: string,
-  documents: readonly HtmlProjectDocument[],
+  documents: readonly ProjectSourceDocument[],
   options: LintProjectSourcesOptions = {},
 ): Promise<LintResult> {
   const root = await resolveContentRoot(contentRoot);
-  return lintHtmlProject(root, documents, options);
+  const unavailablePaths = new Set(
+    (options.unavailablePaths ?? []).map(canonicalPathKey),
+  );
+  return lintProjectDocuments(root, documents, unavailablePaths);
 }
 
 async function lintProjectDocuments(
   root: string,
-  documents: readonly (HtmlProjectDocument & {
-    readonly format: "html" | "markdown";
-  })[],
+  documents: readonly ProjectSourceDocument[],
+  unavailablePaths: ReadonlySet<string>,
 ): Promise<LintResult> {
   const diagnostics: LintDiagnostic[] = [];
   const records = new Map<string, DocumentRecord>();
@@ -79,7 +85,12 @@ async function lintProjectDocuments(
   for (const record of records.values()) {
     if (record.facts !== null) {
       diagnostics.push(
-        ...(await resolveReferences(root, records, record.facts, new Set())),
+        ...(await resolveReferences(
+          root,
+          records,
+          record.facts,
+          unavailablePaths,
+        )),
       );
     }
   }
@@ -89,38 +100,6 @@ async function lintProjectDocuments(
     documents.length,
     documents.filter((document) => document.format === "markdown").length,
   );
-}
-
-async function lintHtmlProject(
-  root: string,
-  documents: readonly HtmlProjectDocument[],
-  options: LintProjectSourcesOptions = {},
-): Promise<LintResult> {
-  const diagnostics: LintDiagnostic[] = [];
-  const records = new Map<string, DocumentRecord>();
-  const unavailablePaths = new Set(
-    (options.unavailablePaths ?? []).map(canonicalPathKey),
-  );
-
-  for (const document of documents) {
-    const result = await lintDocument(
-      document.source,
-      document.absolutePath,
-      document.path,
-    );
-    diagnostics.push(...result.diagnostics);
-    records.set(document.path, { facts: result.facts });
-  }
-
-  for (const record of records.values()) {
-    if (record.facts !== null) {
-      diagnostics.push(
-        ...(await resolveReferences(root, records, record.facts, unavailablePaths)),
-      );
-    }
-  }
-
-  return createLintResult(diagnostics, documents.length, 0);
 }
 
 function createLintResult(

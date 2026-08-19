@@ -19,7 +19,7 @@ Viewerと生成した文書は、手元の信頼済み環境で利用します�
 - content directory内のHTML fragmentからnavigationを自動構成
 - `.md`と`.markdown`を直接表示し、navigationへ`MD` badgeを表示
 - 既存fileを上書きせず、1つのMarkdownを整形済みの編集可能なSpec HTML fragmentへ変換
-- active Markdown全件をlink書換え、検証、Archive切替、rollback付きでHTMLへ一括移行
+- 選択したactive MarkdownをOSS定番fileの組み込み保護、link検証、Archive切替、rollback付きでHTMLへ移行
 - content directory内の変更を検知してbrowserを自動reload
 - 文書間の相対リンク、画像、browser historyに対応
 - mobile向けnavigationとkeyboard操作に対応
@@ -139,17 +139,20 @@ npx spec-html convert ./specs/design.md --lang ja --output ./specs/design.html
 
 変換は数字から始まるIDを含むGitHub互換の見出しIDを維持し、GFM tableのcell揃えにはdeprecatedなHTML属性ではなくViewer CSSを使います。tableには直前の見出しtextを実際のcaptionとして複製します。tableより前に見出しがない場合はsemantic lint errorとして、指定したdraftを作成したうえで終了code `1`を返します。
 
-content root全体の正本をMarkdownからHTMLへ切り替える場合は`migrate`を使います。
+選択した文書directoryの正本をMarkdownからHTMLへ切り替える場合は`migrate`を使います。
 
 ```bash
 npx spec-html migrate ./specs --lang ja --check
 npx spec-html migrate ./specs --lang ja --write
 npx spec-html migrate ./specs --lang ja --language-map ./specs.languages.json --check
+npx spec-html migrate ./specs --target architecture --target concepts --lang ja --check
 npx spec-html migrate ./specs --rollback <migration-id>
 npx spec-html migrate ./specs --finalize <migration-id>
 ```
 
-`--check`はcontent rootを変更せず、移行plan全体を検証します。`--write`は同じpreflightを再実行し、active Markdownごとに同じdirectoryのHTMLを新規作成し、生成HTMLと既存HTMLの対象linkを書き換え、構造を含むcontent parityを確認してから、元Markdownを同階層の`.archived`へ移します。大文字小文字とUnicode正規化の差は全OSで同じcanonical出力へ解決します。既存target、既存Archive copy、安全でない`.archived` directory、symbolic linkは上書きしません。reportにはmigration ID、byte見積り、空き容量、portable pathの最大長が含まれます。memory上のplanを有限に保つため、1文書の入力上限は64 MiB、探索した文書集合全体は256 MiBです。
+`--check`はcontent rootを変更せず、移行plan全体を検証します。`--write`は同じpreflightを再実行し、選択されたactive Markdownごとに同じdirectoryのHTMLを新規作成し、生成HTMLと既存HTMLの対象linkを書き換え、構造を含むcontent parityを確認してから、そのMarkdownを同階層の`.archived`へ移します。`--target <directory>`はcontent root相対のdirectoryを選択し、繰り返し指定できます。省略時はcontent root全体を選択します。大文字小文字とUnicode正規化の差は全OSで同じcanonical出力へ解決します。既存target、既存Archive copy、安全でない`.archived` directory、symbolic linkは上書きしません。reportには選択directory、保護・維持するMarkdown、migration ID、byte見積り、空き容量、portable pathの最大長が含まれます。memory上のplanを有限に保つため、1文書の入力上限は64 MiB、探索した文書集合全体は256 MiBです。
+
+basenameが`README`、`CONTRIBUTING`、`CHANGELOG`、`SECURITY`、`AGENTS`のMarkdownは常に維持します。大文字小文字を区別しない`.md`／`.markdown`と、`README.ja.md`のようなvariantを含みます。project専用manifestなしでOSS定番fileと`spec/README.md`のようなcontent root indexを保護します。選択directory外のMarkdownも維持します。
 
 raw HTMLのliteral化と危険URLの除去はlossy operationなので、既定ではmigrationをblockします。診断を確認して許可する場合だけ`--allow-lossy`を指定してください。front matter、footnote、custom heading ID、wiki link／embed、GitHub alert、数式、MDX、directive拡張は、誤って別構文に解釈せず非対応blockerとして位置付きで報告します。fence、inline、indented code内の拡張構文例は通常のcodeとして扱います。既存HTMLのbaseline warningは通常のlint workflowで扱い、migration固有のblockerにはしません。tableとMermaid diagramは同じblock scopeにある先行見出しだけをcaptionに使い、captionを確定できなければmigrationをblockします。
 
@@ -162,11 +165,11 @@ raw HTMLのliteral化と危険URLの除去はlossy operationなので、既定�
 }
 ```
 
-既存HTMLの通常navigation linkは自動書換えします。download、form、media/source属性、`srcset`、meta refresh、CSS、script、`srcdoc`、event handler、SVG link、`data-*`属性のように意味が異なる参照は、elementとattributeを示してplanをblockし、手動確認を求めます。entity encode、root-relative、壊れたlocal URLも移行対象Markdownを指す場合は推測で書き換えずblockします。commit直前には文書集合全体を再走査し、active Markdownが0件であることとproject lint全体を再確認し、途中で状態が変わっていれば移行全体をrollbackします。
+既存HTMLの通常navigation linkは自動書換えします。維持するMarkdownは編集せず、そのMarkdownが退役予定sourceを参照する場合はlinkを書き換えずvirtual post-state lintでplanをblockします。download、form、media/source属性、`srcset`、meta refresh、CSS、script、`srcdoc`、event handler、SVG link、`data-*`属性のように意味が異なる参照は、elementとattributeを示してplanをblockし、手動確認を求めます。entity encode、root-relative、壊れたlocal URLも移行対象Markdownを指す場合は推測で書き換えずblockします。commit直前には文書集合全体を再走査し、選択された非保護Markdownが0件であることと、維持するMarkdownを含むproject lint全体を再確認し、途中で状態が変わっていれば移行全体をrollbackします。
 
 committed migrationまたは復旧可能な未完了migrationが管理するArchive sourceは閲覧できますが個別Restoreできず、MarkdownとHTMLが同時にactiveな正本になることを防ぎます。移行全体を戻す場合は、HTMLが変更されていない間に`--rollback`します。HTMLを編集した場合も、採用確定後に`--finalize`すれば現在のHTMLを保持してrollback backupだけを削除します。finalized migrationはrollbackできません。
 
-`lint`、`fix`、`format`、`check`は引き続きHTMLだけを処理します。mixed directoryで成功してもMarkdown sourceを検査した意味にはなりません。HTML draftへ変換した後は、そのHTMLへ`check`を実行してください。
+`lint`はHTMLとMarkdownを検証し、`check`のlint stageも同様です。`fix`と`format`が変更するのはHTMLだけです。Markdown draftを変換した後は、生成HTMLにも`check`を実行してください。
 
 普段使う場合は利用プロジェクトの`package.json`へ登録します。
 
@@ -285,7 +288,7 @@ spec-html format [path] --check|--write [options]
 spec-html fix [path] --check|--write [options]
 spec-html check [directory] [--fix] [options]
 spec-html convert <input.md> --lang <language-tag> [--output <output.html>]
-spec-html migrate [directory] --lang <language-tag> --check|--write
+spec-html migrate [directory] [--target <directory>...] --lang <language-tag> --check|--write
 spec-html migrate [directory] --rollback <migration-id>
 spec-html migrate [directory] --finalize <migration-id>
 ```

@@ -2,10 +2,12 @@
 
 Notable changes to Spec HTML are recorded here. The project follows [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.1.3 - 2026-08-20
 
 ### Added
 
+- Repeatable `migrate --target <directory>` selection without a project manifest, with built-in protection for README, CONTRIBUTING, CHANGELOG, SECURITY, and AGENTS Markdown variants
+- Virtual post-migration linting for retained Markdown, which blocks incoming links to sources selected for retirement instead of rewriting retained files
 - Markdown linting for a single non-empty H1, local references, unsafe URLs, and Mermaid syntax, with Markdown file counts in project summaries
 - Repeatable 50, 500, and 5,000 document benchmarks for startup, cold and warm navigation, and live reload, with CI budgets for the smaller scales
 - A security policy, private vulnerability reporting guidance, and structured GitHub issue templates

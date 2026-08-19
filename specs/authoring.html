@@ -52,6 +52,7 @@ spec-html convert ./specs/design.md --lang en --output ./specs/design.html
 spec-html migrate ./specs --lang en --check
 spec-html migrate ./specs --lang en --write
 spec-html migrate ./specs --lang en --language-map ./specs.languages.json --check
+spec-html migrate ./specs --target architecture --target concepts --lang en --check
 </code></pre>
     <p>
       Omitting <code>--output</code> writes HTML only to stdout. An explicit
@@ -68,14 +69,24 @@ spec-html migrate ./specs --lang en --language-map ./specs.languages.json --chec
       lint error.
     </p>
     <p>
-      Use <code>migrate</code> for an all-or-nothing source-of-truth switch.
-      Check mode does not write. Write mode creates same-directory HTML files, rewrites mapped
-      document links, verifies lint and content parity, and archives the Markdown only after every
-      preflight passes. The migration ID can restore the unchanged batch with
-      <code>--rollback</code>. Once the HTML is accepted,
-      <code>--finalize</code> keeps its current contents and removes rollback
-      backups. Migration-managed Markdown remains readable in Archive but cannot be restored
-      individually.
+      Use <code>migrate</code> for a journaled source-of-truth switch.
+      Repeat <code>--target</code> to select content-root-relative
+      directories; omitting it selects the whole content root. Check mode does not write. Write mode
+      creates same-directory HTML files, rewrites mapped document links, verifies lint and content
+      parity, and archives the Markdown only after every preflight passes. The migration ID can
+      restore the unchanged batch with <code>--rollback</code>. Once the HTML
+      is accepted, <code>--finalize</code> keeps its current contents and
+      removes rollback backups. Migration-managed Markdown remains readable in Archive but cannot be
+      restored individually.
+    </p>
+    <p>
+      Markdown basename families <code>README</code>,
+      <code>CONTRIBUTING</code>, <code>CHANGELOG</code>,
+      <code>SECURITY</code>, and
+      <code>AGENTS</code> always stay active, including localized variants
+      such as <code>README.ja.md</code>. Markdown outside selected targets is
+      retained as well. Retained Markdown is never rewritten; an incoming link from it to a selected
+      source blocks the virtual post-state instead of being edited automatically.
     </p>
     <p>
       Migration blocks lossy raw HTML or unsafe-URL removal unless
@@ -90,15 +101,16 @@ spec-html migrate ./specs --lang en --language-map ./specs.languages.json --chec
         The preflight rejects existing archive copies and unsafe archive directories, checks
         capacity and portable path length, and reports non-navigation Markdown references in forms,
         downloads, media attributes, CSS, scripts, and data attributes. Write mode also rescans all
-        documents and links immediately before commit and rolls back if active Markdown remains.
+        documents and links immediately before commit and rolls back if selected, non-protected
+        Markdown remains.
       </p>
     </aside>
     <aside>
       <p>
-        The <code>lint</code>,
-        <code>fix</code>, <code>format</code>,
-        and <code>check</code> commands process HTML only. A successful
-        check of a mixed directory does not mean its Markdown source was linted. Use
+        <code>lint</code> validates both HTML and Markdown.
+        <code>fix</code> and
+        <code>format</code> modify HTML only, while
+        <code>check</code> includes Markdown in its lint stage. Use
         <code>migrate --check</code> to validate the complete Markdown-to-HTML plan
         before switching sources of truth.
       </p>

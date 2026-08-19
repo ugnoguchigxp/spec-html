@@ -83,7 +83,7 @@ Convert:
   spec-html convert <input.md> --lang <language-tag> [--output <output.html>]
 
 Migrate:
-  spec-html migrate [directory] --lang <language-tag> --check|--write`;
+  spec-html migrate [directory] [--target <directory>...] --lang <language-tag> --check|--write`;
 
 export const LINT_HELP_TEXT = `Usage: spec-html lint [directory] [options]
 
@@ -144,13 +144,15 @@ Options:
   --finalize <migration-id>    Keep current HTML and remove rollback backups
   --lang <language-tag>        Article language for check/write (required)
   --language-map <json>        Override language tags by Markdown path
+  --target <directory>         Migrate a content-root-relative directory (repeatable)
   --allow-lossy                Explicitly allow removal of raw HTML and unsafe URLs
   --reporter <compact|json>    Report format (default: compact)
   --warnings-as-errors         Treat warnings as blockers for check/write
   --help                       Show this help
 
 The four actions are mutually exclusive. After --write, Markdown moves to the
-migration-managed archive and can only be restored with --rollback.`;
+migration-managed archive and can only be restored with --rollback. README,
+CONTRIBUTING, CHANGELOG, SECURITY, and AGENTS Markdown variants stay active.`;
 
 /** Dispatch a parsed command without an import-time process side effect. */
 export async function main(args: readonly string[]): Promise<number> {
@@ -254,6 +256,9 @@ export async function runMigrate(options: CliMigrateOptions): Promise<number> {
         ? {}
         : { allowLossy: options.allowLossy }),
       ...(languages === undefined ? {} : { languages }),
+      ...(options.targetDirectories === undefined
+        ? {}
+        : { targetDirectories: options.targetDirectories }),
     });
     console.log(
       formatMigrationPlanReport(

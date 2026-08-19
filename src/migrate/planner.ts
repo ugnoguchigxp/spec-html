@@ -17,7 +17,7 @@ import { isPathWithin } from "../shared/path-boundary.js";
 import {
   lintProject,
   lintProjectSources,
-  type HtmlProjectDocument,
+  type ProjectSourceDocument,
 } from "../lint/project.js";
 import {
   compileMarkdown,
@@ -37,6 +37,11 @@ import {
 } from "./links.js";
 import { compareMarkdownWithHtml } from "./parity.js";
 import { resolveMigrationContentRoot } from "./content-root.js";
+import {
+  canonicalizeMigrationTargetDirectories,
+  isProtectedMigrationMarkdown,
+  isSelectedMigrationMarkdown,
+} from "./selection.js";
 
 export type MigrationIssueSeverity = "error" | "warning";
 
@@ -77,6 +82,8 @@ export interface MigrationReplacementPlan {
 
 export interface MigrationPlanSummary {
   readonly markdown: number;
+  readonly protectedMarkdown: number;
+  readonly retainedMarkdown: number;
   readonly creates: number;
   readonly captions: number;
   readonly htmlRewrites: number;
@@ -96,6 +103,9 @@ export interface MigrationPlanSummary {
 export interface MigrationPlan {
   readonly contentRoot: string;
   readonly language: string;
+  readonly targetDirectories: readonly string[];
+  readonly protectedMarkdown: readonly string[];
+  readonly retainedMarkdown: readonly string[];
   readonly mapping: ReadonlyMap<string, string>;
   readonly sources: readonly MigrationSourcePlan[];
   readonly replacements: readonly MigrationReplacementPlan[];
@@ -109,6 +119,7 @@ export interface CreateMigrationPlanOptions {
   readonly language: string;
   readonly allowLossy?: boolean;
   readonly languages?: ReadonlyMap<string, string>;
+  readonly targetDirectories?: readonly string[];
 }
 
 const MAX_DOCUMENT_INPUT_BYTES = 64 * 1024 * 1024;
@@ -119,17 +130,53 @@ export async function createMigrationPlan(
 ): Promise<MigrationPlan> {
   const language = canonicalizeLanguageTag(options.language);
   const contentRoot = await resolveMigrationContentRoot(options.contentRoot);
+  const issues: MigrationIssue[] = [];
+  let targetDirectories: string[] = [];
+  let targetSelectionValid = true;
+  try {
+    targetDirectories = canonicalizeMigrationTargetDirectories(
+      options.targetDirectories ?? [],
+    );
+  } catch (error: unknown) {
+    issues.push(
+      errorIssue("MIG015", `target directoryが不正です: ${messageOf(error)}`),
+    );
+    targetSelectionValid = false;
+  }
+  if (
+    targetSelectionValid &&
+    !(await validateMigrationTargetDirectories(
+      contentRoot,
+      targetDirectories,
+      issues,
+    ))
+  ) {
+    targetSelectionValid = false;
+  }
   const viewerDocuments = await findViewerDocuments(contentRoot);
-  const markdownDocuments = viewerDocuments.filter(
+  const allMarkdownDocuments = viewerDocuments.filter(
     (document) => document.format === "markdown",
+  );
+  const protectedMarkdownDocuments = allMarkdownDocuments.filter((document) =>
+    isProtectedMigrationMarkdown(document.path)
+  );
+  const markdownDocuments = targetSelectionValid
+    ? allMarkdownDocuments.filter((document) =>
+        isSelectedMigrationMarkdown(document.path, targetDirectories)
+      )
+    : [];
+  const selectedMarkdownPaths = new Set(
+    markdownDocuments.map((document) => document.path),
+  );
+  const retainedMarkdownDocuments = allMarkdownDocuments.filter(
+    (document) => !selectedMarkdownPaths.has(document.path),
   );
   const htmlDocuments = viewerDocuments.filter(
     (document) => document.format === "html",
   );
-  const issues: MigrationIssue[] = [];
   const inputSizes = new Map<string, number>();
   const directorySnapshots = new Map<string, string>();
-  let compilationAllowed = true;
+  let compilationAllowed = targetSelectionValid;
   for (const document of viewerDocuments) {
     const stats = await lstat(document.absolutePath);
     if (!stats.isFile() || stats.isSymbolicLink()) {
@@ -426,7 +473,7 @@ export async function createMigrationPlan(
   }
 
   const replacements: MigrationReplacementPlan[] = [];
-  const htmlSources = new Map<string, HtmlProjectDocument>();
+  const virtualSources = new Map<string, ProjectSourceDocument>();
   for (const document of htmlDocuments) {
     if (!compilationAllowed) {
       continue;
@@ -479,10 +526,11 @@ export async function createMigrationPlan(
         column: blocker.column,
       });
     }
-    htmlSources.set(document.path, {
+    virtualSources.set(document.path, {
       path: document.path,
       absolutePath: document.absolutePath,
       source: rewritten.output,
+      format: "html",
     });
     if (rewritten.output !== source) {
       replacements.push({
@@ -501,11 +549,56 @@ export async function createMigrationPlan(
     }
   }
 
+  for (const document of retainedMarkdownDocuments) {
+    if (!compilationAllowed) {
+      continue;
+    }
+    const source = await readUtf8File(document.absolutePath, document.path);
+    const sourceSnapshot = createFileSnapshot(document.absolutePath, source);
+    const directorySnapshot = directorySnapshots.get(document.path);
+    if (
+      directorySnapshot === undefined ||
+      !(await directoryMatches(document.absolutePath, directorySnapshot))
+    ) {
+      issues.push(
+        errorIssue(
+          "MIG014",
+          "plan作成中に入力directoryが変更されました",
+          document.path,
+        ),
+      );
+      continue;
+    }
+    if (
+      !(await fileMatchesSnapshot(
+        document.absolutePath,
+        document.path,
+        sourceSnapshot,
+      ))
+    ) {
+      issues.push(
+        errorIssue(
+          "MIG014",
+          "plan作成中に入力fileが変更されました",
+          document.path,
+        ),
+      );
+      continue;
+    }
+    virtualSources.set(document.path, {
+      path: document.path,
+      absolutePath: document.absolutePath,
+      source,
+      format: "markdown",
+    });
+  }
+
   for (const source of sources) {
-    htmlSources.set(source.outputPath, {
+    virtualSources.set(source.outputPath, {
       path: source.outputPath,
       absolutePath: source.outputAbsolutePath,
       source: source.output,
+      format: "html",
     });
   }
 
@@ -513,7 +606,7 @@ export async function createMigrationPlan(
   if (compilationAllowed) {
     const [baselineLint, virtualLint] = await Promise.all([
       lintProject(contentRoot),
-      lintProjectSources(contentRoot, [...htmlSources.values()], {
+      lintProjectSources(contentRoot, [...virtualSources.values()], {
         unavailablePaths: [...mapping.keys()],
       }),
     ]);
@@ -656,6 +749,8 @@ export async function createMigrationPlan(
   const sortedIssues = [...issues].sort(compareIssues);
   const summary: MigrationPlanSummary = {
     markdown: markdownDocuments.length,
+    protectedMarkdown: protectedMarkdownDocuments.length,
+    retainedMarkdown: retainedMarkdownDocuments.length,
     creates: sources.length,
     captions: sources.reduce(
       (count, source) =>
@@ -683,6 +778,13 @@ export async function createMigrationPlan(
   return {
     contentRoot,
     language,
+    targetDirectories,
+    protectedMarkdown: protectedMarkdownDocuments.map(
+      (document) => document.path,
+    ),
+    retainedMarkdown: retainedMarkdownDocuments.map(
+      (document) => document.path,
+    ),
     mapping,
     sources,
     replacements,
@@ -690,6 +792,47 @@ export async function createMigrationPlan(
     summary,
     expectedDiagnosticKeys,
   };
+}
+
+async function validateMigrationTargetDirectories(
+  contentRoot: string,
+  targetDirectories: readonly string[],
+  issues: MigrationIssue[],
+): Promise<boolean> {
+  let valid = true;
+  for (const target of targetDirectories) {
+    const absolutePath = target === "."
+      ? contentRoot
+      : join(contentRoot, ...target.split("/"));
+    try {
+      const stats = await lstat(absolutePath);
+      const canonicalPath = await realpath(absolutePath);
+      if (
+        !stats.isDirectory() ||
+        stats.isSymbolicLink() ||
+        !isPathWithin(contentRoot, canonicalPath)
+      ) {
+        issues.push(
+          errorIssue(
+            "MIG015",
+            "targetはcontent root内の通常directoryである必要があります",
+            target,
+          ),
+        );
+        valid = false;
+      }
+    } catch (error: unknown) {
+      issues.push(
+        errorIssue(
+          "MIG015",
+          `target directoryを確認できません: ${messageOf(error)}`,
+          target,
+        ),
+      );
+      valid = false;
+    }
+  }
+  return valid;
 }
 
 function atomicTemporaryPath(targetPath: string, tag: string): string {

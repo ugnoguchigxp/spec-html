@@ -15,6 +15,17 @@
     </p>
   </aside>
 
+  <aside aria-labelledby="selective-migration-update">
+    <strong id="selective-migration-update">2026-08-20 update</strong>
+    <p>
+      whole-root前提は後続実装で変更された。<code>README</code>などのOSS定番Markdownは組み込みで保護し、<code>--target</code>でcontent
+      root相対のdirectoryを選択できる。詳細は<a
+        href="./selective-markdown-migration-implementation-plan.html"
+        >選択的Markdown migration実装計画</a
+      >を参照する。本書のparity原因分析は有効だが、全17件を一括退役させることは現在の必須条件ではない。
+    </p>
+  </aside>
+
   <section id="implementation-result">
     <h2>実装結果</h2>
     <aside data-type="success">
@@ -436,7 +447,8 @@ flowchart LR
     </ol>
     <aside data-type="success">
       <p>
-        現時点の運用推奨はMarkdown直接表示である。HTML固有表現が必要な文書だけを個別<code>convert</code>し、生成HTMLの正本化を文書単位で判断する。一括migrationはparity修正後も、repository全体のsource-of-truth変更として別途承認する。
+        現時点の運用推奨はMarkdown直接表示を基本とし、HTML正本化するdirectoryが明確な場合だけ<code>--target</code>で選択migrationすることである。保護・target外Markdownからのincoming
+        linkが残る場合は自動編集せずblockする。選択対象については、Markdownを正本から退役させる判断とArchive運用を引き続き承認する。
       </p>
     </aside>
   </section>

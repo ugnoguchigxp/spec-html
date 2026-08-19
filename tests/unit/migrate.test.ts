@@ -24,6 +24,12 @@ import {
   portableMigrationPathProblem,
 } from "../../src/migrate/planner.js";
 import {
+  canonicalizeMigrationTargetDirectories,
+  isDocumentInMigrationTargets,
+  isProtectedMigrationMarkdown,
+  normalizeMigrationTargetDirectory,
+} from "../../src/migrate/selection.js";
+import {
   applyMigration,
   finalizeMigration,
   MigrationBlockedError,
@@ -129,6 +135,46 @@ describe("portable migration paths", () => {
   });
 });
 
+describe("migration selection", () => {
+  it("protects the built-in OSS Markdown basename families", () => {
+    for (const path of [
+      "README.md",
+      "spec/README.ja.md",
+      "CONTRIBUTING.markdown",
+      "docs/CHANGELOG.next.MD",
+      "SECURITY.md",
+      "nested/AGENTS.md",
+    ]) {
+      expect(isProtectedMigrationMarkdown(path)).toBe(true);
+    }
+    expect(isProtectedMigrationMarkdown("architecture.md")).toBe(false);
+    expect(isProtectedMigrationMarkdown("README.html")).toBe(false);
+    expect(isProtectedMigrationMarkdown("project-readme.md")).toBe(false);
+  });
+
+  it("normalizes and collapses content-root-relative target directories", () => {
+    expect(normalizeMigrationTargetDirectory("./concepts/")).toBe("concepts");
+    expect(normalizeMigrationTargetDirectory("../concepts")).toBeNull();
+    expect(normalizeMigrationTargetDirectory("/concepts")).toBeNull();
+    expect(
+      canonicalizeMigrationTargetDirectories([
+        "concepts/security",
+        "architecture",
+        "concepts",
+        "architecture",
+      ]),
+    ).toEqual(["architecture", "concepts"]);
+    expect(isDocumentInMigrationTargets("concepts/a.md", ["concepts"])).toBe(
+      true,
+    );
+    expect(isDocumentInMigrationTargets("concepts/a.md", ["CONCEPTS"])).toBe(
+      true,
+    );
+    expect(isDocumentInMigrationTargets("conceptual/a.md", ["concepts"]))
+      .toBe(false);
+  });
+});
+
 describe("Markdown migration lifecycle", () => {
   it("plans a lint-clean, content-equivalent migration without writing", async () => {
     const before = await readFile(join(root, "guide.md"), "utf8");
@@ -145,6 +191,178 @@ describe("Markdown migration lifecycle", () => {
     expect(await readFile(join(root, "guide.md"), "utf8")).toBe(before);
     await expect(access(join(root, "guide.html"))).rejects.toThrow();
     await expect(access(join(root, ".spec-html"))).rejects.toThrow();
+  });
+
+  it("keeps protected OSS Markdown active through write and rollback", async () => {
+    const protectedPaths = [
+      "README.md",
+      "CONTRIBUTING.markdown",
+      "CHANGELOG.md",
+      "SECURITY.MD",
+      "nested/AGENTS.ja.md",
+    ];
+    await Promise.all(
+      protectedPaths.map((path) =>
+        writeFile(join(root, path), `# ${path}\n`)
+      ),
+    );
+
+    const migrationId = "20260820T010000000Z-a1b2c3";
+    const result = await applyMigration({
+      contentRoot: root,
+      language: "en",
+      warningsAsErrors: false,
+      createId: () => migrationId,
+    });
+
+    expect(result.plan.summary).toMatchObject({
+      markdown: 2,
+      protectedMarkdown: 5,
+      retainedMarkdown: 5,
+    });
+    expect(result.plan.protectedMarkdown).toHaveLength(protectedPaths.length);
+    expect(result.plan.protectedMarkdown).toEqual(
+      expect.arrayContaining(protectedPaths),
+    );
+    for (const path of protectedPaths) {
+      await expect(readFile(join(root, path), "utf8")).resolves.toContain("#");
+    }
+    await expect(access(join(root, "guide.md"))).rejects.toThrow();
+    await rollbackMigration(root, migrationId);
+    await expect(readFile(join(root, "guide.md"), "utf8")).resolves.toContain(
+      "# Guide",
+    );
+  });
+
+  it("selects the union of repeated target directories", async () => {
+    await Promise.all([
+      mkdir(join(root, "architecture")),
+      mkdir(join(root, "concepts")),
+      mkdir(join(root, "evidence")),
+    ]);
+    await Promise.all([
+      writeFile(join(root, "architecture", "overview.md"), "# Architecture\n"),
+      writeFile(join(root, "concepts", "model.md"), "# Model\n"),
+      writeFile(join(root, "evidence", "report.md"), "# Evidence\n"),
+      writeFile(join(root, "concepts", "README.md"), "# Concepts index\n"),
+    ]);
+
+    const plan = await createMigrationPlan({
+      contentRoot: root,
+      language: "en",
+      targetDirectories: ["concepts", "architecture"],
+    });
+
+    expect(plan.targetDirectories).toEqual(["architecture", "concepts"]);
+    expect(plan.sources.map((source) => source.path)).toEqual([
+      "architecture/overview.md",
+      "concepts/model.md",
+    ]);
+    expect(plan.protectedMarkdown).toContain("concepts/README.md");
+    expect(plan.retainedMarkdown).toEqual(
+      expect.arrayContaining([
+        "concepts/README.md",
+        "evidence/report.md",
+        "guide.md",
+        "nested/other.md",
+      ]),
+    );
+    expect(plan.summary.errors).toBe(0);
+
+    const migrationId = "20260820T013000000Z-a1b2c3";
+    const result = await applyMigration({
+      contentRoot: root,
+      language: "en",
+      warningsAsErrors: false,
+      targetDirectories: ["concepts", "architecture"],
+      createId: () => migrationId,
+    });
+    expect(result.migrationId).toBe(migrationId);
+    await expect(access(join(root, "architecture", "overview.md")))
+      .rejects.toThrow();
+    await expect(readFile(join(root, "architecture", "overview.html"), "utf8"))
+      .resolves.toContain(">Architecture</h1>");
+    await expect(readFile(join(root, "evidence", "report.md"), "utf8"))
+      .resolves.toContain("# Evidence");
+    await expect(readFile(join(root, "concepts", "README.md"), "utf8"))
+      .resolves.toContain("# Concepts index");
+
+    await rollbackMigration(root, migrationId);
+    await expect(readFile(join(root, "architecture", "overview.md"), "utf8"))
+      .resolves.toContain("# Architecture");
+  });
+
+  it("blocks incoming links from retained Markdown without editing them", async () => {
+    await mkdir(join(root, "concepts"));
+    await writeFile(join(root, "concepts", "architecture.md"), "# Architecture\n");
+    const readme = "# Index\n\n[Architecture](./concepts/architecture.md)\n";
+    await writeFile(join(root, "README.md"), readme);
+    const notes = "# Notes\n\n[Architecture](./concepts/architecture.md)\n";
+    await writeFile(join(root, "notes.md"), notes);
+
+    const plan = await createMigrationPlan({
+      contentRoot: root,
+      language: "en",
+      targetDirectories: ["concepts"],
+    });
+
+    expect(plan.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ file: "README.md", code: "REF003" }),
+        expect.objectContaining({ file: "notes.md", code: "REF003" }),
+      ]),
+    );
+    const result = await applyMigration({
+      contentRoot: root,
+      language: "en",
+      warningsAsErrors: false,
+      targetDirectories: ["concepts"],
+    });
+    expect(result.migrationId).toBeNull();
+    await expect(readFile(join(root, "README.md"), "utf8")).resolves.toBe(
+      readme,
+    );
+    await expect(readFile(join(root, "notes.md"), "utf8")).resolves.toBe(notes);
+    await expect(access(join(root, "concepts", "architecture.html")))
+      .rejects.toThrow();
+  });
+
+  it("reports missing and unsafe target directories as blockers", async () => {
+    const missing = await createMigrationPlan({
+      contentRoot: root,
+      language: "en",
+      targetDirectories: ["missing"],
+    });
+    expect(missing.sources).toHaveLength(0);
+    expect(missing.issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "MIG015" })]),
+    );
+
+    const unsafe = await createMigrationPlan({
+      contentRoot: root,
+      language: "en",
+      targetDirectories: ["../outside"],
+    });
+    expect(unsafe.sources).toHaveLength(0);
+    expect(unsafe.issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "MIG015" })]),
+    );
+
+    const external = await mkdtemp(join(tmpdir(), "spec-html-target-external-"));
+    try {
+      await symlink(external, join(root, "linked-target"), "dir");
+      const linked = await createMigrationPlan({
+        contentRoot: root,
+        language: "en",
+        targetDirectories: ["linked-target"],
+      });
+      expect(linked.sources).toHaveLength(0);
+      expect(linked.issues).toEqual(
+        expect.arrayContaining([expect.objectContaining({ code: "MIG015" })]),
+      );
+    } finally {
+      await rm(external, { recursive: true, force: true });
+    }
   });
 
   it("blocks existing targets and ambiguous non-navigation references", async () => {
@@ -655,6 +873,32 @@ Directive
     await expect(readFile(join(root, "guide.md"), "utf8")).resolves.toContain("# Guide");
     await expect(access(join(root, "guide.html"))).rejects.toThrow();
     await expect(readFile(join(root, "late.md"), "utf8")).resolves.toContain("# Late");
+  });
+
+  it("rescans only the selected targets for late Markdown additions", async () => {
+    await mkdir(join(root, "selected"));
+    await writeFile(join(root, "selected", "start.md"), "# Start\n");
+
+    await expect(
+      applyMigration({
+        contentRoot: root,
+        language: "en",
+        warningsAsErrors: false,
+        targetDirectories: ["selected"],
+        createId: () => "20260820T020000000Z-fedcba",
+        operationHook: async ({ kind, phase, index }) => {
+          if (kind === "archive" && phase === "after" && index === 0) {
+            await writeFile(join(root, "selected", "late.md"), "# Late\n");
+          }
+        },
+      }),
+    ).rejects.toThrow("commit直前にactive Markdownが残っています");
+    await expect(readFile(join(root, "selected", "start.md"), "utf8"))
+      .resolves.toContain("# Start");
+    await expect(access(join(root, "selected", "start.html"))).rejects.toThrow();
+    await expect(readFile(join(root, "guide.md"), "utf8")).resolves.toContain(
+      "# Guide",
+    );
   });
 
   it("counts duplicate final diagnostics and rolls back a late lint regression", async () => {
