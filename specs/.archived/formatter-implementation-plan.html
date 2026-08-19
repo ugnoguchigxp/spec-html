@@ -633,10 +633,10 @@ interface ParsedEnvelope {
   <section id="reporting">
     <h2>9. LLM向けreport</h2>
     <h3>9.1 Compact形式</h3>
-    <pre><code class="language-text">docs/architecture.html
+    <pre><code class="language-text">specs/architecture.html
   C document-envelope-removed
   F layout-formatted
-docs/unsafe.html
+specs/unsafe.html
   4:3 E FMT002 unsupported-head-content — headのstyleを本文へ移してから再実行する
 summary files=2 changed=1 unchanged=0 blocked=1 lint-errors=0 lint-warnings=0
 </code></pre>
@@ -661,7 +661,7 @@ summary files=2 changed=1 unchanged=0 blocked=1 lint-errors=0 lint-warnings=0
   },
   &quot;documents&quot;: [
     {
-      &quot;file&quot;: &quot;docs/architecture.html&quot;,
+      &quot;file&quot;: &quot;specs/architecture.html&quot;,
       &quot;status&quot;: &quot;ready&quot;,
       &quot;inputKind&quot;: &quot;document&quot;,
       &quot;changed&quot;: true,
@@ -1049,7 +1049,7 @@ tests/
       </li>
       <li>
         <code>package.json#files</code
-        >へ<code>docs/formatter-implementation-plan.html</code>を追加する。
+        >へ<code>specs/.archived/formatter-implementation-plan.html</code>を追加する。
       </li>
     </ol>
     <p>
@@ -1064,7 +1064,7 @@ tests/
     <p>
       対象:
       <code>docs</code
-      >、<code>examples</code>、<code>README.md</code>、<code>docs/authoring.html</code>、<code>CHANGELOG.md</code>。
+      >、<code>examples</code>、<code>README.md</code>、<code>specs/authoring.html</code>、<code>CHANGELOG.md</code>。
     </p>
     <ol>
       <li>

@@ -56,6 +56,56 @@ describe("lintProject", () => {
     expect(result.summary).toEqual({ files: 2, errors: 0, warnings: 0 });
   });
 
+  it("lints Markdown titles, references, URLs, and Mermaid source", async () => {
+    const root = await createProject();
+    await writeDocument(
+      root,
+      "valid.md",
+      [
+        "# Valid",
+        "",
+        "[Target](target.html#section)",
+        "",
+        "```mermaid",
+        "flowchart LR",
+        "  A --> B",
+        "```",
+      ].join("\n"),
+    );
+    await writeDocument(
+      root,
+      "invalid.md",
+      [
+        "Body without a title.",
+        "",
+        "[Unsafe](javascript:alert(1))",
+        "[Missing](./missing.md)",
+        "",
+        "```mermaid",
+        "flowchart LR",
+        "  A -->",
+        "```",
+      ].join("\n"),
+    );
+    await writeDocument(
+      root,
+      "target.html",
+      '<article lang="en"><h1>Target</h1><section id="section"><h2>Section</h2></section></article>',
+    );
+
+    const result = await lintProject(root);
+
+    expect(result.summary).toMatchObject({ files: 3, markdownFiles: 2 });
+    expect(result.diagnostics.map((diagnostic) => diagnostic.rule).sort()).toEqual([
+      "MD001",
+      "MD002",
+      "MD003",
+      "REF003",
+    ]);
+    expect(result.diagnostics.every((diagnostic) => diagnostic.file === "invalid.md"))
+      .toBe(true);
+  });
+
   it("resolves same-document fragments against the source file", async () => {
     const root = await createProject();
     await writeDocument(

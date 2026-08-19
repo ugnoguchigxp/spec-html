@@ -1,7 +1,8 @@
 import { access, readFile, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { findHtmlDocuments } from "../content/documents.js";
+import { dirname, relative, resolve, sep } from "node:path";
+import { findViewerDocuments } from "../content/documents.js";
+import type { DocumentDiscoveryCache } from "../content/documents.js";
 import {
   createDiagnostic,
   sortAndDedupe,
@@ -13,6 +14,8 @@ import {
   type DocumentFacts,
   type LocalReference,
 } from "./document.js";
+import { lintMarkdownDocument } from "./markdown.js";
+import { isPathWithin } from "../shared/path-boundary.js";
 
 interface DocumentRecord {
   facts: DocumentFacts | null;
@@ -29,18 +32,22 @@ export interface LintProjectSourcesOptions {
   readonly unavailablePaths?: readonly string[];
 }
 
-/** Lint every HTML document in a content root. */
-export async function lintProject(contentRoot: string): Promise<LintResult> {
+/** Lint every HTML and Markdown document in a content root. */
+export async function lintProject(
+  contentRoot: string,
+  discoveryCache?: DocumentDiscoveryCache,
+): Promise<LintResult> {
   const root = await resolveContentRoot(contentRoot);
-  const documents = await findHtmlDocuments(root);
+  const documents = await findViewerDocuments(root, discoveryCache);
   const sources = await Promise.all(
     documents.map(async (document) => ({
       path: document.path,
       absolutePath: document.absolutePath,
+      format: document.format,
       source: await readFile(document.absolutePath, "utf8"),
     })),
   );
-  return lintHtmlProject(root, sources);
+  return lintProjectDocuments(root, sources);
 }
 
 /** Lint an explicit post-operation HTML view without requiring files to exist. */
@@ -51,6 +58,37 @@ export async function lintProjectSources(
 ): Promise<LintResult> {
   const root = await resolveContentRoot(contentRoot);
   return lintHtmlProject(root, documents, options);
+}
+
+async function lintProjectDocuments(
+  root: string,
+  documents: readonly (HtmlProjectDocument & {
+    readonly format: "html" | "markdown";
+  })[],
+): Promise<LintResult> {
+  const diagnostics: LintDiagnostic[] = [];
+  const records = new Map<string, DocumentRecord>();
+
+  for (const document of documents) {
+    const result = document.format === "markdown"
+      ? await lintMarkdownDocument(document.source, document.path)
+      : await lintDocument(document.source, document.absolutePath, document.path);
+    diagnostics.push(...result.diagnostics);
+    records.set(document.path, { facts: result.facts });
+  }
+  for (const record of records.values()) {
+    if (record.facts !== null) {
+      diagnostics.push(
+        ...(await resolveReferences(root, records, record.facts, new Set())),
+      );
+    }
+  }
+
+  return createLintResult(
+    diagnostics,
+    documents.length,
+    documents.filter((document) => document.format === "markdown").length,
+  );
 }
 
 async function lintHtmlProject(
@@ -82,11 +120,20 @@ async function lintHtmlProject(
     }
   }
 
+  return createLintResult(diagnostics, documents.length, 0);
+}
+
+function createLintResult(
+  diagnostics: readonly LintDiagnostic[],
+  files: number,
+  markdownFiles: number,
+): LintResult {
   const sorted = sortAndDedupe(diagnostics);
   return {
     diagnostics: sorted,
     summary: {
-      files: documents.length,
+      files,
+      ...(markdownFiles === 0 ? {} : { markdownFiles }),
       errors: sorted.filter((diagnostic) => diagnostic.severity === "error")
         .length,
       warnings: sorted.filter((diagnostic) => diagnostic.severity === "warning")
@@ -223,7 +270,7 @@ async function resolveReference(
     isHref && pathPart.length === 0
       ? resolve(root, sourceFile)
       : resolve(root, dirname(sourceFile), pathPart || ".");
-  if (!isWithin(root, candidate)) {
+  if (!isPathWithin(root, candidate)) {
     return { kind: "invalid" };
   }
 
@@ -244,7 +291,7 @@ async function resolveReference(
   } catch {
     return { kind: "invalid" };
   }
-  if (!targetStats.isFile() || !isWithin(root, targetPath)) {
+  if (!targetStats.isFile() || !isPathWithin(root, targetPath)) {
     return { kind: "invalid" };
   }
 
@@ -290,14 +337,6 @@ function isValidExternalUrl(value: string): boolean {
   } catch {
     return false;
   }
-}
-
-function isWithin(root: string, target: string): boolean {
-  const path = relative(root, target);
-  return (
-    path.length === 0 ||
-    (!isAbsolute(path) && !path.startsWith(`..${sep}`) && path !== "..")
-  );
 }
 
 function toContentPath(root: string, path: string): string {

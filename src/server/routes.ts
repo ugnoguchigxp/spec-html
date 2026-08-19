@@ -7,10 +7,12 @@ import {
   ARCHIVED_DIRECTORY,
   ContentDocumentNotFoundError,
   DocumentArchiveConflictError,
+} from "../content/archive.js";
+import {
   getDocumentArchiveState,
   MigrationManagedDocumentError,
   setDocumentArchived,
-} from "../content/archive.js";
+} from "../migrate/archive.js";
 import {
   normalizeDocumentPath,
   type NavigationView,
@@ -23,21 +25,27 @@ import {
   validateRequestHost,
   type HostPolicy,
 } from "./host-policy.js";
-import { createNavigationHtml } from "./navigation.js";
+import {
+  createNavigationHtml,
+  type NavigationTitleCache,
+} from "./navigation.js";
 import { createShellHtml } from "./shell.js";
 import {
   InvalidRequestPathError,
+  ResolvedRequestFileChangedError,
   resolveRequestFile,
   sendFile,
 } from "./static-file.js";
+import {
+  CHART_PATH,
+  CONTENT_PREFIX,
+  DOCUMENT_STATE_PATH,
+  LIVE_RELOAD_PATH,
+  MERMAID_PREFIX,
+  NAVIGATION_PATH,
+  RUNTIME_PREFIX,
+} from "../shared/runtime-paths.js";
 
-const CONTENT_PREFIX = "/_content/";
-const RUNTIME_PREFIX = "/_spec-html/";
-const NAVIGATION_PATH = "/_spec-html/navigation";
-const DOCUMENT_STATE_PATH = "/_spec-html/document-state";
-const LIVE_RELOAD_PATH = "/_spec-html/live-reload";
-const CHART_PATH = "/_spec-html/integrations/chart.js";
-const MERMAID_PREFIX = "/_spec-html/integrations/mermaid/";
 const RUNTIME_CACHE_CONTROL = "private, max-age=300";
 
 type RequestHandlerOptions = Pick<
@@ -47,6 +55,7 @@ type RequestHandlerOptions = Pick<
   hostPolicy: HostPolicy;
   liveReload: LiveReload;
   markdownLanguage: string;
+  navigationTitleCache: NavigationTitleCache;
 };
 
 export function createRequestHandler(
@@ -110,6 +119,7 @@ async function handleRequest(
       options.contentRoot,
       url,
       hostValidation.origin,
+      options.hostPolicy.mutationOriginRequired,
     );
     return;
   }
@@ -160,6 +170,7 @@ async function handleRequest(
         new Date(),
         view,
         options.markdownLanguage,
+        options.navigationTitleCache,
       ),
     );
     return;
@@ -216,6 +227,7 @@ async function handleDocumentState(
   contentRoot: string,
   url: URL,
   requestOrigin: string,
+  originRequired: boolean,
 ): Promise<void> {
   if (
     request.method !== "GET" &&
@@ -235,7 +247,7 @@ async function handleDocumentState(
 
   try {
     if (request.method === "PUT") {
-      if (!requestOriginMatches(request, requestOrigin)) {
+      if (!requestOriginMatches(request, requestOrigin, originRequired)) {
         sendText(request, response, 403, "Forbidden");
         return;
       }
@@ -304,6 +316,10 @@ async function sendContentRoute(
   } catch (error: unknown) {
     if (error instanceof InvalidRequestPathError) {
       sendText(request, response, 400, "Bad Request");
+      return;
+    }
+    if (error instanceof ResolvedRequestFileChangedError) {
+      sendText(request, response, 404, "Not Found");
       return;
     }
     throw error;
@@ -399,6 +415,10 @@ async function sendStaticRoute(
   } catch (error: unknown) {
     if (error instanceof InvalidRequestPathError) {
       sendText(request, response, 400, "Bad Request");
+      return;
+    }
+    if (error instanceof ResolvedRequestFileChangedError) {
+      sendText(request, response, 404, "Not Found");
       return;
     }
     throw error;

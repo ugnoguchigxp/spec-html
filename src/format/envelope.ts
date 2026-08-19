@@ -12,6 +12,7 @@ import {
   type TagStartEvent,
 } from "html-validate";
 import { normalizeDetail } from "../lint/diagnostics.js";
+import { messageOf } from "../shared/error-message.js";
 import {
   createFormatProblem,
   sortAndDedupeFormatProblems,
@@ -666,8 +667,4 @@ function attributeSource(
     }
   }
   return source.slice(start, end);
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

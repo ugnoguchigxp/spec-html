@@ -45,7 +45,10 @@
         <tr>
           <th scope="row">相対link、画像、browser history</th>
           <td>対応</td>
-          <td><code>.html</code>と<code>.md</code>を相互に遷移できるようにする。</td>
+          <td>
+            <code>.html</code
+            >と<code>.md</code>を相互に遷移できるようにする。
+          </td>
         </tr>
         <tr>
           <th scope="row">見出しへのfragment link</th>
@@ -65,7 +68,10 @@
         <tr>
           <th scope="row">Mermaid</th>
           <td>限定対応</td>
-          <td><code>mermaid</code>指定のfenced code blockを既存integrationへ接続する。</td>
+          <td>
+            <code>mermaid</code>指定のfenced code
+            blockを既存integrationへ接続する。
+          </td>
         </tr>
         <tr>
           <th scope="row">aside、details、Chart.js、inline script</th>
@@ -88,7 +94,10 @@
       integrationを付けた<code>iframe srcdoc</code>へ挿入する処理である。Markdownを一度HTML
       fragmentへ変換すれば、この後半の処理はそのまま再利用できる。
     </p>
-    <p>一方、次の箇所は現在<code>.html</code>をdocument identityとして扱っている。</p>
+    <p>
+      一方、次の箇所は現在<code>.html</code>をdocument
+      identityとして扱っている。
+    </p>
     <ul>
       <li>content directoryとarchiveからの文書探索</li>
       <li>route、content URL、document stateで使うpath検証</li>
@@ -170,10 +179,11 @@ flowchart LR
     <h3>Document model</h3>
     <ul>
       <li>
-        documentを<code>{ path, absolutePath, format }</code
-        >として扱い、<code>format</code>は<code>html</code>または<code>markdown</code>とする。
+        documentを<code>{ path, absolutePath, format }</code>として扱い、<code>format</code>は<code>html</code>または<code>markdown</code>とする。
       </li>
-      <li>初期対応拡張子は<code>.html</code>、<code>.md</code>、<code>.markdown</code>とする。</li>
+      <li>
+        初期対応拡張子は<code>.html</code>、<code>.md</code>、<code>.markdown</code>とする。
+      </li>
       <li>routeとarchiveのpath検証は許可拡張子を共有し、assetの配信許可とは分離する。</li>
       <li>
         <code>index</code
@@ -301,13 +311,17 @@ flowchart LR
     <pre><code>spec-html convert ./design.md --lang ja
 spec-html convert ./design.md --lang ja --output ./design.html</code></pre>
     <ul>
-      <li><code>--output</code>なしではHTML fragmentだけを標準出力し、fileを書き換えない。</li>
+      <li>
+        <code>--output</code>なしではHTML
+        fragmentだけを標準出力し、fileを書き換えない。
+      </li>
       <li>
         <code>--output</code
         >はMVPでは入力と同じdirectoryの新規<code>.html</code>だけを許可し、既存fileがあれば失敗する。
       </li>
       <li>
-        <code>--lang</code>は必須とし、自動言語判定、暗黙の<code>en</code>、front
+        <code>--lang</code
+        >は必須とし、自動言語判定、暗黙の<code>en</code>、front
         matter依存を避ける。
       </li>
       <li>directory一括変換、上書きoption、watch modeは初期対応しない。</li>
@@ -321,8 +335,9 @@ spec-html convert ./design.md --lang ja --output ./design.html</code></pre>
     <h3>出力contract</h3>
     <ul>
       <li>
-        出力はfull HTML documentではなく、<code>&lt;article lang="…"&gt;</code
-        >を唯一のrootとするSpec HTML fragmentにする。
+        出力はfull HTML
+        documentではなく、<code>&lt;article lang="…"&gt;</code>を唯一のrootとするSpec HTML
+        fragmentにする。
       </li>
       <li>
         CSS、navigation、<code>html</code>、<code>head</code>、<code>body</code>は生成しない。
@@ -397,7 +412,9 @@ spec-html convert ./design.md --lang ja --output ./design.html</code></pre>
       <li>
         一時fileを使い、失敗時にpartial outputを残さないcreate専用のsafe-write処理を追加する。
       </li>
-      <li>既存fileを更新する<code>--force</code>や<code>--overwrite</code>は設けない。</li>
+      <li>
+        既存fileを更新する<code>--force</code>や<code>--overwrite</code>は設けない。
+      </li>
     </ul>
 
     <h3>既存commandとの統合</h3>
@@ -407,9 +424,8 @@ spec-html convert ./design.md --lang ja --output ./design.html</code></pre>
       typoのfixを行わない。生成したHTMLにconverter由来のtypoがあれば実装bugであり、fixerで隠さずtestで防ぐ。
     </p>
     <p>
-      出力後は通常の<code>spec-html check ./specs --fix --warnings-as-errors</code
-      >を使える。変換時のreportは、生成したfile、変換status、HTML lint diagnosticsを区別し、lint
-      errorが残る場合も「draftを生成した」ことが分かるようにする。
+      出力後は通常の<code>spec-html check ./specs --fix --warnings-as-errors</code>を使える。変換時のreportは、生成したfile、変換status、HTML
+      lint diagnosticsを区別し、lint errorが残る場合も「draftを生成した」ことが分かるようにする。
     </p>
 
     <h3>変換機能の受入条件</h3>
@@ -509,7 +525,9 @@ spec-html convert ./design.md --lang ja --output ./design.html</code></pre>
     <h2>Phase 1の受入条件</h2>
     <ul>
       <li>HTMLだけの既存fixtureとbrowser testが変更前と同じ結果になる。</li>
-      <li>同じdirectoryの<code>.html</code>と<code>.md</code>がnavigationへ同時に表示される。</li>
+      <li>
+        同じdirectoryの<code>.html</code>と<code>.md</code>がnavigationへ同時に表示される。
+      </li>
       <li>MarkdownのGFM table、task list、code fence、画像が既存themeで読める。</li>
       <li>MarkdownからHTML、HTMLからMarkdown、Markdown同士の相対linkがViewer内で遷移する。</li>
       <li>重複見出しと日本語見出しを含むfragment linkがreloadとhistory操作後も機能する。</li>

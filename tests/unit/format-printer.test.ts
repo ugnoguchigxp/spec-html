@@ -26,6 +26,29 @@ describe("formatHtml", () => {
     expect(compact).not.toBe(spaced);
   });
 
+  it("preserves inline code contents verbatim while formatting", async () => {
+    const longCode =
+      "bun run scan:profile -- --project-path &lt;repo&gt; --create-project true --profile agent-output --json";
+    const source = `<article lang="en"><h1>Code</h1><p>A<code>${longCode}</code>B <code> alpha  beta </code></p><pre><code>raw
+  block</code></pre></article>`;
+    const output = await format(source);
+
+    expect(output).toContain(`<code>${longCode}</code>`);
+    expect(output).toContain("<code> alpha  beta </code>");
+    expect(output).toContain(`<pre><code>raw
+  block</code></pre>`);
+    await expect(format(output)).resolves.toBe(output);
+  });
+
+  it("protects only the outermost range when code elements are nested", async () => {
+    const nested = "outer <code>inner  value</code> tail";
+    const source = `<article lang="en"><h1>Nested code</h1><p><code>${nested}</code></p></article>`;
+    const output = await format(source);
+
+    expect(output).toContain(`<code>${nested}</code>`);
+    await expect(format(output)).resolves.toBe(output);
+  });
+
   it("preserves raw element contents while formatting surrounding HTML", async () => {
     const source = `<article lang="ja"><h1>Raw</h1><pre>  a
  b</pre><textarea> a
@@ -46,9 +69,12 @@ console.log(value);</script>`);
   });
 
   it("handles source text which already contains the marker prefix", async () => {
-    const source = '<article lang="en"><h1>Marker</h1><pre>SPEC_HTML_FORMAT_RAW_0_0</pre></article>';
+    const source =
+      '<article lang="en"><h1>Marker</h1><p><code>SPEC_HTML_FORMAT_PROTECTED_0_0</code></p><pre>SPEC_HTML_FORMAT_PROTECTED_0_0</pre></article>';
     const output = await format(source);
-    expect(output).toContain("SPEC_HTML_FORMAT_RAW_0_0");
+    expect(output.match(/SPEC_HTML_FORMAT_PROTECTED_0_0/g)).toHaveLength(2);
+    expect(output).not.toContain("SPEC_HTML_FORMAT_PROTECTED_0_1");
+    expect(output).not.toContain("SPEC_HTML_FORMAT_PROTECTED_1_0");
   });
 
   it("removes BOM, normalizes line endings, and ends with one newline", async () => {

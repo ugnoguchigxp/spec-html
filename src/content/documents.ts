@@ -13,6 +13,20 @@ export interface ContentDocument {
   format: DocumentFormat;
 }
 
+/** Reuse one immutable directory snapshot across a composite command. */
+export class DocumentDiscoveryCache {
+  private readonly entries = new Map<string, Promise<readonly ContentDocument[]>>();
+
+  read(contentRoot: string): Promise<readonly ContentDocument[]> {
+    let documents = this.entries.get(contentRoot);
+    if (documents === undefined) {
+      documents = discoverDocuments(contentRoot);
+      this.entries.set(contentRoot, documents);
+    }
+    return documents;
+  }
+}
+
 const IGNORED_DIRECTORIES = new Set(["node_modules"]);
 
 /**
@@ -23,25 +37,42 @@ const IGNORED_DIRECTORIES = new Set(["node_modules"]);
  */
 export async function findViewerDocuments(
   contentRoot: string,
+  cache?: DocumentDiscoveryCache,
 ): Promise<ContentDocument[]> {
   return findDocuments(
     contentRoot,
     new Set<DocumentFormat>(["html", "markdown"]),
+    cache,
   );
 }
 
 export async function findHtmlDocuments(
   contentRoot: string,
+  cache?: DocumentDiscoveryCache,
 ): Promise<ContentDocument[]> {
-  return findDocuments(contentRoot, new Set<DocumentFormat>(["html"]));
+  return findDocuments(
+    contentRoot,
+    new Set<DocumentFormat>(["html"]),
+    cache,
+  );
 }
 
 async function findDocuments(
   contentRoot: string,
   formats: ReadonlySet<DocumentFormat>,
+  cache?: DocumentDiscoveryCache,
+): Promise<ContentDocument[]> {
+  const documents = cache === undefined
+    ? await discoverDocuments(contentRoot)
+    : await cache.read(contentRoot);
+  return documents.filter((document) => formats.has(document.format));
+}
+
+async function discoverDocuments(
+  contentRoot: string,
 ): Promise<ContentDocument[]> {
   const documents: ContentDocument[] = [];
-  await visit(contentRoot, "", formats, documents);
+  await visit(contentRoot, "", documents);
   return documents.sort((left, right) =>
     left.path.localeCompare(right.path, "en"),
   );
@@ -50,7 +81,6 @@ async function findDocuments(
 async function visit(
   directory: string,
   relativeDirectory: string,
-  formats: ReadonlySet<DocumentFormat>,
   documents: ContentDocument[],
 ): Promise<void> {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -68,7 +98,7 @@ async function visit(
 
     if (entry.isDirectory()) {
       if (!IGNORED_DIRECTORIES.has(entry.name)) {
-        await visit(absolutePath, path, formats, documents);
+        await visit(absolutePath, path, documents);
       }
       continue;
     }
@@ -76,7 +106,6 @@ async function visit(
     const format = entry.isFile() ? documentFormatFromPath(entry.name) : null;
     if (
       format !== null &&
-      formats.has(format) &&
       !(format === "html" && entry.name.toLowerCase() === "nav.html")
     ) {
       documents.push({ absolutePath, path, format });

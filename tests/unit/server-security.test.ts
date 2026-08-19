@@ -111,6 +111,30 @@ describe("server request boundary", () => {
     ).resolves.toBe(true);
   });
 
+  it("requires Origin for archive updates on a non-loopback listener", async () => {
+    await runningServer?.close();
+    runningServer = await startServer({
+      contentRoot,
+      runtimeRoot,
+      host: "0.0.0.0",
+      allowedHosts: ["127.0.0.1"],
+      port: 0,
+    });
+
+    const response = await sendRequest(
+      "/_spec-html/document-state?doc=document.html",
+      {
+        method: "PUT",
+        body: JSON.stringify({ archived: true }),
+      },
+    );
+
+    expect(response.status).toBe(403);
+    await expect(
+      getDocumentArchived(contentRoot, "document.html"),
+    ).resolves.toBe(false);
+  });
+
   it("rejects a misleading JSON-prefixed content type without moving the document", async () => {
     const response = await sendRequest(
       "/_spec-html/document-state?doc=document.html",

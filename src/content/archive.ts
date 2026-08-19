@@ -1,13 +1,10 @@
 import { link, lstat, mkdir, readdir, realpath, rmdir, unlink } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { findViewerDocuments, type ContentDocument } from "./documents.js";
 import { normalizeDocumentPath } from "./document-path.js";
 import { documentFormatFromPath } from "./document-format.js";
-import {
-  acquireMigrationLock,
-  findMigrationOwnership,
-  type MigrationOwnership,
-} from "../migrate/storage.js";
+import { acquireContentMutationLock } from "./mutation-lock.js";
+import { isPathWithin } from "../shared/path-boundary.js";
 
 export const ARCHIVED_DIRECTORY = ".archived";
 
@@ -28,31 +25,11 @@ export interface DocumentArchiveDestination {
   readonly archivedPath: string;
 }
 
-export class MigrationManagedDocumentError extends Error {
-  override name = "MigrationManagedDocumentError";
-
-  constructor(
-    readonly documentPath: string,
-    readonly migrationId: string,
-  ) {
-    super(
-      `migration管理下の文書は個別Restoreできません: ${documentPath} (${migrationId})`,
-    );
-  }
-}
-
 const operationQueues = new Map<string, Promise<void>>();
 
 export interface DocumentArchiveSnapshot {
   readonly active: readonly ContentDocument[];
   readonly archived: readonly ContentDocument[];
-}
-
-export interface DocumentArchiveState {
-  readonly archived: boolean;
-  readonly restoreAllowed: boolean;
-  readonly migrationId: string | null;
-  readonly migrationOutputPath: string | null;
 }
 
 export interface SetDocumentArchivedOptions {
@@ -91,21 +68,10 @@ export async function getDocumentArchived(
   contentRoot: string,
   documentPath: string,
 ): Promise<boolean> {
-  return (await getDocumentArchiveState(contentRoot, documentPath)).archived;
-}
-
-export async function getDocumentArchiveState(
-  contentRoot: string,
-  documentPath: string,
-): Promise<DocumentArchiveState> {
   assertDocumentPath(documentPath);
-  return enqueueArchiveOperation(contentRoot, async () => {
-    const archived = await getDocumentArchivedUnlocked(contentRoot, documentPath);
-    const ownership = archived
-      ? await findMigrationOwnership(contentRoot, documentPath)
-      : null;
-    return archiveState(archived, ownership);
-  });
+  return enqueueArchiveOperation(contentRoot, () =>
+    getDocumentArchivedUnlocked(contentRoot, documentPath)
+  );
 }
 
 async function getDocumentArchivedUnlocked(
@@ -138,7 +104,7 @@ export async function setDocumentArchived(
   return enqueueArchiveOperation(contentRoot, async () => {
     const lock = options.migrationOperation === true
       ? null
-      : await acquireMigrationLock(contentRoot);
+      : await acquireContentMutationLock(contentRoot);
     try {
       const currentArchived = await getDocumentArchivedUnlocked(
         contentRoot,
@@ -147,16 +113,6 @@ export async function setDocumentArchived(
       if (currentArchived === archived) {
         return archived;
       }
-      if (!archived && options.migrationOperation !== true) {
-        const ownership = await findMigrationOwnership(contentRoot, documentPath);
-        if (ownership !== null) {
-          throw new MigrationManagedDocumentError(
-            documentPath,
-            ownership.migrationId,
-          );
-        }
-      }
-
       const activePath = join(contentRoot, ...documentPath.split("/"));
       const { archiveDirectory, archivedPath } = archiveDestination(
         contentRoot,
@@ -254,7 +210,7 @@ async function validateArchiveDirectory(
 ): Promise<void> {
   const canonicalRoot = await realpath(contentRoot);
   const canonicalParent = await realpath(dirname(destination.archiveDirectory));
-  if (!isWithin(canonicalRoot, canonicalParent)) {
+  if (!isPathWithin(canonicalRoot, canonicalParent)) {
     throw new DocumentArchiveUnsafeError(
       `Archive parentがcontent root外を参照しています: ${documentPath}`,
     );
@@ -274,7 +230,7 @@ async function validateArchiveDirectory(
     );
   }
   const canonicalArchive = await realpath(destination.archiveDirectory);
-  if (!isWithin(canonicalRoot, canonicalArchive)) {
+  if (!isPathWithin(canonicalRoot, canonicalArchive)) {
     throw new DocumentArchiveUnsafeError(
       `.archivedがcontent root外を参照しています: ${documentPath}`,
     );
@@ -307,12 +263,6 @@ function archiveDestination(
     archiveDirectory,
     archivedPath: join(archiveDirectory, basename(documentPath)),
   };
-}
-
-function isWithin(parent: string, child: string): boolean {
-  const path = relative(parent, child);
-  return path === "" ||
-    (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
 
 async function findDocumentArchiveSnapshotUnlocked(
@@ -448,16 +398,4 @@ function isNotFoundError(error: unknown): boolean {
 
 function isNodeError(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code;
-}
-
-function archiveState(
-  archived: boolean,
-  ownership: MigrationOwnership | null,
-): DocumentArchiveState {
-  return {
-    archived,
-    restoreAllowed: !archived || ownership === null,
-    migrationId: ownership?.migrationId ?? null,
-    migrationOutputPath: ownership?.outputPath ?? null,
-  };
 }

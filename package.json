@@ -34,16 +34,17 @@
     "README.md",
     "README.ja.md",
     "LICENSE",
+    "SECURITY.md",
     "RELEASING.md",
     "RELEASING.ja.md",
     "CHANGELOG.md",
     "CONTRIBUTING.md",
     "CONTRIBUTING.ja.md",
     "assets",
-    "docs/authoring.html",
-    "docs/authoring.ja.html",
-    "docs/mermaid-showcase.html",
-    "docs/charts-showcase.html"
+    "specs/authoring.html",
+    "specs/authoring.ja.html",
+    "specs/mermaid-showcase.html",
+    "specs/charts-showcase.html"
   ],
   "engines": {
     "node": "^20.19.0 || ^22.16.0 || >=24.0.0"
@@ -56,20 +57,22 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:browser": "playwright test",
+    "test:benchmark": "node ./scripts/benchmark.mjs --check",
     "test:pack": "node ./scripts/test-pack.mjs",
+    "benchmark": "node ./scripts/benchmark.mjs",
     "release:check": "node ./scripts/release-check.mjs",
     "fix:check": "node ./dist/cli.js fix ./docs --check && node ./dist/cli.js fix ./examples --check && node ./dist/cli.js fix ./tests/fixtures/browser --check",
     "format:check": "node ./dist/cli.js format ./docs --check && node ./dist/cli.js format ./examples --check && node ./dist/cli.js format ./tests/fixtures/browser --check",
     "lint:docs": "node ./dist/cli.js lint ./docs --warnings-as-errors && node ./dist/cli.js lint ./examples --warnings-as-errors",
     "docs:check": "node ./dist/cli.js check ./docs --warnings-as-errors && node ./dist/cli.js check ./examples --warnings-as-errors && node ./dist/cli.js check ./tests/fixtures/browser --fixer --format",
-    "check": "npm run typecheck && npm run lint && npm run test:coverage && npm run build && npm run docs:check && npm run test:browser && npm run test:pack",
+    "check": "npm run typecheck && npm run lint && npm run test:coverage && npm run build && npm run docs:check && npm run test:benchmark && npm run test:browser && npm run test:pack",
     "prepack": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "github-slugger": "2.0.0",
     "html-validate": "10.17.0",
     "marked": "18.0.10",
-    "open": "^11.0.1",
+    "open": "11.0.1",
     "prettier": "3.9.6"
   },
   "peerDependencies": {
@@ -93,6 +96,7 @@
     "esbuild": "^0.28.2",
     "eslint": "^10.8.1",
     "globals": "^17.11.0",
+    "jsdom": "26.1.0",
     "mermaid": "^11.16.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.67.0",

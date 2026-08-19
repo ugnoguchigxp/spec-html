@@ -29,7 +29,7 @@ await build({
   platform: "node",
   format: "esm",
   target: "node20",
-  external: ["open", "html-validate", "prettier"],
+  external: ["open", "html-validate", "mermaid", "prettier"],
   banner: { js: "#!/usr/bin/env node" },
   define: {
     __SPEC_HTML_VERSION__: JSON.stringify(packageJson.version),
@@ -38,8 +38,11 @@ await build({
 
 await build({
   ...commonOptions,
-  entryPoints: [resolve(sourceRoot, "browser/start.ts")],
-  outfile: resolve(browserDistRoot, "viewer.js"),
+  entryPoints: { viewer: resolve(sourceRoot, "browser/start.ts") },
+  outdir: browserDistRoot,
+  entryNames: "[name]",
+  chunkNames: "chunks/[name]-[hash]",
+  splitting: true,
   platform: "browser",
   format: "esm",
   target: "es2022",

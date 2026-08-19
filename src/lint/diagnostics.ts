@@ -11,6 +11,7 @@ export type RuleId =
   | "TBL001" | "TBL002"
   | "DET001"
   | "INT001" | "INT002" | "INT101"
+  | "MD001" | "MD002" | "MD003"
   | "SEM101";
 
 export interface LintDiagnostic {
@@ -34,7 +35,9 @@ export interface LintSummary {
 
 export interface LintResult {
   diagnostics: LintDiagnostic[];
-  summary: Omit<LintSummary, "displayed" | "omitted">;
+  summary: Omit<LintSummary, "displayed" | "omitted"> & {
+    markdownFiles?: number;
+  };
 }
 
 export function createDiagnostic(
@@ -137,8 +140,14 @@ function display(
 }
 
 function formatSummary(summary: LintSummary): string {
+  const markdown =
+    "markdownFiles" in summary &&
+    typeof summary.markdownFiles === "number" &&
+    summary.markdownFiles > 0
+      ? ` markdown=${summary.markdownFiles}`
+      : "";
   const omitted = summary.omitted > 0
     ? ` displayed=${summary.displayed} omitted=${summary.omitted}`
     : "";
-  return `summary files=${summary.files} errors=${summary.errors} warnings=${summary.warnings}${omitted}`;
+  return `summary files=${summary.files}${markdown} errors=${summary.errors} warnings=${summary.warnings}${omitted}`;
 }

@@ -12,11 +12,11 @@ export function createShellHtml(features: ViewerFeatures): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Spec HTML</title>
-  <link rel="stylesheet" href="/_spec-html/shell.css">
+  <link rel="stylesheet" href="${SHELL_STYLESHEET_PATH}">
 </head>
 <body>
   <div id="app" data-chart-js="${String(features.chartJs)}" data-mermaid="${String(features.mermaid)}" data-markdown-language="${markdownLanguage}"></div>
-  <script type="module" src="/_spec-html/viewer.js"></script>
+  <script type="module" src="${VIEWER_SCRIPT_PATH}"></script>
 </body>
 </html>`;
 }
@@ -24,3 +24,7 @@ export function createShellHtml(features: ViewerFeatures): string {
 function escapeAttribute(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
+import {
+  SHELL_STYLESHEET_PATH,
+  VIEWER_SCRIPT_PATH,
+} from "../shared/runtime-paths.js";

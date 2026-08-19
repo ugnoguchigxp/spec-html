@@ -1,0 +1,862 @@
+<article lang="ja">
+  <h1>Spec HTML 多角プロジェクト評価（0.1.2 / 2026-08-19）</h1>
+
+  <aside data-type="success" aria-labelledby="verdict">
+    <strong id="verdict">総合評価: 75 / 100</strong>
+    <p>
+      核となる実装は0.1系のprojectとしては明確に高水準である。前回評価の<abbr title="最優先"
+        >P0</abbr
+      >
+      blockerであるWindows CI失敗と公開version不一致はいずれも解消し、HEAD
+      <code>0873fd5</code>のCIは6 job全て成功、npm
+      latestは<code>0.1.2</code>でHEADと一致している。
+    </p>
+    <p>
+      減点は機能欠陥ではなく<strong>製品化と運用の周辺</strong>に集中する。実装中核5観点（55点）の達成率は84%だが、周辺6観点（45点）は64%にとどまる。npm公開CLIでありながらCLI出力が日本語固定であること、公開済み3
+      versionにgit tagとGitHub
+      Releaseが存在しないこと、Markdownが検査対象外のまま無報告でgreenになること、性能が未測定であることが主因である。
+    </p>
+  </aside>
+
+  <aside data-type="warning" aria-labelledby="parallel-note">
+    <strong id="parallel-note">同一HEADに対する並行評価</strong>
+    <p>
+      同じHEAD <code>0873fd5</code>を対象に、<a
+        href="./project-evaluation-2026-08-19.html"
+        >もう1件の10観点評価（84 / 100）</a
+      >が並行して作成されている。事実認識は概ね一致しており、差は重み付けだけである。あちらはcommunityを4点に抑えて実装中核を厚く配分し、こちらはDX、release運用、性能を独立観点として周辺に45点を割いている。<a
+        href="#sensitivity"
+        >評点の感度</a
+      >で示すとおり、重みを変えると総点は75から84まで動く。
+    </p>
+  </aside>
+
+  <section id="scope">
+    <h2>評価範囲と実測条件</h2>
+    <p>
+      HEAD <code>0873fd5</code>（working tree
+      clean）に対し、source全件、英日README、authoring guide、release手順、package
+      metadata、test、CI、npm registry、GitHub repository
+      metadataを確認した。加えてlocalで<code>npm run check</code>を完走した。数値は推定ではなく実測値である。大規模directoryのbenchmarkと第三者への聞き取りは範囲外とした。
+    </p>
+    <ul>
+      <li>
+        localの<code>npm run check</code>はNode.js 24.11.1／macOSで終了code
+        0だった。typecheck、lint、coverage、build、文書検査、browser test、packed consumer
+        testを含む。
+      </li>
+      <li>unit／server testは27 files、414 testsが成功した。</li>
+      <li>
+        coverageはstatements 87.67%（3,351/3,822）、branches 81.38%（2,317/2,847）、functions
+        94.31%（647/686）、lines 87.75%（3,282/3,740）で、閾値80%を全て上回った。
+      </li>
+      <li>
+        browser testは32 testsが成功した。Chromium 24件に加えFirefoxとWebKitで<code
+          >@smoke</code
+        >
+        4件ずつを実行している。
+      </li>
+      <li>
+        GitHub Actions run <code>32258669275</code>はNode 24／Ubuntu full
+        check、Node 20.19.0、Node 22.16.0、Bun 1.3.14、macOS Node 24、Windows Node 24.15.0の6
+        job全てが成功した。
+      </li>
+      <li>
+        <code>npm audit</code>はdependency 348件（prod 101、dev 196、optional
+        54）に対し脆弱性0件だった。
+      </li>
+      <li>
+        npm
+        registryは<code>0.1.0</code>、<code>0.1.1</code>、<code>0.1.2</code>を公開し、latestは
+        <code>0.1.2</code
+        >（2026-08-19T13:44Z）でHEADのCI成功より後である。
+      </li>
+      <li>
+        source規模はTypeScript 61 files、13,566行、test
+        6,555行である。実使用の<code>any</code>、
+        <code>@ts-expect-error</code>、TODO／FIXME commentはいずれも0件だった。
+      </li>
+      <li>
+        <code>git tag -l</code>は空で、GitHub Releaseも0件である。repository
+        descriptionとhomepage、topicsはいずれも未設定で、<code>SECURITY.md</code>も存在しない。
+      </li>
+      <li>repositoryは2026-08-18作成、star 0、fork 0、実質1人体制である。</li>
+    </ul>
+  </section>
+
+  <section id="scores">
+    <h2>観点別評点</h2>
+    <p>
+      前回評価は5観点×20点だったが、今回はDX、release運用、性能、communityを独立させた11観点へ細分した。総点が前回の82から75へ下がるのは劣化ではなく、前回1観点に束ねていた弱点を個別に重み付けした結果である。
+    </p>
+    <table>
+      <caption>
+        11観点の評点と満点
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">観点</th>
+          <th scope="col">評点</th>
+          <th scope="col">達成率</th>
+          <th scope="col">判断根拠</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">製品価値と位置付け</th>
+          <td>9 / 10</td>
+          <td>90%</td>
+          <td>
+            「AI生成の仕様書をlocalで読む」という狭く明確なniche
+            に絞り、既存Markdownからの段階移行導線（preview→<code>convert</code>→<code>migrate</code>）まで揃えている。非目標が明文化され、機能追加の境界が保たれている。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">architectureと設計</th>
+          <td>8 / 11</td>
+          <td>73%</td>
+          <td>
+            層構造は概ね一方向で循環依存はないが、<code>content</code>から<code>migrate</code>への層逆転が1件あり、500行超fileが9件に集中している。HTTP
+            path定数も3 moduleに重複する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">実装品質と型安全性</th>
+          <td>9 / 10</td>
+          <td>90%</td>
+          <td>
+            <code>strict</code
+            >に加え<code>noUncheckedIndexedAccess</code>と<code>exactOptionalPropertyTypes</code>を有効化し、<code>any</code>、抑止comment、TODOが0件である。utilityの重複が減点要因である。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">securityとdata安全性</th>
+          <td>10 / 12</td>
+          <td>83%</td>
+          <td>
+            path正規化とrealpath二段検証、loopback既定のHost policy、atomic write、migration
+            journalとlockが堅い。非loopback公開時のPUT保護とTOCTOUが残る。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">testと品質保証</th>
+          <td>10 / 12</td>
+          <td>83%</td>
+          <td>
+            unit／server／browser／packed consumerの4層でlines
+            87.75%を確保している。<code>src/browser</code>はunit
+            coverage対象外で、966行のViewer起動処理がE2Eのみに依存する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">CIとruntime互換性</th>
+          <td>7 / 9</td>
+          <td>78%</td>
+          <td>
+            Node 3 version、Bun、Ubuntu／macOS／Windows、browser 3
+            engineをmatrix検証し全green。publishは手動で、provenanceとrelease
+            workflowがない。WindowsはNode 24.15.0固定である。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">文書</th>
+          <td>7 / 9</td>
+          <td>78%</td>
+          <td>
+            英日README、authoring
+            guide、showcase、CONTRIBUTING、RELEASING、設計spec群が揃う。<code>--reporter</code>等のoption、終了code、既定directoryが未記載である。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">開発者体験と国際化</th>
+          <td>5 / 8</td>
+          <td>63%</td>
+          <td>
+            README英語版とViewer UIは英語だが、CLI help、usage
+            error、lint診断は日本語固定である。npm公開CLIとして言語方針が分裂している。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">release運用と発見性</th>
+          <td>4 / 8</td>
+          <td>50%</td>
+          <td>
+            <code>release:check</code
+            >、<code>prepack</code>、packed consumer
+            testは有効だが、公開済み3 versionのtagとGitHub Releaseがなく、repository
+            descriptionとtopicsも空である。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">性能と拡張性</th>
+          <td>4 / 7</td>
+          <td>57%</td>
+          <td>
+            同期I/Oは0件で非同期に統一されている。一方navigationがrequestごとに全Markdownを再compileし、benchmarkと検索indexがない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">communityと持続性</th>
+          <td>2 / 4</td>
+          <td>50%</td>
+          <td>
+            MIT licenseとCONTRIBUTING、Dependabotは整っている。一方作成2日目、star
+            0、単独maintainerで、<code>SECURITY.md</code>とissue
+            templateがない。
+          </td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <th scope="row">合計</th>
+          <td>75 / 100</td>
+          <td>75%</td>
+          <td>核となる実装は堅い。残る課題は製品化と運用の周辺に偏っている。</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <figure>
+      <canvas
+        id="evaluation-radar"
+        width="760"
+        height="440"
+        role="img"
+        aria-label="11観点の達成率レーダーチャート"
+        >11観点の達成率。製品価値90%、architecture 73%、実装品質90%、security 83%、test
+        83%、CI互換性78%、文書78%、DXと国際化63%、release運用50%、性能57%、community 50%。</canvas
+      >
+      <figcaption>
+        達成率は観点ごとの評点を満点で割った値である。実装中核が高く、製品化の周辺が低い非対称なprofileを示す。正確な値は直前の表に記載している。
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="sensitivity">
+    <h2>評点の感度</h2>
+    <p>
+      この
+      projectの評価は<strong>重み付け次第で大きく動く</strong>。弱点が周辺観点に偏っているため、実装中核を重視するrubricでは高く、製品化を重視するrubricでは低く出る。総点だけを比べても意味が薄いので、内訳で示す。
+    </p>
+    <table>
+      <caption>
+        観点群ごとの達成率
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">観点群</th>
+          <th scope="col">構成観点</th>
+          <th scope="col">評点</th>
+          <th scope="col">達成率</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">実装中核</th>
+          <td>製品価値、architecture、実装品質、security、test</td>
+          <td>46 / 55</td>
+          <td>84%</td>
+        </tr>
+        <tr>
+          <th scope="row">製品化と運用</th>
+          <td>CI互換性、文書、DXと国際化、release運用、性能、community</td>
+          <td>29 / 45</td>
+          <td>64%</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      つまり「codeとして信頼できるか」には84%相当の答えが出るが、「他人が見つけて長く使える製品か」には64%相当しか出ていない。周辺観点の重みを小さく取れば総点は84前後まで上がるため、<strong
+        >75という数字よりも、この20 pointの乖離が本評価の要点である</strong
+      >。
+    </p>
+  </section>
+
+  <section id="delta">
+    <h2>前回評価からの変化</h2>
+    <p>
+      release前の時点評価が挙げた11件の指摘について、現状を照合した。P0 2件はいずれも解消している。
+    </p>
+    <table>
+      <caption>
+        前回指摘の解消状況
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">前回指摘</th>
+          <th scope="col">優先度</th>
+          <th scope="col">現状</th>
+          <th scope="col">確認根拠</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Windows CIをgreenにする</th>
+          <td>P0</td>
+          <td>解消</td>
+          <td>
+            Windowsを Node 24.15.0 へpinし、upstream issue番号をworkflow
+            commentに記録した。HEADのCIは6 job全て成功である。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">公開versionとsourceを一致させる</th>
+          <td>P0</td>
+          <td>解消</td>
+          <td>
+            npm
+            latestは<code>0.1.2</code>でHEADの<code>package.json</code>と一致し、CHANGELOGに3
+            versionの日付が入っている。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">READMEのNode要件矛盾</th>
+          <td>P1</td>
+          <td>解消</td>
+          <td>READMEのNode要件記述は「20.19+、22.16+、24+」の1箇所のみで、CI matrixと一致する。</td>
+        </tr>
+        <tr>
+          <th scope="row">npm検索metadataの更新</th>
+          <td>P1</td>
+          <td>解消</td>
+          <td>
+            <code>description</code
+            >がMarkdownを含み、<code>keywords</code>に<code
+              >markdown</code
+            >
+            と<code>conversion</code>が入った。ただしGitHub側のdescriptionは空のままである。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">文書単位のlanguage metadata</th>
+          <td>P2</td>
+          <td>解消</td>
+          <td>
+            <code>--language-map</code>でMarkdown
+            pathごとの言語tagを上書きでき、JSON検証も実装済みである。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">既存Markdown向けzero-migration quick start</th>
+          <td>P1</td>
+          <td>一部</td>
+          <td>
+            <code>migrate</code
+            >導線がREADMEへ追加されたが、positional省略時の既定<code
+              >./specs</code
+            >
+            は依然として未記載である。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Markdownを無検査でgreenにしない</th>
+          <td>P1</td>
+          <td>未対応</td>
+          <td>
+            <code>src/lint/project.ts</code>は<code
+              >findHtmlDocuments</code
+            >
+            のみを使い、Markdownを対象外にする。<code>markdown-skipped=N</code>
+            相当の出力もMarkdown lintも存在しない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Markdown compilerのlazy-load</th>
+          <td>P2</td>
+          <td>未対応</td>
+          <td>
+            <code>dist/browser/viewer.js</code>は119,128
+            bytesで、HTMLのみ利用でもcompilerを取得する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">navigation titleのparse cache</th>
+          <td>P2</td>
+          <td>未対応</td>
+          <td>
+            <code>src/server/navigation.ts</code
+            >がrequestごとに全Markdownを<code>compileMarkdown</code>する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">英語利用者向けCLI体験の統一</th>
+          <td>P2</td>
+          <td>未対応</td>
+          <td>
+            <code>HELP_TEXT</code
+            >、<code>CliUsageError</code>、lint rule messageはすべて日本語である。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">検索と規模別benchmark</th>
+          <td>P3</td>
+          <td>未対応</td>
+          <td>benchmark scriptと性能回帰testが存在しない。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="strengths">
+    <h2>強み</h2>
+    <ol>
+      <li>
+        <strong>書込安全性が製品水準である。</strong>
+        digest snapshot照合、temp fileからのatomic replace、hard linkによるcreate-only公開、symbolic
+        link拒否を全書込経路で共有する。<code>migrate</code>はさらにcross-process
+        lock、journal状態機械、失敗時rollbackを備える。
+      </li>
+      <li>
+        <strong>filesystem境界の防御が一貫している。</strong>
+        HTTP
+        pathをsegment単位で検証し、<code>..</code>、NUL、backslash、dotfileを拒否したうえで
+        <code>realpath</code>後にroot内かを再確認する。content
+        rootを信頼境界と明示し、symlinkを追跡しない。
+      </li>
+      <li>
+        <strong>検証が実利用に近い。</strong>
+        unitだけでなくHTTP統合、Playwrightによる3 engine、そして<code
+          >npm pack</code
+        >
+        後のconsumer projectでCLI全体をsmokeする。release品質の安全網として機能している。
+      </li>
+      <li>
+        <strong>型のdisciplineが効いている。</strong>
+        <code>strict</code
+        >に3種の追加厳格化を加え、<code>any</code>、<code>@ts-expect-error</code>、
+        TODO commentを0件に保っている。型assertionもmarked
+        token、DOM、動的JSONという外部境界に限定されている。
+      </li>
+      <li>
+        <strong>互換性を宣言ではなくmatrixで担保している。</strong>
+        Node 3 version、Bun、3 OSを常時検証し、Windowsのpin理由はupstream
+        issue番号付きで記録される。
+      </li>
+      <li>
+        <strong>設計判断が追跡可能である。</strong>
+        非目標、risk、rollback、release gateがSpec HTML文書として<code
+          >specs/</code
+        >
+        に保存され、機能追加の経緯を後から辿れる。
+      </li>
+    </ol>
+  </section>
+
+  <section id="risks">
+    <h2>リスクと改善backlog</h2>
+
+    <aside data-type="danger" aria-labelledby="put-risk">
+      <strong id="put-risk">最も深刻なリスク: 非loopback公開時のPUT</strong>
+      <p>
+        <code>requestOriginMatches</code>はOriginヘッダが存在しない場合に<code
+          >true</code
+        >
+        を返す。既定の<code>127.0.0.1</code> bindでは実害が小さいが、<code
+          >--host 0.0.0.0</code
+        >
+        と<code>--allowed-host</code>を併用してLANへ公開すると、Originを送らないclientが文書のArchive
+        とRestoreを実行できる。Origin必須化、token、または状態変更APIのloopback限定が必要である。
+      </p>
+    </aside>
+
+    <table>
+      <caption>
+        優先度別の改善backlog
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">優先度</th>
+          <th scope="col">改善</th>
+          <th scope="col">対象と完了条件</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">P0</th>
+          <td>非loopback公開時の状態変更APIを保護する</td>
+          <td>
+            <code>src/server/host-policy.ts</code>のOrigin省略許容を見直す。非loopback
+            bind時はOriginを必須にするか、PUTをloopbackのみに限定する。回帰testを追加する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P0</th>
+          <td>Markdownの無検査greenを解消する</td>
+          <td>
+            <code>check</code
+            >と<code>lint</code>が対象外にしたMarkdown件数をsummaryへ出力し、続いてh1、
+            local参照、危険URL、Mermaid parseを検査するMarkdown lintを実装する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P0</th>
+          <td>公開済みversionのtagとGitHub Releaseを作成する</td>
+          <td>
+            <code>0.1.0</code
+            >〜<code>0.1.2</code>のtagを作成し、<code
+              >release-check.mjs</code
+            >
+            にtag存在検証を追加してRELEASING手順の未完遂を検出可能にする。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>CLIの言語方針を決めて文書と揃える</td>
+          <td>
+            help、usage
+            error、lint診断を既定英語＋locale選択にするか、英語READMEに実際の出力言語を明記する。Viewer
+            UIが英語である点も含めて方針を1つに揃える。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>repositoryの発見性と報告窓口を整える</td>
+          <td>
+            GitHub descriptionとtopics、homepageを設定し、<code
+              >SECURITY.md</code
+            >
+            で脆弱性報告手順を示す。localhost bindという脅威modelも明記する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>
+            <code>content</code
+            >から<code>migrate</code>への層逆転を解消する
+          </td>
+          <td>
+            <code>src/content/archive.ts</code>が<code
+              >src/migrate/storage.ts</code
+            >
+            のlockとownershipを直接importしている。lock抽象を下層へ移すか、ownership検査をmigrate側へ移す。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>HTTP path定数を単一sourceにする</td>
+          <td>
+            <code>/_spec-html/</code
+            >系のpathが<code>server/routes.ts</code>、<code>browser/constants.ts</code>、<code>server/shell.ts</code>に重複定義されている。共有moduleへ集約する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>Viewer起動処理を分割する</td>
+          <td>
+            966行の<code>src/browser/start.ts</code>をdocument制御、navigation制御、archive
+            UI、live reloadへ分け、jsdom＋Vitestでunit testを追加する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>未記載のCLI契約を文書化する</td>
+          <td>
+            <code>--reporter</code
+            >、<code>--max-issues</code>、<code>lint --format</code>、終了code
+            0／1／2、既定content
+            directory<code>./specs</code>をREADMEへ追加する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>navigation titleをcacheする</td>
+          <td>
+            mtimeまたはsizeをkeyにtitle metadataをcacheし、live
+            reload時の全Markdown再compileを避ける。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>読取pathのTOCTOUを縮める</td>
+          <td>
+            <code>resolveRequestFile</code
+            >の<code>realpath</code>検証後、<code
+              >sendFile</code
+            >
+            が再検証せずstreamを開く。送出直前のrealpath再確認を検討する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>HTML由来Mermaidのsecurity levelを見直す</td>
+          <td>
+            Markdown由来は<code>strict</code>だがHTML由来は<code
+              >loose</code
+            >
+            である。HTML信頼前提を文書化するか、既定を厳格化してopt-outを設ける。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>依存のpinを完全にする</td>
+          <td>
+            <code>marked</code>等は完全固定だが<code
+              >open</code
+            >
+            のみcaret範囲である。供給網riskを揃えるため固定する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>走査とbundleの重複costを削る</td>
+          <td>
+            <code>check</code
+            >がfix／format／lintで3回tree走査する点と、viewer bundleがMarkdown
+            compilerを常時含む点を改善する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>規模別benchmarkと検索を検討する</td>
+          <td>
+            50／500／5,000
+            documentsで起動、navigation、reload時間を測定し、検索index方式の判断材料にする。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>重複utilityを共通moduleへ集約する</td>
+          <td>
+            <code>isWithin</code
+            >、<code>resolveContentRoot</code>、<code>messageOf</code>、<code>diagnosticStableKey</code>が複数moduleに重複定義されている。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="architecture-debt">
+    <h2>構造上の負債</h2>
+    <p>
+      依存は概ねCLIを起点とした一方向で、循環依存は検出されなかった。唯一の例外が<code
+        >content</code
+      >
+      から<code>migrate</code>への逆方向依存である。下位層であるcontentがmigrationという上位機能の概念を知っているため、Viewerとserverも
+      <code>content/archive.ts</code>経由でmigration ownershipに間接的に結合する。
+    </p>
+    <figure>
+      <pre class="mermaid">
+flowchart TD
+  CLI[cli] --> LINT[lint]
+  CLI --> FMT[format]
+  CLI --> FIX[fix]
+  CLI --> CNV[convert]
+  CLI --> MIG[migrate]
+  CLI --> SRV[server]
+  SRV --> BRW[browser]
+  MIG --> CNT[content]
+  LINT --> CNT
+  FMT --> CNT
+  FIX --> CNT
+  CNV --> CNT
+  SRV --> CNT
+  MIG --> MD[markdown]
+  CNV --> MD
+  SRV --> MD
+  CNT -. 層逆転 .-> MIG
+      </pre>
+      <figcaption>
+        層依存の概要。実線は正方向の依存、破線は<code>content/archive.ts</code>から<code>migrate/storage.ts</code>への逆方向依存を示す。
+      </figcaption>
+    </figure>
+    <p>
+      もう1つの負債は巨大fileへの集中である。500行超は9
+      fileあり、内訳は<code>fix/document.ts</code>が1,057行、<code
+        >browser/start.ts</code
+      >
+      が966行、<code>migrate/planner.ts</code>が827行である。<code
+        >migrate/parity.ts</code
+      >
+      のようにdomain固有で凝集が高いものは現状維持で妥当だが、<code
+        >browser/start.ts</code
+      >
+      はUI、fetch、history、archive、live reloadが同居しており、変更riskが最も高い。
+    </p>
+    <p>
+      coverageの穴も同じ場所に偏る。<code>src/server/integrations.ts</code>はlines
+      5%、<code>src/convert/diagnostics.ts</code>は50%、<code
+        >src/migrate/diagnostics.ts</code
+      >
+      は55%である。実装の問題ではなく、成功経路中心のtest配分の結果である。
+    </p>
+  </section>
+
+  <section id="scale">
+    <h2>規模とcostの推移</h2>
+    <p>
+      機能追加に伴いpackage規模は0.1.0から46.3%増加した。file数は22件で変わらず、増加分はbundleに集中している。現時点で
+      1 MB未満のため配布上の問題はないが、Markdown
+      compilerの常時同梱が主要因である点は記録しておく。
+    </p>
+    <table>
+      <caption>
+        公開package規模の推移
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">version</th>
+          <th scope="col">unpacked size</th>
+          <th scope="col">0.1.0比</th>
+          <th scope="col">主な追加</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">0.1.0</th>
+          <td>654,878 bytes</td>
+          <td>基準</td>
+          <td>Viewer、lint、format、fix、archive</td>
+        </tr>
+        <tr>
+          <th scope="row">0.1.1</th>
+          <td>824,050 bytes</td>
+          <td>+25.8%</td>
+          <td>Markdown previewと単一file <code>convert</code></td>
+        </tr>
+        <tr>
+          <th scope="row">0.1.2</th>
+          <td>958,355 bytes</td>
+          <td>+46.3%</td>
+          <td>一括<code>migrate</code>、journal、content parity検査</td>
+        </tr>
+      </tbody>
+    </table>
+    <figure>
+      <canvas
+        id="package-size-chart"
+        width="760"
+        height="340"
+        role="img"
+        aria-label="version別のunpacked package sizeの推移"
+        >unpacked package sizeは0.1.0が654,878 bytes、0.1.1が824,050 bytes、0.1.2が958,355
+        bytesである。</canvas
+      >
+      <figcaption>version別のunpacked package size。正確な値は直前の表に記載している。</figcaption>
+    </figure>
+    <p>
+      現行buildの内訳は<code>dist/cli.js</code>が365,542 bytes、<code
+        >dist/browser/viewer.js</code
+      >
+      が119,128 bytesである。test側は414 unit／server testsと32 browser
+      testsで、機能規模に対する検証量は十分である。
+    </p>
+  </section>
+
+  <section id="judgment">
+    <h2>最終判断</h2>
+    <p>
+      0.1.2は前回評価のrelease
+      blockerを両方解消し、「改善が一般利用者へ届いていない」という留保は解除できる。npm
+      latestとHEADが一致し、全CIがgreenで、脆弱性0件、coverage
+      87.75%という状態は、信頼できるlocal環境で仕様書を読む用途には十分な水準である。公開Web、untrusted
+      HTML、大規模ナレッジの検索基盤としては、このversionの対象外である。
+    </p>
+    <p>
+      評価軸を細分すると弱点の性質が明確になる。<strong
+        >core実装の品質（84%）と、製品としての完成度（64%）に20 pointの差がある</strong
+      >。具体的には、npm公開CLIなのにCLI出力が日本語固定で英語READMEと乖離していること、公開済み3
+      versionにtagとReleaseがなくrelease手順が未完遂であること、Markdownが検査対象外のまま無報告でgreenになること、性能が一度も測定されていないことである。いずれも実装難易度は低く、P0
+      3件を解消すれば80前後、P1まで進めれば86前後を見込める。
+    </p>
+    <p>
+      次の判断点は、利用者が増える前に<strong>言語方針とrelease traceability</strong>
+      を確定させることである。どちらも後から変更するとbreaking
+      changeまたは履歴の欠損になるため、機能追加より先に処理する価値がある。community観点の低評価は作成2日目としては自然であり、総点を押し下げすぎないよう重みは4に抑えている。
+    </p>
+  </section>
+
+  <script>
+    const evaluationStyle = getComputedStyle(document.documentElement);
+    const evaluationText = evaluationStyle.getPropertyValue("--doc-text").trim();
+    const evaluationMuted = evaluationStyle.getPropertyValue("--doc-muted").trim();
+    const evaluationBorder = evaluationStyle.getPropertyValue("--doc-border").trim();
+    const evaluationSurface = evaluationStyle.getPropertyValue("--doc-surface").trim();
+    const evaluationAccent = evaluationStyle.getPropertyValue("--doc-accent").trim();
+    const evaluationSuccess = evaluationStyle.getPropertyValue("--doc-success-border").trim();
+
+    function evaluationAlpha(hexColor, alpha) {
+      const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hexColor);
+      if (match === null) {
+        return hexColor;
+      }
+      const red = Number.parseInt(match[1], 16);
+      const green = Number.parseInt(match[2], 16);
+      const blue = Number.parseInt(match[3], 16);
+      return "rgba(" + red + ", " + green + ", " + blue + ", " + alpha + ")";
+    }
+
+    new Chart(document.getElementById("evaluation-radar"), {
+      type: "radar",
+      data: {
+        labels: [
+          "製品価値",
+          "architecture",
+          "実装品質",
+          "security",
+          "test",
+          "CI互換性",
+          "文書",
+          "DXと国際化",
+          "release運用",
+          "性能と拡張性",
+          "community"
+        ],
+        datasets: [
+          {
+            label: "達成率 (%)",
+            data: [90, 73, 90, 83, 83, 78, 78, 63, 50, 57, 50],
+            borderColor: evaluationAccent,
+            backgroundColor: evaluationAlpha(evaluationAccent, 0.22),
+            pointBackgroundColor: evaluationAccent
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { labels: { color: evaluationText } }
+        },
+        scales: {
+          r: {
+            beginAtZero: true,
+            max: 100,
+            angleLines: { color: evaluationBorder },
+            grid: { color: evaluationBorder },
+            pointLabels: { color: evaluationText },
+            ticks: { color: evaluationMuted, backdropColor: evaluationSurface }
+          }
+        }
+      }
+    });
+
+    new Chart(document.getElementById("package-size-chart"), {
+      type: "bar",
+      data: {
+        labels: ["0.1.0", "0.1.1", "0.1.2"],
+        datasets: [
+          {
+            label: "unpacked size (bytes)",
+            data: [654878, 824050, 958355],
+            backgroundColor: evaluationAlpha(evaluationSuccess, 0.22),
+            borderColor: evaluationSuccess,
+            borderWidth: 1
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { labels: { color: evaluationText } }
+        },
+        scales: {
+          x: { ticks: { color: evaluationMuted }, grid: { color: evaluationBorder } },
+          y: {
+            beginAtZero: true,
+            ticks: { color: evaluationMuted },
+            grid: { color: evaluationBorder }
+          }
+        }
+      }
+    });
+  </script>
+</article>

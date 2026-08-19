@@ -36,6 +36,21 @@ afterEach(async () => {
   );
 });
 
+describe("CLI language policy", () => {
+  it("uses English for help and usage errors", async () => {
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await expect(main(["--help"])).resolves.toBe(0);
+    await expect(main(["--port", "invalid"])).resolves.toBe(1);
+
+    expect(output).toHaveBeenCalledWith(expect.stringContaining("Usage:"));
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("Invalid arguments:"),
+    );
+  });
+});
+
 describe("lint CLI execution", () => {
   it("writes a compact result to stdout and returns zero for a valid project", async () => {
     const root = await project('<article lang="en"><h1>Valid</h1></article>');

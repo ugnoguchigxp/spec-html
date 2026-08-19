@@ -3,9 +3,9 @@ import { messageForCliError } from "../../src/cli/errors.js";
 import { CliUsageError } from "../../src/cli/options.js";
 
 describe("messageForCliError", () => {
-  it("formats usage errors in Japanese", () => {
+  it("formats usage errors in English", () => {
     expect(messageForCliError(new CliUsageError("unknown option"))).toBe(
-      "引数が不正です: unknown option",
+      "Invalid arguments: unknown option",
     );
   });
 
@@ -14,7 +14,7 @@ describe("messageForCliError", () => {
       code: "EADDRINUSE",
       port: 4173,
     });
-    expect(messageForCliError(error)).toBe("ポートを使用できません: 4173");
+    expect(messageForCliError(error)).toBe("Port is unavailable: 4173");
   });
 
   it("keeps ordinary error messages", () => {

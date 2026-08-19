@@ -86,7 +86,10 @@
       loopで複数fileへ適用しても、次の移行作業は利用者へ残る。
     </p>
     <ul>
-      <li>数字から始まる見出しIDとGFM tableのdeprecatedな<code>align</code>属性を解消する。</li>
+      <li>
+        数字から始まる見出しIDとGFM
+        tableのdeprecatedな<code>align</code>属性を解消する。
+      </li>
       <li>Markdownでcaptionを直接表せないtableへ、既存見出しtextから実際のcaptionを与える。</li>
       <li>Markdown間linkと既存HTMLからMarkdownへのlinkを、変換後のHTMLへ切り替える。</li>
       <li>active Markdownと同名stemのHTMLを長期間併存させず、正本を一度に切り替える。</li>
@@ -119,18 +122,23 @@
         <tr>
           <th scope="row">deprecatedなtable <code>align</code></th>
           <td>alignment classと共有Viewer CSSへ変換する。</td>
-          <td>生成HTMLの<code>align</code>属性0件、表示上のleft／center／right一致。</td>
+          <td>
+            生成HTMLの<code>align</code>属性0件、表示上のleft／center／right一致。
+          </td>
         </tr>
         <tr>
           <th scope="row">table caption不足</th>
-          <td>直近見出しの既存textを実際の<code>caption</code>として複製する。</td>
+          <td>
+            直近見出しの既存textを実際の<code>caption</code>として複製する。
+          </td>
           <td>生成tableの非空caption率100%、<code>TBL001</code> 0件。</td>
         </tr>
         <tr>
           <th scope="row">Markdown／HTML間link</th>
           <td>全対象mappingでMarkdownと既存HTMLのlocal document URLを書き換える。</td>
           <td>
-            移行対象Markdownを指すactive URL 0件、<code>REF002</code>／<code>REF003</code>増加0件。
+            移行対象Markdownを指すactive URL
+            0件、<code>REF002</code>／<code>REF003</code>増加0件。
           </td>
         </tr>
         <tr>
@@ -213,7 +221,10 @@
   </section>
 
   <section id="command-boundary">
-    <h2><code>convert</code>と<code>migrate</code>の境界</h2>
+    <h2>
+      <code>convert</code
+      >と<code>migrate</code>の境界
+    </h2>
     <table>
       <caption>
         command contractの違い
@@ -233,7 +244,11 @@
         </tr>
         <tr>
           <th scope="row">入力</th>
-          <td>1つの<code>.md</code>または<code>.markdown</code></td>
+          <td>
+            1つの<code>.md</code>または<code
+              >.markdown</code
+            >
+          </td>
           <td>1つのdirectory内にあるactive Markdown全件</td>
         </tr>
         <tr>
@@ -281,7 +296,9 @@ spec-html migrate ./spec --finalize &lt;migration-id&gt;</code></pre>
         <tr>
           <th scope="row"><code>--lang</code></th>
           <td>
-            <code>--check</code>と<code>--write</code>では必須。全生成articleへ使うBCP 47 tag。
+            <code>--check</code
+            >と<code>--write</code>では必須。全生成articleへ使うBCP 47
+            tag。
           </td>
         </tr>
         <tr>
@@ -310,7 +327,10 @@ spec-html migrate ./spec --finalize &lt;migration-id&gt;</code></pre>
         </tr>
         <tr>
           <th scope="row"><code>--reporter</code></th>
-          <td><code>compact</code>または<code>json</code>。既定は<code>compact</code>。</td>
+          <td>
+            <code>compact</code
+            >または<code>json</code>。既定は<code>compact</code>。
+          </td>
         </tr>
         <tr>
           <th scope="row"><code>--warnings-as-errors</code></th>
@@ -354,9 +374,13 @@ spec-html migrate ./spec --finalize &lt;migration-id&gt;</code></pre>
   <section id="target-discovery">
     <h2>対象探索とmapping</h2>
     <ol>
-      <li><code>realpath</code>でcontent rootを固定し、通常directoryであることを確認する。</li>
       <li>
-        既存の<code>findViewerDocuments</code>と同じ規則でactive Markdownだけを列挙する。dot
+        <code>realpath</code>でcontent
+        rootを固定し、通常directoryであることを確認する。
+      </li>
+      <li>
+        既存の<code>findViewerDocuments</code>と同じ規則でactive
+        Markdownだけを列挙する。dot
         directory、<code>.archived</code>、<code>node_modules</code>、symlinkは対象外とする。
       </li>
       <li>
@@ -408,7 +432,10 @@ spec-html migrate ./spec --finalize &lt;migration-id&gt;</code></pre>
   …
 &lt;/table&gt;</code></pre>
     <ul>
-      <li><code>TBL001</code>の「非空caption必須」という既存contractは変更しない。</li>
+      <li>
+        <code>TBL001</code
+        >の「非空caption必須」という既存contractは変更しない。
+      </li>
       <li>inline markupを含む見出しは、title抽出と同じplain textへ正規化してescapeする。</li>
       <li>
         tableより前に見出しがないMarkdownはSpec HTMLの文書contractを満たさないため、migration
@@ -456,7 +483,10 @@ spec-html migrate ./spec --finalize &lt;migration-id&gt;</code></pre>
           <td>変更しない。</td>
         </tr>
         <tr>
-          <th scope="row"><code>http:</code>、<code>https:</code>など</th>
+          <th scope="row">
+            <code>http:</code
+            >、<code>https:</code>など
+          </th>
           <td>外部URLとして変更しない。</td>
         </tr>
         <tr>
@@ -566,7 +596,8 @@ flowchart TD
   <section id="journal">
     <h2>lock、journal、backup</h2>
     <p>
-      content root直下の<code>.spec-html/migrations/</code>を内部状態directoryとして使う。dot
+      content
+      root直下の<code>.spec-html/migrations/</code>を内部状態directoryとして使う。dot
       directoryは既存document
       discoveryから除外される。directory自体または構成fileがsymlink、通常file以外、所有外pathの場合は処理を拒否する。
     </p>
@@ -617,12 +648,16 @@ flowchart TD
       <li>
         各operationの前後にstateを更新し、process停止後はdigestと実在状態から曖昧なoperationを照合する。
       </li>
-      <li><code>migrate.lock</code>は排他的createで取得し、別processの同時migrationを拒否する。</li>
+      <li>
+        <code>migrate.lock</code
+        >は排他的createで取得し、別processの同時migrationを拒否する。
+      </li>
       <li>
         ViewerのArchive mutationも共通content-mutation lockを確認し、migration中の移動を拒否する。
       </li>
       <li>
-        <code>committed</code>または<code>finalized</code>のmanifestにsource
+        <code>committed</code
+        >または<code>finalized</code>のmanifestにsource
         pathがある間、そのsourceはmigration管理下とし、Viewerからの個別Restoreを拒否する。復元はmigration単位の<code>--rollback</code>だけで行う。
       </li>
       <li>
@@ -638,9 +673,15 @@ flowchart TD
     <h3>write</h3>
     <ol>
       <li>lock取得後に対象集合、入力digest、output不在、既存HTML digestを再検証する。</li>
-      <li>既存HTMLの変更前sourceをbackupへ保存し、journalを<code>prepared</code>にする。</li>
-      <li>生成HTMLを既存<code>atomicCreate</code>で作る。既存entryはraceを含め上書きしない。</li>
-      <li>既存HTMLのlink変更をsnapshot確認後に<code>atomicReplace</code>する。</li>
+      <li>
+        既存HTMLの変更前sourceをbackupへ保存し、journalを<code>prepared</code>にする。
+      </li>
+      <li>
+        生成HTMLを既存<code>atomicCreate</code>で作る。既存entryはraceを含め上書きしない。
+      </li>
+      <li>
+        既存HTMLのlink変更をsnapshot確認後に<code>atomicReplace</code>する。
+      </li>
       <li>Markdownを既存<code>setDocumentArchived</code>で移す。</li>
       <li>active Markdown 0件、生成HTML件数一致、実project diagnostic差分を確認する。</li>
       <li>
@@ -657,7 +698,9 @@ flowchart TD
       <li>
         生成HTMLがjournal digestと一致する場合だけ削除する。symlinkや変更済みfileは削除しない。
       </li>
-      <li>元のdocument集合とdigestを確認し、journalを<code>rolled-back</code>にする。</li>
+      <li>
+        元のdocument集合とdigestを確認し、journalを<code>rolled-back</code>にする。
+      </li>
     </ol>
     <p>
       crash後に<code>applying</code>のjournalが見つかった場合、新しいwriteは開始しない。compact
@@ -699,8 +742,8 @@ flowchart TD
     </table>
     <pre><code>summary markdown=17 creates=17 captions=9 html-rewrites=4 archives=17 errors=0 warnings=2 ready=true</code></pre>
     <p>
-      JSON reporterは<code>version: 1</code
-      >、mode、migrationId、mapping、operations、diagnostics、summaryを構造化して返す。pathとdiagnosticのsort順はOSに依存させない。
+      JSON
+      reporterは<code>version: 1</code>、mode、migrationId、mapping、operations、diagnostics、summaryを構造化して返す。pathとdiagnosticのsort順はOSに依存させない。
     </p>
   </section>
 
@@ -743,7 +786,10 @@ flowchart TD
         </tr>
         <tr>
           <th scope="row"><code>src/lint/document.ts</code></th>
-          <td>HTML5 ID設定を更新する。<code>TBL001</code>のcaption必須条件は維持する。</td>
+          <td>
+            HTML5
+            ID設定を更新する。<code>TBL001</code>のcaption必須条件は維持する。
+          </td>
         </tr>
         <tr>
           <th scope="row"><code>src/lint/project.ts</code></th>
@@ -757,7 +803,11 @@ flowchart TD
           </td>
         </tr>
         <tr>
-          <th scope="row"><code>src/server/routes.ts</code>、<code>src/browser/start.ts</code></th>
+          <th scope="row">
+            <code>src/server/routes.ts</code>、<code
+              >src/browser/start.ts</code
+            >
+          </th>
           <td>
             Archive状態に<code>restoreAllowed</code>とmigration
             IDを追加し、管理下sourceではRestoreを無効化してbatch rollbackの案内を表示する。
@@ -768,7 +818,11 @@ flowchart TD
           <td>digest一致を必須にしたgenerated fileのsafe removeを追加する。</td>
         </tr>
         <tr>
-          <th scope="row"><code>src/cli/options.ts</code>、<code>src/cli/main.ts</code></th>
+          <th scope="row">
+            <code>src/cli/options.ts</code>、<code
+              >src/cli/main.ts</code
+            >
+          </th>
           <td>command parse、help、dispatch、exit codeを追加する。</td>
         </tr>
         <tr>
@@ -778,7 +832,9 @@ flowchart TD
       </tbody>
     </table>
     <p>
-      新しいruntime dependencyは追加しない。Markdown parse、<code>html-validate</code>
+      新しいruntime dependencyは追加しない。Markdown parse、<code
+        >html-validate</code
+      >
       Parser、formatter、linter、safe-write、Archiveを再利用する。
     </p>
   </section>
@@ -885,16 +941,18 @@ flowchart TD
     </table>
     <p>
       報告されたdatasetを模したfixtureではactive Markdown 17件、既存Archive
-      20件を用意する。<code>--check</code>で17件ready、<code>--write</code>後にactive Markdown
-      0件、active HTML 17件増加、Archive Markdown 37件、content parity 17件一致、local reference
-      error 0件、migration管理下17件の個別Restore拒否を確認する。
+      20件を用意する。<code>--check</code>で17件ready、<code>--write</code>後にactive
+      Markdown 0件、active HTML 17件増加、Archive Markdown 37件、content parity 17件一致、local
+      reference error 0件、migration管理下17件の個別Restore拒否を確認する。
     </p>
   </section>
 
   <section id="acceptance">
     <h2>完了条件</h2>
     <ul>
-      <li><code>migrate --check</code>が入力file、mtime、directoryを一切変更しない。</li>
+      <li>
+        <code>migrate --check</code>が入力file、mtime、directoryを一切変更しない。
+      </li>
       <li>変換対象全件について生成HTMLのlint errorが0件である。</li>
       <li>
         変換対象全件について、captionとlink rewriteを除くcontent parity factが変換前と一致する。
@@ -916,11 +974,14 @@ flowchart TD
       <li>
         raw HTML、unsafe URL、Mermaid strict、no-clobber、symlink拒否のsecurity contractを維持する。
       </li>
-      <li><code>npm run check</code>、Spec HTML check、packed consumer、Windows CIが成功する。</li>
+      <li>
+        <code>npm run check</code>、Spec HTML check、packed consumer、Windows
+        CIが成功する。
+      </li>
       <li>
         実評価対象のactive Markdown
-        17件で<code>--check</code>と<code>--write</code>を行い、変換成功数17、終了code 0、content
-        parity 17件一致、active重複0、個別Restore拒否17件を確認する。
+        17件で<code>--check</code>と<code>--write</code>を行い、変換成功数17、終了code
+        0、content parity 17件一致、active重複0、個別Restore拒否17件を確認する。
       </li>
     </ul>
   </section>
@@ -951,7 +1012,9 @@ flowchart TD
         </tr>
         <tr>
           <th scope="row">table診断を隠すだけになる</th>
-          <td>既存見出しtextから実際のcaptionを生成し、<code>TBL001</code>自体は変更しない。</td>
+          <td>
+            既存見出しtextから実際のcaptionを生成し、<code>TBL001</code>自体は変更しない。
+          </td>
         </tr>
         <tr>
           <th scope="row">既存project errorが移行を妨げる</th>
@@ -970,7 +1033,8 @@ flowchart TD
         <tr>
           <th scope="row">backupの残留</th>
           <td>
-            migration IDをreportし、採用確定後に<code>--finalize</code>でrollback
+            migration
+            IDをreportし、採用確定後に<code>--finalize</code>でrollback
             payloadを明示削除する。個別Restore guardに必要なcompact manifestは残す。
           </td>
         </tr>
@@ -989,7 +1053,10 @@ flowchart TD
         <code>convert</code
         >のsource-retained表示には、一括切替には<code>migrate</code>を使う案内を加える。
       </li>
-      <li>新規CLI commandを含むため、実装完了時のrelease candidateは<code>0.2.0</code>とする。</li>
+      <li>
+        新規CLI commandを含むため、実装完了時のrelease
+        candidateは<code>0.2.0</code>とする。
+      </li>
       <li>release noteにはno-clobber、Archive、rollback、既存link rewriteの範囲を明記する。</li>
     </ul>
   </section>

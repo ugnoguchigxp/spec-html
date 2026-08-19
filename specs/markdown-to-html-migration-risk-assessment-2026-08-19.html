@@ -139,7 +139,8 @@
         <tr>
           <th scope="row">既存HTML参照</th>
           <td>
-            HTML character reference、空白を含むscript path、<code>srcdoc</code>、event属性、SVG
+            HTML character reference、空白を含むscript
+            path、<code>srcdoc</code>、event属性、SVG
             <code>xlink:href</code
             >、root-relative／壊れたqueryが移行対象Markdownを参照しても残り得た。
           </td>
@@ -198,7 +199,8 @@
           <th scope="row">P0</th>
           <td>active sourceと同名の既存Archive copyをcheckが検出しない</td>
           <td>
-            <code>--check</code>は<code>ready=true</code>だったが、writeはArchive
+            <code>--check</code
+            >は<code>ready=true</code>だったが、writeはArchive
             conflictで失敗した。rollbackもsource配置を特定できず、生成HTMLが残った。
           </td>
           <td>
@@ -210,7 +212,8 @@
           <th scope="row">P0</th>
           <td>case違いのMarkdown linkがcase-insensitive filesystemで残る</td>
           <td>
-            <code>other.md</code>に対する<code>./OTHER.MD</code>はmacOSでerror
+            <code>other.md</code
+            >に対する<code>./OTHER.MD</code>はmacOSでerror
             0のまま生成HTMLへ残った。virtual
             lintは移行前の物理Markdownを解決できるため見逃すが、write後はsourceがArchiveへ移りlinkが切れる。
           </td>
@@ -262,7 +265,8 @@ flowchart LR
           <td>
             raw HTMLはliteral textになり、unsafe
             URLは除去されるが、どちらもwarningである。既定のwriteはwarningを許可し、parityもsanitized後の表現を正解として扱う。repository
-            fixtureでもraw HTMLとunsafe linkを含みながら<code>ready=true</code>を確認した。
+            fixtureでもraw HTMLとunsafe
+            linkを含みながら<code>ready=true</code>を確認した。
           </td>
           <td>
             source変換noticeを既定blockerにし、明示的な<code>--allow-lossy</code>だけで許可する。既存HTMLのbaseline
@@ -277,7 +281,8 @@ flowchart LR
             labelを<code>Badge</code>、HTML側はanchorの<code>textContent</code>を空として比較し、<code>MIG004</code>で停止した。tableやheading内の画像にも同型の誤判定があり得る。
           </td>
           <td>
-            HTML側のaccessible textへdescendant画像の<code>alt</code>を含める。link、heading、table
+            HTML側のaccessible
+            textへdescendant画像の<code>alt</code>を含める。link、heading、table
             cellごとのfixtureを追加する。
           </td>
         </tr>
@@ -348,8 +353,9 @@ flowchart LR
           <th scope="row">P2</th>
           <td>content root全体へ単一言語を適用する</td>
           <td>
-            <code>--lang</code>は全生成articleへ同じ値を設定する。front matterと文書単位language
-            metadataは非対応なので、mixed-language directoryではアクセシビリティmetadataが誤る。
+            <code>--lang</code>は全生成articleへ同じ値を設定する。front
+            matterと文書単位language metadataは非対応なので、mixed-language
+            directoryではアクセシビリティmetadataが誤る。
           </td>
           <td>
             移行manifestでpathごとの言語を指定できるようにするか、初期releaseでは単一言語rootだけを明示的な前提にする。
@@ -395,7 +401,9 @@ flowchart LR
         root直下とnested directoryの<code>.archived</code>
         symlink、通常file、同名copyを<code>--check</code>でerrorにし、fileを1件も変更しない。
       </li>
-      <li>上記状態で<code>--write</code>を直接実行してもmutation前に停止する。</li>
+      <li>
+        上記状態で<code>--write</code>を直接実行してもmutation前に停止する。
+      </li>
       <li>
         case違いとUnicode正規化違いのlinkをmacOS、Windows、Linuxでcanonical
         HTMLへrewriteするかblockする。
@@ -424,7 +432,9 @@ flowchart LR
     <ol>
       <li>外部評価対象17件と既存Archive 20件を取得し、受入gateのdigestまで記録する。</li>
       <li>Ubuntu、macOS、Windowsのpacked migration testをCIで通す。</li>
-      <li>release gate成功後に<code>0.2.0</code>候補としてversioningする。</li>
+      <li>
+        release gate成功後に<code>0.2.0</code>候補としてversioningする。
+      </li>
     </ol>
   </section>
 </article>

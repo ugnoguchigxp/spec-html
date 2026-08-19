@@ -1,0 +1,42 @@
+name: Bug report
+description: Report a reproducible Spec HTML defect
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: For security vulnerabilities, use the private reporting instructions in SECURITY.md instead of this form.
+  - type: input
+    id: version
+    attributes:
+      label: Spec HTML version
+      placeholder: 0.1.2
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime and operating system
+      placeholder: Node 24.15.0 on Windows 11
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include commands and the smallest document that reproduces the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true

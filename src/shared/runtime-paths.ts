@@ -1,0 +1,10 @@
+export const CONTENT_PREFIX = "/_content/";
+export const RUNTIME_PREFIX = "/_spec-html/";
+export const NAVIGATION_PATH = `${RUNTIME_PREFIX}navigation`;
+export const DOCUMENT_STATE_PATH = `${RUNTIME_PREFIX}document-state`;
+export const LIVE_RELOAD_PATH = `${RUNTIME_PREFIX}live-reload`;
+export const CHART_PATH = `${RUNTIME_PREFIX}integrations/chart.js`;
+export const MERMAID_PREFIX = `${RUNTIME_PREFIX}integrations/mermaid/`;
+export const MERMAID_MODULE_PATH = `${MERMAID_PREFIX}mermaid.esm.min.mjs`;
+export const SHELL_STYLESHEET_PATH = `${RUNTIME_PREFIX}shell.css`;
+export const VIEWER_SCRIPT_PATH = `${RUNTIME_PREFIX}viewer.js`;

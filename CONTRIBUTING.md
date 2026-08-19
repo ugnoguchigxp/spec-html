@@ -42,7 +42,7 @@ tests/unit/          Pure unit tests
 tests/server/        Local HTTP server tests
 tests/browser/       Playwright tests
 scripts/             Build and test scripts
-docs/                User guides, showcases, and internal notes
+specs/               User guides, showcases, and internal notes
 examples/            Example specifications
 dist/                Generated package files
 ```

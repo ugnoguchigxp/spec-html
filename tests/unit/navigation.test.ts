@@ -9,7 +9,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createNavigationHtml } from "../../src/server/navigation.js";
+import {
+  createNavigationHtml,
+  NavigationTitleCache,
+} from "../../src/server/navigation.js";
 import { setDocumentArchived } from "../../src/content/archive.js";
 
 let root: string;
@@ -129,6 +132,37 @@ describe("createNavigationHtml", () => {
       '<a href="./notes.markdown" title="notes"><span class="viewer-navigation-title">notes</span><span class="viewer-navigation-format" aria-label="Markdown">MD</span>',
     );
     expect(navigation).toContain('<a href="./notes.html" title="HTML Notes">');
+  });
+
+  it("reuses parsed titles until size or mtime changes", async () => {
+    const path = join(root, "guide.md");
+    await writeFile(path, "# First\n", "utf8");
+    let reads = 0;
+    const cache = new NavigationTitleCache({
+      readFile: async (file, encoding) => {
+        reads += 1;
+        return readFile(file, encoding);
+      },
+      stat: async (file) => {
+        const { stat } = await import("node:fs/promises");
+        return stat(file);
+      },
+    });
+
+    await createNavigationHtml(root, new Date(), "documents", "en", cache);
+    await createNavigationHtml(root, new Date(), "documents", "en", cache);
+    expect(reads).toBe(1);
+
+    await writeFile(path, "# Updated title\n", "utf8");
+    const updated = await createNavigationHtml(
+      root,
+      new Date(),
+      "documents",
+      "en",
+      cache,
+    );
+    expect(reads).toBe(2);
+    expect(updated).toContain("Updated title");
   });
 
   it("falls back for an empty Markdown h1 and decodes title character references", async () => {

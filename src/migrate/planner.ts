@@ -2,11 +2,8 @@ import { lstat, realpath, statfs } from "node:fs/promises";
 import {
   basename,
   dirname,
-  isAbsolute,
   join,
   relative,
-  resolve,
-  sep,
 } from "node:path";
 import { removeDocumentExtension } from "../content/document-format.js";
 import { validateDocumentArchiveDestination } from "../content/archive.js";
@@ -19,6 +16,9 @@ import {
 } from "../content/safe-write.js";
 import { formatDocument } from "../format/document.js";
 import type { LintDiagnostic } from "../lint/diagnostics.js";
+import { diagnosticStableKey } from "../lint/diagnostic-key.js";
+import { messageOf } from "../shared/error-message.js";
+import { isPathWithin } from "../shared/path-boundary.js";
 import {
   lintProject,
   lintProjectSources,
@@ -41,6 +41,7 @@ import {
   rewriteMigrationLink,
 } from "./links.js";
 import { compareMarkdownWithHtml } from "./parity.js";
+import { resolveMigrationContentRoot } from "./content-root.js";
 
 export type MigrationIssueSeverity = "error" | "warning";
 
@@ -122,7 +123,7 @@ export async function createMigrationPlan(
   options: CreateMigrationPlanOptions,
 ): Promise<MigrationPlan> {
   const language = canonicalizeLanguageTag(options.language);
-  const contentRoot = await resolveContentRoot(options.contentRoot);
+  const contentRoot = await resolveMigrationContentRoot(options.contentRoot);
   const viewerDocuments = await findViewerDocuments(contentRoot);
   const markdownDocuments = viewerDocuments.filter(
     (document) => document.format === "markdown",
@@ -144,7 +145,7 @@ export async function createMigrationPlan(
       continue;
     }
     const canonicalDirectory = await realpath(dirname(document.absolutePath));
-    if (!isWithin(contentRoot, canonicalDirectory)) {
+    if (!isPathWithin(contentRoot, canonicalDirectory)) {
       issues.push(
         errorIssue(
           "MIG014",
@@ -701,20 +702,6 @@ export function migrationPlanHasBlockers(
     (warningsAsErrors && plan.summary.warnings > 0);
 }
 
-async function resolveContentRoot(requestedRoot: string): Promise<string> {
-  const absoluteRoot = resolve(requestedRoot);
-  let stats;
-  try {
-    stats = await lstat(absoluteRoot);
-  } catch {
-    throw new Error(`対象ディレクトリが見つかりません: ${absoluteRoot}`);
-  }
-  if (stats.isSymbolicLink() || !stats.isDirectory()) {
-    throw new Error(`対象は通常directoryで指定してください: ${absoluteRoot}`);
-  }
-  return realpath(absoluteRoot);
-}
-
 async function entryExists(path: string): Promise<boolean> {
   try {
     await lstat(path);
@@ -736,12 +723,6 @@ async function directoryMatches(
   } catch {
     return false;
   }
-}
-
-function isWithin(parent: string, child: string): boolean {
-  const path = relative(parent, child);
-  return path === "" ||
-    (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
 
 function addLintIssues(
@@ -774,10 +755,6 @@ function diagnosticCounts(
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return counts;
-}
-
-function diagnosticStableKey(diagnostic: LintDiagnostic): string {
-  return `${diagnostic.file}\0${diagnostic.rule}\0${diagnostic.detail ?? ""}`;
 }
 
 function lintIssue(diagnostic: LintDiagnostic): MigrationIssue {
@@ -820,8 +797,4 @@ function compareIssues(left: MigrationIssue, right: MigrationIssue): number {
 
 function isNodeError(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

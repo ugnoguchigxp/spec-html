@@ -10,6 +10,8 @@ import { formatProject, writeFormatProject } from "../format/project.js";
 import { formatCompact, formatJson } from "../lint/diagnostics.js";
 import { lintProject } from "../lint/project.js";
 import { getRule } from "../lint/rules.js";
+import { messageOf } from "../shared/error-message.js";
+import { DocumentDiscoveryCache } from "../content/documents.js";
 import {
   convertMarkdownDocument,
   writeConvertedDocument,
@@ -53,17 +55,17 @@ import {
   rollbackMigration,
 } from "../migrate/runner.js";
 
-export const HELP_TEXT = `使い方: spec-html [directory] [options]
+export const HELP_TEXT = `Usage: spec-html [directory] [options]
 
 Options:
-  --host <host>                  listenするhost（既定: 127.0.0.1）
-  --allowed-host <hostname>      非loopbackで許可するHost（repeat可、wildcardでは必須）
-  --port <port>                  listenするport（既定: 4173、0で自動割り当て）
-  --markdown-lang <language-tag> Markdown文書の言語（既定: en）
-  --open                         起動後にbrowserを開く（既定）
-  --no-open                      browserを開かない
-  --help                         このhelpを表示
-  --version                      versionを表示
+  --host <host>                  Host to listen on (default: 127.0.0.1)
+  --allowed-host <hostname>      Allowed Host for non-loopback listeners (repeatable; required for wildcard hosts)
+  --port <port>                  Port to listen on (default: 4173; 0 selects a free port)
+  --markdown-lang <language-tag> Language of rendered Markdown documents (default: en)
+  --open                         Open a browser after startup (default)
+  --no-open                      Do not open a browser
+  --help                         Show this help
+  --version                      Show the version
 
 Lint:
   spec-html lint [directory] [options]
@@ -83,72 +85,72 @@ Convert:
 Migrate:
   spec-html migrate [directory] --lang <language-tag> --check|--write`;
 
-export const LINT_HELP_TEXT = `使い方: spec-html lint [directory] [options]
+export const LINT_HELP_TEXT = `Usage: spec-html lint [directory] [options]
 
 Options:
-  --format <compact|json>  出力形式（既定: compact）
-  --warnings-as-errors     warningも終了code 1にする
-  --max-issues <number>    最大表示件数（既定: 50、0で全件）
-  --explain <RULE_ID>      ruleの理由と最小例を表示
-  --help                   このhelpを表示`;
+  --format <compact|json>  Output format (default: compact)
+  --warnings-as-errors     Return exit code 1 for warnings
+  --max-issues <number>    Maximum issues to display (default: 50; 0 shows all)
+  --explain <RULE_ID>      Show the rule rationale and minimal examples
+  --help                   Show this help`;
 
-export const FORMAT_HELP_TEXT = `使い方: spec-html format [path] --check|--write [options]
-
-Options:
-  --check                      変更が必要か確認する
-  --write                      整形結果をfileへ書き込む
-  --reporter <compact|json>    report形式（既定: compact）
-  --help                       このhelpを表示`;
-
-export const FIX_HELP_TEXT = `使い方: spec-html fix [path] --check|--write [options]
+export const FORMAT_HELP_TEXT = `Usage: spec-html format [path] --check|--write [options]
 
 Options:
-  --check                      安全に修正できるTypoがあるか確認する
-  --write                      修正結果をfileへ書き込む
-  --reporter <compact|json>    report形式（既定: compact）
-  --help                       このhelpを表示`;
+  --check                      Check whether formatting changes are needed
+  --write                      Write formatted output to files
+  --reporter <compact|json>    Report format (default: compact)
+  --help                       Show this help`;
 
-export const CHECK_HELP_TEXT = `使い方: spec-html check [directory] [--fix] [options]
-
-実行対象を省略するとfixer、formatter、linterをこの順で全て実行します。
---fixer、--format、--lintを1つ以上指定すると、指定した処理だけを実行します。
+export const FIX_HELP_TEXT = `Usage: spec-html fix [path] --check|--write [options]
 
 Options:
-  --fix                        fixerとformatterの変更をfileへ書き込む
-  --fixer                      fixerを実行対象にする
-  --format                     formatterを実行対象にする
-  --lint                       linterを実行対象にする
-  --reporter <compact|json>    report形式（既定: compact）
-  --warnings-as-errors         lint warningも終了code 1にする
-  --max-issues <number>        lintの最大表示件数（既定: 50、0で全件）
-  --help                       このhelpを表示`;
+  --check                      Check for safely fixable markup issues
+  --write                      Write fixes to files
+  --reporter <compact|json>    Report format (default: compact)
+  --help                       Show this help`;
 
-export const CONVERT_HELP_TEXT = `使い方: spec-html convert <input.md> --lang <language-tag> [options]
+export const CHECK_HELP_TEXT = `Usage: spec-html check [directory] [--fix] [options]
 
-Options:
-  --lang <language-tag>    生成するarticleのBCP 47言語tag（必須）
-  --output <output.html>   同じdirectoryへ新規HTML fileを作成（既存entryは拒否）
-  --help                   このhelpを表示
-
---outputを省略するとHTMLだけをstdoutへ出力します。
-出力後もMarkdownは残り、HTMLとは同期せずViewerでも別文書として表示されます。`;
-
-export const MIGRATE_HELP_TEXT = `使い方: spec-html migrate [directory] [options]
+Without a stage option, fixer, formatter, and linter run in that order.
+When one or more of --fixer, --format, and --lint are present, only those stages run.
 
 Options:
-  --check                      一括移行を副作用なしで検証する
-  --write                      検証成功後にHTMLへ一括移行する
-  --rollback <migration-id>    migration単位で元の状態へ戻す
-  --finalize <migration-id>    現在のHTMLを採用してrollback backupを削除する
-  --lang <language-tag>        check／writeで生成するarticleの言語tag（必須）
-  --language-map <json>        Markdown pathごとの言語tagを上書きするJSON object
-  --allow-lossy                raw HTML／危険URLの除去を明示的に許可する
-  --reporter <compact|json>    report形式（既定: compact）
-  --warnings-as-errors         warningもcheck／writeのblockerにする
-  --help                       このhelpを表示
+  --fix                        Write fixer and formatter changes to files
+  --fixer                      Run the fixer stage
+  --format                     Run the formatter stage
+  --lint                       Run the linter stage
+  --reporter <compact|json>    Report format (default: compact)
+  --warnings-as-errors         Return exit code 1 for lint warnings
+  --max-issues <number>        Maximum lint issues to display (default: 50; 0 shows all)
+  --help                       Show this help`;
 
-4つのactionは相互排他です。write後のMarkdownはmigration管理下のArchiveへ移り、
-個別Restoreできません。戻す場合はmigration IDを指定してrollbackします。`;
+export const CONVERT_HELP_TEXT = `Usage: spec-html convert <input.md> --lang <language-tag> [options]
+
+Options:
+  --lang <language-tag>    BCP 47 language tag for the generated article (required)
+  --output <output.html>   Create a new HTML file in the same directory (existing entries are rejected)
+  --help                   Show this help
+
+Without --output, generated HTML is written to stdout.
+The Markdown source remains and is not synchronized with the generated HTML.`;
+
+export const MIGRATE_HELP_TEXT = `Usage: spec-html migrate [directory] [options]
+
+Options:
+  --check                      Validate a batch migration without side effects
+  --write                      Apply the migration after validation succeeds
+  --rollback <migration-id>    Restore the state before a migration
+  --finalize <migration-id>    Keep current HTML and remove rollback backups
+  --lang <language-tag>        Article language for check/write (required)
+  --language-map <json>        Override language tags by Markdown path
+  --allow-lossy                Explicitly allow removal of raw HTML and unsafe URLs
+  --reporter <compact|json>    Report format (default: compact)
+  --warnings-as-errors         Treat warnings as blockers for check/write
+  --help                       Show this help
+
+The four actions are mutually exclusive. After --write, Markdown moves to the
+migration-managed archive and can only be restored with --rollback.`;
 
 /** Dispatch a parsed command without an import-time process side effect. */
 export async function main(args: readonly string[]): Promise<number> {
@@ -291,7 +293,7 @@ export async function runMigrate(options: CliMigrateOptions): Promise<number> {
   }
   try {
     if (!("migrationId" in options)) {
-      throw new Error("migration actionを解決できません");
+      throw new Error("Could not resolve the migration action");
     }
     const journal = options.action === "rollback"
       ? await rollbackMigration(options.contentRoot, options.migrationId)
@@ -316,7 +318,7 @@ export async function runMigrate(options: CliMigrateOptions): Promise<number> {
 async function readLanguageMap(path: string): Promise<ReadonlyMap<string, string>> {
   const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new CliUsageError("--language-mapはJSON objectで指定してください");
+    throw new CliUsageError("--language-map must contain a JSON object");
   }
   const languages = new Map<string, string>();
   for (const [documentPath, value] of Object.entries(parsed)) {
@@ -324,10 +326,10 @@ async function readLanguageMap(path: string): Promise<ReadonlyMap<string, string
       normalizeDocumentPath(documentPath) !== documentPath ||
       documentFormatFromPath(documentPath) !== "markdown"
     ) {
-      throw new CliUsageError(`--language-mapのMarkdown pathが不正です: ${documentPath}`);
+      throw new CliUsageError(`Invalid Markdown path in --language-map: ${documentPath}`);
     }
     if (typeof value !== "string") {
-      throw new CliUsageError(`--language-mapの言語tagが文字列ではありません: ${documentPath}`);
+      throw new CliUsageError(`Language tag in --language-map must be a string: ${documentPath}`);
     }
     languages.set(documentPath, canonicalizeLanguageTag(value));
   }
@@ -343,11 +345,12 @@ interface CheckStageReport {
 export async function runCheck(options: CliCheckOptions): Promise<number> {
   const reports: CheckStageReport[] = [];
   let exitCode = 0;
+  const discoveryCache = new DocumentDiscoveryCache();
 
   for (const stage of options.stages) {
     let stop = false;
     if (stage === "fixer") {
-      const result = await fixProject(options.targetPath);
+      const result = await fixProject(options.targetPath, discoveryCache);
       if (options.mode === "fix" && result.summary.blocked === 0) {
         await writeFixProject(options.targetPath, result);
       }
@@ -364,7 +367,7 @@ export async function runCheck(options: CliCheckOptions): Promise<number> {
       }
       stop = options.mode === "fix" && result.summary.blocked > 0;
     } else if (stage === "formatter") {
-      const result = await formatProject(options.targetPath);
+      const result = await formatProject(options.targetPath, discoveryCache);
       if (options.mode === "fix" && result.summary.blocked === 0) {
         await writeFormatProject(options.targetPath, result);
       }
@@ -384,7 +387,7 @@ export async function runCheck(options: CliCheckOptions): Promise<number> {
       }
       stop = options.mode === "fix" && result.summary.blocked > 0;
     } else {
-      const result = await lintProject(options.targetPath);
+      const result = await lintProject(options.targetPath, discoveryCache);
       reports.push({
         stage,
         compact: formatCompact(result, options.maxIssues),
@@ -487,7 +490,7 @@ export async function runViewer(options: CliRunOptions): Promise<number> {
     try {
       await openViewer(viewerUrl);
     } catch (error: unknown) {
-      console.warn(`spec-html: browserを開けませんでした: ${messageOf(error)}`);
+      console.warn(`spec-html: Could not open the browser: ${messageOf(error)}`);
     }
   }
 
@@ -496,7 +499,7 @@ export async function runViewer(options: CliRunOptions): Promise<number> {
     await runningServer.close();
     return 0;
   } catch (error: unknown) {
-    console.error(`spec-html: server終了に失敗しました: ${messageOf(error)}`);
+    console.error(`spec-html: Could not stop the server: ${messageOf(error)}`);
     return 1;
   }
 }
@@ -528,9 +531,9 @@ export function waitForShutdownSignal(
 function formatExplanation(ruleId: Parameters<typeof getRule>[0]): string {
   const rule = getRule(ruleId);
   return `${rule.id} ${rule.name} [${rule.severity}]
-理由: ${rule.reason}
-NG: ${rule.bad}
-OK: ${rule.good}`;
+Reason: ${rule.reason}
+Bad: ${rule.bad}
+Good: ${rule.good}`;
 }
 
 async function assertContentDirectory(contentRoot: string): Promise<void> {
@@ -538,13 +541,9 @@ async function assertContentDirectory(contentRoot: string): Promise<void> {
   try {
     rootStats = await stat(contentRoot);
   } catch {
-    throw new Error(`対象ディレクトリが見つかりません: ${contentRoot}`);
+    throw new Error(`Content directory not found: ${contentRoot}`);
   }
   if (!rootStats.isDirectory()) {
-    throw new Error("対象パスはディレクトリではありません");
+    throw new Error("Content path is not a directory");
   }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

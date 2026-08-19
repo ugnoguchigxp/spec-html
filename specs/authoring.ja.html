@@ -31,8 +31,10 @@
       Viewerは<code>.md</code>と<code>.markdown</code>も探索します。見出し、段落、強調、listとtask
       list、blockquote、code、GFM table、link、画像、<code>mermaid</code>
       fenceを表示し、相対URLはMarkdown fileの位置から解決します。raw HTMLはliteral
-      textとして表示し、危険なURL schemeを除去し、Mermaidの<code>strict</code> security
-      levelでcallback directiveを無効化します。
+      textとして表示し、危険なURL schemeを除去し、Mermaidの<code
+        >strict</code
+      >
+      security levelでcallback directiveを無効化します。
     </p>
     <pre><code class="language-sh">spec-html ./specs --markdown-lang ja
 spec-html convert ./specs/design.md --lang ja
@@ -53,8 +55,9 @@ spec-html migrate ./specs --lang ja --language-map ./specs.languages.json --chec
       errorのままにします。
     </p>
     <p>
-      正本を一括切替する場合は<code>migrate</code>を使います。check modeはfileを変更しません。write
-      modeは同じdirectoryへHTMLを作成し、対象document linkを書き換え、Lintとcontent
+      正本を一括切替する場合は<code>migrate</code>を使います。check
+      modeはfileを変更しません。write modeは同じdirectoryへHTMLを作成し、対象document
+      linkを書き換え、Lintとcontent
       parityを検証し、全preflight成功後だけMarkdownをArchiveへ移します。変更していない移行全体はmigration
       IDで<code>--rollback</code>できます。HTMLの採用確定後は<code>--finalize</code>で現在の内容を保持し、rollback
       backupだけを削除します。migration管理下のMarkdownはArchiveで閲覧できますが、個別Restoreできません。
@@ -79,9 +82,8 @@ spec-html migrate ./specs --lang ja --language-map ./specs.languages.json --chec
       <p>
         <code>lint</code
         >、<code>fix</code>、<code>format</code>、<code>check</code>が処理するのはHTMLだけです。mixed
-        directoryのcheck成功はMarkdown sourceの検査を意味しません。正本切替前に<code
-          >migrate --check</code
-        >でMarkdownからHTMLへのplan全体を検証してください。
+        directoryのcheck成功はMarkdown
+        sourceの検査を意味しません。正本切替前に<code>migrate --check</code>でMarkdownからHTMLへのplan全体を検証してください。
       </p>
     </aside>
   </section>
@@ -136,9 +138,7 @@ spec-html lint ./specs --warnings-as-errors
 spec-html check ./specs --fix
 </code></pre>
     <p>
-      必要な組み合わせだけを実行する場合は処理を選択します。例えばFixerとLinterは<code
-        >--fixer --lint</code
-      >、FixerとFormatterは<code>--fixer --format</code>を指定します。
+      必要な組み合わせだけを実行する場合は処理を選択します。例えばFixerとLinterは<code>--fixer --lint</code>、FixerとFormatterは<code>--fixer --format</code>を指定します。
     </p>
   </section>
 
@@ -158,8 +158,8 @@ spec-html check ./specs --fix
   <section id="chart-js">
     <h2>Chart.jsの例</h2>
     <p>
-      Chart.jsを使う場合は、canvasを<code>figure</code>に入れてaccessible nameを付け、inline
-      scriptからglobal
+      Chart.jsを使う場合は、canvasを<code>figure</code>に入れてaccessible
+      nameを付け、inline scriptからglobal
       <code>Chart</code>
       APIを呼び出します。JavaScriptが動かない場合にも内容を確認できるよう、正確な値は通常のHTMLにも残します。
     </p>

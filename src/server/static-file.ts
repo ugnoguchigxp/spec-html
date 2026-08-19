@@ -1,5 +1,4 @@
-import { createReadStream } from "node:fs";
-import { realpath, stat } from "node:fs/promises";
+import { open, realpath, stat, type FileHandle } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -7,6 +6,18 @@ import { getContentType } from "./mime.js";
 
 export class InvalidRequestPathError extends Error {
   override name = "InvalidRequestPathError";
+}
+
+export class ResolvedRequestFileChangedError extends Error {
+  override name = "ResolvedRequestFileChangedError";
+}
+
+export interface ResolvedRequestFile {
+  readonly filePath: string;
+  readonly identity: {
+    readonly dev: bigint;
+    readonly ino: bigint;
+  };
 }
 
 export interface ResolveRequestFileOptions {
@@ -17,7 +28,7 @@ export async function resolveRequestFile(
   root: string,
   encodedRelativePath: string,
   options: ResolveRequestFileOptions = {},
-): Promise<string | null> {
+): Promise<ResolvedRequestFile | null> {
   const encodedSegments = encodedRelativePath.split("/");
   if (
     encodedSegments.length === 0 ||
@@ -74,8 +85,13 @@ export async function resolveRequestFile(
     ) {
       return null;
     }
-    const fileStats = await stat(canonicalPath);
-    return fileStats.isFile() ? canonicalPath : null;
+    const fileStats = await stat(canonicalPath, { bigint: true });
+    return fileStats.isFile()
+      ? {
+          filePath: canonicalPath,
+          identity: { dev: fileStats.dev, ino: fileStats.ino },
+        }
+      : null;
   } catch (error: unknown) {
     if (isNotFoundError(error)) {
       return null;
@@ -87,22 +103,53 @@ export async function resolveRequestFile(
 export async function sendFile(
   request: IncomingMessage,
   response: ServerResponse,
-  filePath: string,
+  file: string | ResolvedRequestFile,
   cacheControl = "no-store",
 ): Promise<void> {
-  const fileStats = await stat(filePath);
-  response.writeHead(200, {
-    "Cache-Control": cacheControl,
-    "Content-Length": String(fileStats.size),
-    "Content-Type": getContentType(filePath),
-  });
+  const filePath = typeof file === "string" ? file : file.filePath;
+  const handle = typeof file === "string"
+    ? await open(filePath, "r")
+    : await openResolvedRequestFile(file);
+  try {
+    const fileStats = await handle.stat();
+    response.writeHead(200, {
+      "Cache-Control": cacheControl,
+      "Content-Length": String(fileStats.size),
+      "Content-Type": getContentType(filePath),
+    });
 
-  if (request.method === "HEAD") {
-    response.end();
-    return;
+    if (request.method === "HEAD") {
+      response.end();
+      return;
+    }
+
+    await pipeline(handle.createReadStream({ autoClose: false }), response);
+  } finally {
+    await handle.close();
   }
+}
 
-  await pipeline(createReadStream(filePath), response);
+/** Open a previously resolved file and reject path replacement before serving bytes. */
+export async function openResolvedRequestFile(
+  file: ResolvedRequestFile,
+): Promise<FileHandle> {
+  const handle = await open(file.filePath, "r");
+  try {
+    const openedStats = await handle.stat({ bigint: true });
+    if (
+      !openedStats.isFile() ||
+      openedStats.dev !== file.identity.dev ||
+      openedStats.ino !== file.identity.ino
+    ) {
+      throw new ResolvedRequestFileChangedError(
+        "Resolved request file changed before it was opened",
+      );
+    }
+    return handle;
+  } catch (error: unknown) {
+    await handle.close();
+    throw error;
+  }
 }
 
 function isNotFoundError(error: unknown): boolean {

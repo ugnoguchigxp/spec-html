@@ -18,6 +18,80 @@ interface NavigationDocument {
   format: ContentDocument["format"];
 }
 
+interface CachedNavigationTitle {
+  readonly format: ContentDocument["format"];
+  readonly language: string;
+  readonly mtimeMs: number;
+  readonly size: number;
+  readonly title: string;
+}
+
+export interface NavigationTitleCacheOperations {
+  readFile(path: string, encoding: "utf8"): Promise<string>;
+  stat(path: string): Promise<{
+    readonly mtime: Date;
+    readonly mtimeMs: number;
+    readonly size: number;
+  }>;
+}
+
+const defaultCacheOperations: NavigationTitleCacheOperations = {
+  readFile,
+  stat,
+};
+
+/** Caches parsed navigation titles until a document's size or mtime changes. */
+export class NavigationTitleCache {
+  private readonly entries = new Map<string, CachedNavigationTitle>();
+
+  constructor(
+    private readonly operations: NavigationTitleCacheOperations =
+      defaultCacheOperations,
+  ) {}
+
+  async read(
+    document: ContentDocument,
+    markdownLanguage: string,
+  ): Promise<NavigationDocument> {
+    const fileStats = await this.operations.stat(document.absolutePath);
+    const cached = this.entries.get(document.absolutePath);
+    const language = document.format === "markdown" ? markdownLanguage : "";
+    if (
+      cached !== undefined &&
+      cached.format === document.format &&
+      cached.language === language &&
+      cached.mtimeMs === fileStats.mtimeMs &&
+      cached.size === fileStats.size
+    ) {
+      return {
+        path: document.path,
+        title: cached.title,
+        updatedAt: fileStats.mtime,
+        format: document.format,
+      };
+    }
+
+    const source = await this.operations.readFile(document.absolutePath, "utf8");
+    const title = document.format === "markdown"
+      ? (compileMarkdown(source, { language: markdownLanguage }).title ??
+        fallbackDocumentTitle(document.path))
+      : documentTitle(source, basename(document.path));
+    this.entries.set(document.absolutePath, {
+      format: document.format,
+      language,
+      mtimeMs: fileStats.mtimeMs,
+      size: fileStats.size,
+      title,
+    });
+    return {
+      path: document.path,
+      title,
+      updatedAt: fileStats.mtime,
+      format: document.format,
+    };
+  }
+}
+
 const MINUTE_IN_MS = 60 * 1000;
 const HOUR_IN_MS = 60 * MINUTE_IN_MS;
 const DAY_IN_MS = 24 * HOUR_IN_MS;
@@ -28,10 +102,11 @@ export async function createNavigationHtml(
   now = new Date(),
   view: NavigationView = "documents",
   markdownLanguage = "en",
+  titleCache = new NavigationTitleCache(),
 ): Promise<string> {
   const language = canonicalizeLanguageTag(markdownLanguage);
   return withDocumentArchiveSnapshot(contentRoot, (snapshot) =>
-    createNavigationHtmlFromSnapshot(snapshot, now, view, language),
+    createNavigationHtmlFromSnapshot(snapshot, now, view, language, titleCache),
   );
 }
 
@@ -40,6 +115,7 @@ async function createNavigationHtmlFromSnapshot(
   now: Date,
   view: NavigationView,
   markdownLanguage: string,
+  titleCache: NavigationTitleCache,
 ): Promise<string> {
   const { active: activeDocuments, archived: archivedDocuments } = snapshot;
   const activePaths = new Set(activeDocuments.map((document) => document.path));
@@ -52,6 +128,7 @@ async function createNavigationHtmlFromSnapshot(
   const documents = await findNavigationDocuments(
     view === "archive" ? archivedDocuments : activeDocuments,
     markdownLanguage,
+    titleCache,
   );
   const groups = new Map<string, NavigationDocument[]>();
 
@@ -123,24 +200,12 @@ function documentRank(path: string): number {
 async function findNavigationDocuments(
   contentDocuments: readonly ContentDocument[],
   markdownLanguage: string,
+  titleCache: NavigationTitleCache,
 ): Promise<NavigationDocument[]> {
   return Promise.all(
-    contentDocuments.map(async ({ absolutePath, path, format }) => {
-      const [source, fileStats] = await Promise.all([
-        readFile(absolutePath, "utf8"),
-        stat(absolutePath),
-      ]);
-      return {
-        path,
-        title:
-          format === "markdown"
-            ? (compileMarkdown(source, { language: markdownLanguage }).title ??
-              fallbackDocumentTitle(path))
-            : documentTitle(source, basename(path)),
-        updatedAt: fileStats.mtime,
-        format,
-      };
-    }),
+    contentDocuments.map((document) =>
+      titleCache.read(document, markdownLanguage)
+    ),
   );
 }
 

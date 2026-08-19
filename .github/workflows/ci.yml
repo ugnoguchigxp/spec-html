@@ -72,10 +72,8 @@ jobs:
         include:
           - os: macos-latest
             node-version: 24
-          # nodejs/node#63638: Node 24.16+ regressed recursive fs.watch with Windows short paths.
-          # Remove this pin after nodejs/node#65118 ships in a Node 24 release.
           - os: windows-latest
-            node-version: 24.15.0
+            node-version: 24
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

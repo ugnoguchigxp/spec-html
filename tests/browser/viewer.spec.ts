@@ -110,6 +110,28 @@ test("@smoke shows the first navigation document and updates active navigation",
     .toBe(true);
 });
 
+test("loads the Markdown compiler only after opening Markdown", async ({ page }) => {
+  const parserChunks: string[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/_spec-html/chunks/")) {
+      parserChunks.push(path);
+    }
+  });
+
+  await page.goto("/");
+  await expect(
+    page.frameLocator("iframe.viewer-document").locator("h1"),
+  ).toHaveText("Overview");
+  expect(parserChunks).toEqual([]);
+
+  await page.getByRole("link", { name: /Markdown design/ }).click();
+  await expect(
+    page.frameLocator("iframe.viewer-document").locator("h1"),
+  ).toHaveText("Markdown design");
+  expect(parserChunks.length).toBeGreaterThan(0);
+});
+
 test("@smoke archives and restores the current document from the actions menu", async ({
   page,
 }) => {

@@ -1,26 +1,20 @@
 import {
   CONTENT_PREFIX,
-  DOCUMENT_STATE_PATH,
-  LIVE_RELOAD_PATH,
   NAVIGATION_PATH,
 } from "./constants.js";
 import type { NavigationView } from "../content/document-path.js";
 import { documentFormatFromPath } from "../content/document-format.js";
-import { compileMarkdown } from "../markdown/compiler.js";
-import { fetchDocument, DocumentHttpError } from "./document-loader.js";
+import { renderMarkdownDocument } from "./markdown.js";
+import { fetchDocument } from "./document-loader.js";
 import { buildSrcdoc } from "./frame.js";
 import type { FrameIntegrations } from "./frame.js";
 import { createLayout, renderLoadState } from "./layout.js";
-import { isPlainPrimaryClick } from "./links.js";
 import {
   mountNavigation,
-  sortNavigation,
   updateActiveNavigation,
 } from "./navigation.js";
 import {
   createContentUrl,
-  createShellUrl,
-  documentPathFromContentUrl,
   normalizeDocumentPath,
   parseRoute,
 } from "./router.js";
@@ -38,22 +32,40 @@ import {
 import type { ThemePreference } from "./theme.js";
 import type {
   NavigationItem,
-  RouteParseResult,
   RouteState,
-  SortDirection,
-  SortPreference,
   ViewerElements,
 } from "./types.js";
-
-type HistoryMode = "push" | "replace" | "none";
-
-interface DocumentStateResponse {
-  doc: string;
-  archived: boolean;
-  restoreAllowed: boolean;
-  migrationId: string | null;
-  migrationOutputPath: string | null;
-}
+import {
+  fetchDocumentState,
+  messageForArchiveError,
+  updateDocumentArchived,
+  updateDocumentArchiveButton,
+  viewForArchived,
+} from "./archive-controls.js";
+import {
+  installFrameLinkHandler,
+  isCurrentRequest,
+  messageForDocumentError,
+  setFrameDocument,
+  updateSourceLabels,
+} from "./document-controls.js";
+import {
+  clearDocumentActionStatus,
+  closeDocumentActionsMenu,
+  closeSourceDialog,
+} from "./document-actions.js";
+import { type HistoryMode, updateHistory } from "./history.js";
+import { installLiveReload } from "./live-reload.js";
+import {
+  installSidebarLinkHandler,
+  renderEmptyNavigation,
+  showInitialRoute,
+  updateNavigationViewButton,
+} from "./navigation-controls.js";
+import { installPrintController } from "./print-controller.js";
+import { installSidebarController } from "./sidebar-controller.js";
+import { SortController } from "./sort-controller.js";
+import { updateThemeButtons } from "./theme-controls.js";
 
 void initializeViewer().catch((error: unknown) => {
   console.error("Spec HTML failed to initialize", error);
@@ -74,8 +86,6 @@ async function initializeViewer(): Promise<void> {
   const markdownLanguage = app.dataset.markdownLanguage ?? "en";
 
   let themePreference = readThemePreference();
-  let sortPreference: SortPreference = "name";
-  let sortDirection: SortDirection = "ascending";
   const initialRoute = parseRoute(new URL(window.location.href));
   let navigationView =
     initialRoute.kind === "invalid"
@@ -84,8 +94,10 @@ async function initializeViewer(): Promise<void> {
   applyThemePreference(document.documentElement, themePreference);
   const elements = createLayout(app);
   updateThemeButtons(elements, themePreference);
-  updateSortButtons(elements, sortPreference, sortDirection);
+  const sortController = new SortController(elements);
   updateNavigationViewButton(elements, navigationView);
+  const sidebarController = installSidebarController(elements);
+  installPrintController(elements.frame);
   elements.root.dataset.navigationView = navigationView;
   const contentBaseUrl = new URL(CONTENT_PREFIX, window.location.origin);
   let navigationItems: NavigationItem[] = [];
@@ -96,50 +108,6 @@ async function initializeViewer(): Promise<void> {
   let currentDocumentRestoreAllowed = true;
   let currentDocumentMigrationId: string | null = null;
   let currentRoute: RouteState = { doc: null, hash: "", view: navigationView };
-  let detailsOpenedForPrint: HTMLDetailsElement[] = [];
-  const mobileViewport = window.matchMedia("(max-width: 767px)");
-
-  const syncSidebarInteractivity = (): void => {
-    const isHidden =
-      mobileViewport.matches && elements.root.dataset.sidebarOpen !== "true";
-    elements.sidebar.inert = isHidden;
-    if (isHidden) {
-      elements.sidebar.setAttribute("aria-hidden", "true");
-    } else {
-      elements.sidebar.removeAttribute("aria-hidden");
-    }
-  };
-
-  const setSidebarOpen = (isOpen: boolean): void => {
-    elements.root.dataset.sidebarOpen = String(isOpen);
-    elements.menuButton.setAttribute("aria-expanded", String(isOpen));
-    syncSidebarInteractivity();
-  };
-
-  syncSidebarInteractivity();
-  mobileViewport.addEventListener("change", syncSidebarInteractivity);
-
-  const closeSourceDialog = (): void => {
-    if (elements.sourceDialog.open) {
-      elements.sourceDialog.close();
-    }
-  };
-
-  const closeDocumentActionsMenu = (restoreFocus = false): void => {
-    if (!elements.documentActionsMenu.hidden) {
-      elements.documentActionsMenu.hidden = true;
-      elements.documentActionsButton.setAttribute("aria-expanded", "false");
-      if (restoreFocus) {
-        elements.documentActionsButton.focus();
-      }
-    }
-  };
-
-  const clearDocumentActionStatus = (): void => {
-    elements.documentActionStatus.replaceChildren();
-    elements.documentActionStatus.hidden = true;
-  };
-
   const clearDocument = (): void => {
     activeAbortController?.abort();
     activeAbortController = undefined;
@@ -148,9 +116,9 @@ async function initializeViewer(): Promise<void> {
     currentDocumentArchived = null;
     currentDocumentRestoreAllowed = true;
     currentDocumentMigrationId = null;
-    closeSourceDialog();
-    closeDocumentActionsMenu();
-    clearDocumentActionStatus();
+    closeSourceDialog(elements);
+    closeDocumentActionsMenu(elements);
+    clearDocumentActionStatus(elements);
     elements.frame.title = "Document";
     updateSourceLabels(elements, "html");
     resetDocumentTitle();
@@ -183,7 +151,7 @@ async function initializeViewer(): Promise<void> {
     navigationView = view;
     elements.root.dataset.navigationView = view;
     updateNavigationViewButton(elements, view);
-    sortNavigation(elements.navigation, sortPreference, sortDirection);
+    sortController.apply();
     updateActiveNavigation(navigationItems, currentRoute);
     return items;
   };
@@ -256,7 +224,7 @@ async function initializeViewer(): Promise<void> {
       activeAbortController = undefined;
       updateActiveNavigation(navigationItems, route);
       scrollToHash(route.hash);
-      setSidebarOpen(false);
+      sidebarController.close();
       return;
     }
 
@@ -266,11 +234,11 @@ async function initializeViewer(): Promise<void> {
     currentDocument = null;
     currentDocumentSource = null;
     currentDocumentArchived = null;
-    closeSourceDialog();
-    closeDocumentActionsMenu();
-    clearDocumentActionStatus();
+    closeSourceDialog(elements);
+    closeDocumentActionsMenu(elements);
+    clearDocumentActionStatus(elements);
     renderLoadState(elements, { kind: "loading", doc });
-    setSidebarOpen(false);
+    sidebarController.close();
 
     try {
       const documentUrl = createContentUrl(doc, new URL(window.location.href));
@@ -305,10 +273,9 @@ async function initializeViewer(): Promise<void> {
       if (format === null) {
         throw new Error(`Unsupported document format: ${doc}`);
       }
-      const fragment =
-        format === "markdown"
-          ? compileMarkdown(source, { language: markdownLanguage }).fragment
-          : source;
+      const fragment = format === "markdown"
+        ? await renderMarkdownDocument(source, markdownLanguage)
+        : source;
       const title = getFragmentTitle(fragment, doc);
       const srcdoc = buildSrcdoc(
         fragment,
@@ -372,7 +339,7 @@ async function initializeViewer(): Promise<void> {
   }
 
   elements.documentActionsButton.addEventListener("click", () => {
-    clearDocumentActionStatus();
+    clearDocumentActionStatus(elements);
     if (
       currentDocumentArchived === true &&
       !currentDocumentRestoreAllowed &&
@@ -402,7 +369,7 @@ async function initializeViewer(): Promise<void> {
     const archived = !currentDocumentArchived;
     elements.documentArchiveButton.disabled = true;
     elements.documentArchiveButton.setAttribute("aria-busy", "true");
-    clearDocumentActionStatus();
+    clearDocumentActionStatus(elements);
 
     void (async () => {
       try {
@@ -422,9 +389,9 @@ async function initializeViewer(): Promise<void> {
         currentRoute = { ...currentRoute, view };
         updateHistory(currentRoute, "replace");
         updateActiveNavigation(navigationItems, currentRoute);
-        closeDocumentActionsMenu(true);
+        closeDocumentActionsMenu(elements, true);
       } catch (error: unknown) {
-        closeDocumentActionsMenu();
+        closeDocumentActionsMenu(elements);
         elements.documentActionStatus.textContent = messageForArchiveError(
           error,
           archived,
@@ -483,72 +450,23 @@ async function initializeViewer(): Promise<void> {
     elements.sourceDialogCode.textContent = currentDocumentSource;
     elements.sourceDialog.showModal();
   });
-  elements.sourceDialogCloseButton.addEventListener("click", closeSourceDialog);
+  elements.sourceDialogCloseButton.addEventListener("click", () =>
+    closeSourceDialog(elements)
+  );
 
   document.addEventListener("pointerdown", (event) => {
     const target = event.target;
     if (target instanceof Node && !elements.documentActions.contains(target)) {
-      closeDocumentActionsMenu();
+      closeDocumentActionsMenu(elements);
     }
-  });
-
-  for (const preference of ["name", "date"] as const) {
-    elements.sortButtons[preference].addEventListener("click", () => {
-      if (sortPreference === preference) {
-        sortDirection =
-          sortDirection === "ascending" ? "descending" : "ascending";
-      } else {
-        sortPreference = preference;
-        sortDirection = preference === "date" ? "descending" : "ascending";
-      }
-      sortNavigation(elements.navigation, sortPreference, sortDirection);
-      updateSortButtons(elements, sortPreference, sortDirection);
-    });
-  }
-
-  window.addEventListener("beforeprint", () => {
-    const frameDocument = elements.frame.contentDocument;
-    if (frameDocument === null) {
-      return;
-    }
-    if (detailsOpenedForPrint.length === 0) {
-      detailsOpenedForPrint = Array.from(
-        frameDocument.querySelectorAll<HTMLDetailsElement>(
-          "details:not([open])",
-        ),
-      );
-      for (const details of detailsOpenedForPrint) {
-        details.open = true;
-      }
-    }
-    const printHeight = Math.max(
-      frameDocument.documentElement.scrollHeight,
-      frameDocument.body.scrollHeight,
-    );
-    elements.frame.style.height = `${String(printHeight)}px`;
-  });
-  window.addEventListener("afterprint", () => {
-    for (const details of detailsOpenedForPrint) {
-      details.open = false;
-    }
-    detailsOpenedForPrint = [];
-    elements.frame.style.removeProperty("height");
-  });
-
-  elements.menuButton.addEventListener("click", () => {
-    setSidebarOpen(elements.root.dataset.sidebarOpen !== "true");
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !elements.documentActionsMenu.hidden) {
-      closeDocumentActionsMenu(true);
+      closeDocumentActionsMenu(elements, true);
       return;
     }
-    if (
-      event.key === "Escape" &&
-      elements.root.dataset.sidebarOpen === "true"
-    ) {
-      setSidebarOpen(false);
-      elements.menuButton.focus();
+    if (event.key === "Escape" && sidebarController.isOpen()) {
+      sidebarController.close(true);
     }
   });
   installSidebarLinkHandler(elements, navigate, () => navigationView);
@@ -623,344 +541,4 @@ async function initializeViewer(): Promise<void> {
   }
 
   await showInitialRoute(initialRoute, navigationItems, navigate, elements);
-}
-
-function installLiveReload(): void {
-  const events = new EventSource(LIVE_RELOAD_PATH);
-  events.addEventListener("message", (event) => {
-    if (event.data !== "reload") {
-      return;
-    }
-    events.close();
-    window.location.reload();
-  });
-}
-
-function updateHistory(route: RouteState, mode: HistoryMode): void {
-  if (mode === "none") {
-    return;
-  }
-  const shellUrl = createShellUrl(route, new URL(window.location.href));
-  if (mode === "push") {
-    history.pushState(null, "", shellUrl.href);
-  } else {
-    history.replaceState(null, "", shellUrl.href);
-  }
-}
-
-function viewForArchived(archived: boolean): NavigationView {
-  return archived ? "archive" : "documents";
-}
-
-async function fetchDocumentState(
-  documentPath: string,
-  signal: AbortSignal,
-): Promise<DocumentStateResponse> {
-  return requestDocumentState(documentPath, { signal });
-}
-
-async function updateDocumentArchived(
-  documentPath: string,
-  archived: boolean,
-): Promise<DocumentStateResponse> {
-  return requestDocumentState(documentPath, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ archived }),
-  });
-}
-
-async function requestDocumentState(
-  documentPath: string,
-  init?: RequestInit,
-): Promise<DocumentStateResponse> {
-  const url = new URL(DOCUMENT_STATE_PATH, window.location.origin);
-  url.searchParams.set("doc", documentPath);
-  const response = await fetch(url, init);
-  if (!response.ok) {
-    throw new Error(`Document state request failed: HTTP ${response.status}`);
-  }
-  const value: unknown = await response.json();
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("doc" in value) ||
-    value.doc !== documentPath ||
-    !("archived" in value) ||
-    typeof value.archived !== "boolean" ||
-    !("restoreAllowed" in value) ||
-    typeof value.restoreAllowed !== "boolean" ||
-    !("migrationId" in value) ||
-    (value.migrationId !== null && typeof value.migrationId !== "string") ||
-    !("migrationOutputPath" in value) ||
-    (value.migrationOutputPath !== null &&
-      typeof value.migrationOutputPath !== "string")
-  ) {
-    throw new Error("Document state response is invalid");
-  }
-  return {
-    doc: value.doc,
-    archived: value.archived,
-    restoreAllowed: value.restoreAllowed,
-    migrationId: value.migrationId,
-    migrationOutputPath: value.migrationOutputPath,
-  };
-}
-
-function updateDocumentArchiveButton(
-  elements: ViewerElements,
-  state: Pick<
-    DocumentStateResponse,
-    "archived" | "restoreAllowed" | "migrationId"
-  >,
-): void {
-  elements.documentArchiveButton.textContent = state.archived
-    ? "Restore"
-    : "Archive";
-  elements.documentArchiveButton.disabled =
-    state.archived && !state.restoreAllowed;
-  elements.documentArchiveButton.title =
-    state.archived && !state.restoreAllowed && state.migrationId !== null
-      ? `Use migrate --rollback ${state.migrationId}`
-      : "";
-}
-
-function updateSourceLabels(
-  elements: ViewerElements,
-  format: "html" | "markdown",
-): void {
-  const formatLabel = format === "markdown" ? "Markdown" : "HTML";
-  const actionLabel = `View source ${formatLabel}`;
-  elements.documentModeButton.setAttribute("aria-label", actionLabel);
-  elements.documentModeButton.title = actionLabel;
-  elements.sourceDialogTitle.textContent = `Source ${formatLabel}`;
-}
-
-function updateNavigationViewButton(
-  elements: ViewerElements,
-  view: NavigationView,
-): void {
-  const label = view === "documents" ? "Archived" : "Documents";
-  elements.navigationViewButton.textContent = label;
-  elements.navigationViewButton.setAttribute(
-    "aria-label",
-    view === "documents" ? "Show archived documents" : "Show documents",
-  );
-}
-
-function renderEmptyNavigation(
-  elements: ViewerElements,
-  view: NavigationView,
-): void {
-  renderLoadState(elements, {
-    kind: "error",
-    doc: null,
-    message:
-      view === "archive"
-        ? "No archived documents."
-        : "No documents are available.",
-  });
-}
-
-function messageForArchiveError(error: unknown, archived: boolean): string {
-  console.error(
-    `Spec HTML: Could not ${archived ? "archive" : "restore"} document`,
-    error,
-  );
-  return archived
-    ? "Document could not be archived."
-    : "Document could not be restored.";
-}
-
-async function showInitialRoute(
-  parsedRoute: RouteParseResult,
-  navigationItems: readonly NavigationItem[],
-  navigate: (route: RouteState, historyMode: HistoryMode) => Promise<void>,
-  elements: ViewerElements,
-): Promise<void> {
-  if (parsedRoute.kind === "valid") {
-    await navigate(parsedRoute.route, "none");
-    return;
-  }
-  if (parsedRoute.kind === "invalid") {
-    renderLoadState(elements, {
-      kind: "error",
-      doc: parsedRoute.rawDoc,
-      message: "Invalid document path",
-    });
-    return;
-  }
-
-  const firstItem = navigationItems[0];
-  if (firstItem === undefined) {
-    renderEmptyNavigation(elements, parsedRoute.route.view);
-    return;
-  }
-
-  await navigate(
-    {
-      doc: firstItem.doc,
-      hash: firstItem.hash,
-      view: parsedRoute.route.view,
-    },
-    "replace",
-  );
-}
-
-function installSidebarLinkHandler(
-  elements: ViewerElements,
-  navigate: (route: RouteState, historyMode: HistoryMode) => Promise<void>,
-  currentView: () => NavigationView,
-): void {
-  elements.sidebar.addEventListener("click", (event) => {
-    if (!(event instanceof MouseEvent) || !isPlainPrimaryClick(event)) {
-      return;
-    }
-    const target = event.target;
-    if (!(target instanceof Element)) {
-      return;
-    }
-    const anchor = target.closest<HTMLAnchorElement>("a");
-    if (anchor === null) {
-      return;
-    }
-    if (anchor.dataset.specHtmlBlocked === "javascript") {
-      event.preventDefault();
-      return;
-    }
-    let url: URL;
-    try {
-      url = new URL(anchor.href, window.location.href);
-    } catch {
-      return;
-    }
-    if (url.protocol === "javascript:") {
-      event.preventDefault();
-      return;
-    }
-    if (anchor.hasAttribute("target") || anchor.hasAttribute("download")) {
-      return;
-    }
-    const doc =
-      url.origin === window.location.origin
-        ? documentPathFromContentUrl(url)
-        : null;
-    if (doc === null) {
-      return;
-    }
-    event.preventDefault();
-    void navigate({ doc, hash: url.hash, view: currentView() }, "push");
-  });
-}
-
-function installFrameLinkHandler(
-  frameDocument: Document,
-  navigate: (route: RouteState, historyMode: HistoryMode) => Promise<void>,
-  currentView: () => NavigationView,
-): void {
-  frameDocument.addEventListener("click", (event) => {
-    const frameWindow = frameDocument.defaultView;
-    if (
-      frameWindow === null ||
-      !(event instanceof frameWindow.MouseEvent) ||
-      !isPlainPrimaryClick(event)
-    ) {
-      return;
-    }
-    const target = event.target;
-    if (!(target instanceof frameWindow.Element)) {
-      return;
-    }
-    const anchor = target.closest<HTMLAnchorElement>("a[href]");
-    if (anchor === null) {
-      return;
-    }
-
-    let url: URL;
-    try {
-      url = new URL(anchor.href, frameDocument.baseURI);
-    } catch {
-      return;
-    }
-    if (url.protocol === "javascript:") {
-      event.preventDefault();
-      return;
-    }
-    if (anchor.hasAttribute("target") || anchor.hasAttribute("download")) {
-      return;
-    }
-    const doc =
-      url.origin === window.location.origin
-        ? documentPathFromContentUrl(url)
-        : null;
-    if (doc === null) {
-      return;
-    }
-    event.preventDefault();
-    void navigate({ doc, hash: url.hash, view: currentView() }, "push");
-  });
-}
-
-function setFrameDocument(
-  frame: HTMLIFrameElement,
-  srcdoc: string,
-): Promise<void> {
-  return new Promise((resolve) => {
-    frame.addEventListener("load", () => resolve(), { once: true });
-    frame.srcdoc = srcdoc;
-  });
-}
-
-function isCurrentRequest(
-  active: AbortController | undefined,
-  request: AbortController,
-): boolean {
-  return active === request && !request.signal.aborted;
-}
-
-function messageForDocumentError(error: unknown, doc: string): string {
-  if (error instanceof DocumentHttpError && error.status === 404) {
-    return `Document not found: ${doc}`;
-  }
-  if (error instanceof DocumentHttpError) {
-    return `Could not load document: HTTP ${error.status}. Reload the page and try again.`;
-  }
-  return "Document could not be displayed";
-}
-
-function updateSortButtons(
-  elements: ViewerElements,
-  preference: SortPreference,
-  direction: SortDirection,
-): void {
-  for (const value of ["name", "date"] as const) {
-    const button = elements.sortButtons[value];
-    const isActive = value === preference;
-    const label = value === "name" ? "Name" : "Date";
-    button.setAttribute("aria-pressed", String(isActive));
-    button.textContent = isActive
-      ? `${label} ${direction === "ascending" ? "↑" : "↓"}`
-      : label;
-    button.setAttribute(
-      "aria-label",
-      isActive ? `${label}, ${direction}` : `Sort by ${label.toLowerCase()}`,
-    );
-    if (isActive) {
-      button.title = "Reverse sort order";
-    } else {
-      button.removeAttribute("title");
-    }
-  }
-}
-
-function updateThemeButtons(
-  elements: ViewerElements,
-  preference: ThemePreference,
-): void {
-  for (const value of THEME_PREFERENCES) {
-    elements.themeButtons[value].setAttribute(
-      "aria-pressed",
-      String(value === preference),
-    );
-  }
 }

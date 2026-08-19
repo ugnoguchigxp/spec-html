@@ -249,9 +249,10 @@ async function collectHtmlFacts(
   const root = parser.parseHtml(input);
   const article = root.querySelector("article") ?? root;
   const facts = emptyFacts();
+  const orderedElements = descendantElementsInDocumentOrder(article);
   facts.visibleText = normalizeVisibleText(visibleHtmlText(article));
-  facts.headings = article
-    .querySelectorAll("h1, h2, h3, h4, h5, h6")
+  facts.headings = orderedElements
+    .filter(isHeading)
     .map((heading) => ({
       depth: Number(heading.tagName.slice(1)),
       id: heading.id ?? "",
@@ -305,16 +306,20 @@ async function collectHtmlFacts(
   facts.blockquotes = article.querySelectorAll("blockquote").map((quote) =>
     ancestorDepth(quote, "blockquote") + 1
   );
-  facts.lists = article.querySelectorAll("ol, ul").map((list) => ({
-    ordered: list.is("ol"),
-    start: list.is("ol")
-      ? Number(list.getAttributeValue("start") ?? "1")
-      : null,
-    depth: ancestorListDepth(list) + 1,
-    items: list.childElements.filter((child) => child.is("li")).length,
-  }));
-  facts.marks = article
-    .querySelectorAll("strong, em, del")
+  facts.lists = orderedElements
+    .filter((element) => element.is("ol") || element.is("ul"))
+    .map((list) => ({
+      ordered: list.is("ol"),
+      start: list.is("ol")
+        ? Number(list.getAttributeValue("start") ?? "1")
+        : null,
+      depth: ancestorListDepth(list) + 1,
+      items: list.childElements.filter((child) => child.is("li")).length,
+    }));
+  facts.marks = orderedElements
+    .filter((element) =>
+      element.is("strong") || element.is("em") || element.is("del")
+    )
     .map((element) => element.tagName.toLowerCase());
   facts.horizontalRules = article.querySelectorAll("hr").length;
   facts.lineBreaks = article.querySelectorAll("br").length;
@@ -434,6 +439,22 @@ function ancestorListDepth(element: HtmlElement): number {
   return depth;
 }
 
+function descendantElementsInDocumentOrder(root: HtmlElement): HtmlElement[] {
+  const elements: HtmlElement[] = [];
+  const visit = (parent: HtmlElement): void => {
+    for (const child of parent.childElements) {
+      elements.push(child);
+      visit(child);
+    }
+  };
+  visit(root);
+  return elements;
+}
+
+function isHeading(element: HtmlElement): boolean {
+  return /^h[1-6]$/.test(element.tagName.toLowerCase());
+}
+
 function visitTokens(tokens: readonly Token[], visit: (token: Token) => void): void {
   for (const token of tokens) {
     visit(token);
@@ -500,6 +521,10 @@ function accessibleHtmlText(element: HtmlElement): string {
       return;
     }
     if (!(node instanceof HtmlElement)) return;
+    if (node.is("br")) {
+      values.push(" ");
+      return;
+    }
     if (node.is("img")) {
       values.push(node.getAttributeValue("alt") ?? "");
       return;
@@ -507,7 +532,7 @@ function accessibleHtmlText(element: HtmlElement): string {
     for (const child of node.childNodes) visit(child);
   };
   visit(element);
-  return values.join(" ");
+  return values.join("");
 }
 
 function alignmentOf(

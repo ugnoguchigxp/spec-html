@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  DocumentDiscoveryCache,
   findHtmlDocuments,
   findViewerDocuments,
 } from "../../src/content/documents.js";
@@ -60,5 +61,24 @@ describe("document discovery", () => {
         format: "html",
       },
     ]);
+  });
+
+  it("shares one discovery snapshot across composite command stages", async () => {
+    const root = await mkdtemp(join(tmpdir(), "spec-html-documents-cache-"));
+    roots.push(root);
+    await writeFile(join(root, "first.html"), "", "utf8");
+    const cache = new DocumentDiscoveryCache();
+
+    await expect(findHtmlDocuments(root, cache)).resolves.toHaveLength(1);
+    await writeFile(join(root, "later.md"), "# Later\n", "utf8");
+
+    await expect(findViewerDocuments(root, cache)).resolves.toEqual([
+      {
+        absolutePath: join(root, "first.html"),
+        path: "first.html",
+        format: "html",
+      },
+    ]);
+    await expect(findViewerDocuments(root)).resolves.toHaveLength(2);
   });
 });

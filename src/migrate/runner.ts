@@ -4,9 +4,9 @@ import {
   rename,
   rm,
 } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join } from "node:path";
 import {
-  getDocumentArchiveState,
+  getDocumentArchived,
   setDocumentArchived,
 } from "../content/archive.js";
 import {
@@ -19,6 +19,8 @@ import {
 } from "../content/safe-write.js";
 import { findViewerDocuments } from "../content/documents.js";
 import { lintProject } from "../lint/project.js";
+import { diagnosticStableKey } from "../lint/diagnostic-key.js";
+import { messageOf } from "../shared/error-message.js";
 import {
   createMigrationPlan,
   migrationPlanHasBlockers,
@@ -38,6 +40,7 @@ import {
   writeMigrationJournal,
   type MigrationJournal,
 } from "./storage.js";
+import { resolveMigrationContentRoot } from "./content-root.js";
 
 export class MigrationBlockedError extends Error {
   override name = "MigrationBlockedError";
@@ -65,7 +68,7 @@ export interface ApplyMigrationResult {
 export async function applyMigration(
   options: ApplyMigrationOptions,
 ): Promise<ApplyMigrationResult> {
-  const contentRoot = await resolveContentRoot(options.contentRoot);
+  const contentRoot = await resolveMigrationContentRoot(options.contentRoot);
   const lock = await acquireMigrationLock(contentRoot);
   try {
     const incompleteMigration = await findIncompleteMigrationId(contentRoot);
@@ -274,19 +277,11 @@ function diagnosticCounts(keys: readonly string[]): Map<string, number> {
   return counts;
 }
 
-function diagnosticStableKey(diagnostic: {
-  file: string;
-  rule: string;
-  detail?: string;
-}): string {
-  return `${diagnostic.file}\0${diagnostic.rule}\0${diagnostic.detail ?? ""}`;
-}
-
 export async function rollbackMigration(
   requestedRoot: string,
   migrationId: string,
 ): Promise<MigrationJournal> {
-  const contentRoot = await resolveContentRoot(requestedRoot);
+  const contentRoot = await resolveMigrationContentRoot(requestedRoot);
   const lock = await acquireMigrationLock(contentRoot);
   try {
     const journal = await readMigrationJournal(contentRoot, migrationId);
@@ -310,7 +305,7 @@ export async function finalizeMigration(
   requestedRoot: string,
   migrationId: string,
 ): Promise<MigrationJournal> {
-  const contentRoot = await resolveContentRoot(requestedRoot);
+  const contentRoot = await resolveMigrationContentRoot(requestedRoot);
   const lock = await acquireMigrationLock(contentRoot);
   try {
     const journal = await readMigrationJournal(contentRoot, migrationId);
@@ -435,8 +430,7 @@ async function verifyAppliedMigration(
   journal: MigrationJournal,
 ): Promise<void> {
   for (const source of journal.sources) {
-    const state = await getDocumentArchiveState(contentRoot, source.path);
-    if (!state.archived) {
+    if (!(await getDocumentArchived(contentRoot, source.path))) {
       throw new Error(`MarkdownをArchiveできませんでした: ${source.path}`);
     }
     const archivedPath = archivedAbsolutePath(contentRoot, source.path);
@@ -629,20 +623,6 @@ async function assertRegularFile(path: string, displayPath: string): Promise<voi
   }
 }
 
-async function resolveContentRoot(requestedRoot: string): Promise<string> {
-  const absoluteRoot = resolve(requestedRoot);
-  let stats;
-  try {
-    stats = await lstat(absoluteRoot);
-  } catch {
-    throw new Error(`対象ディレクトリが見つかりません: ${absoluteRoot}`);
-  }
-  if (!stats.isDirectory() || stats.isSymbolicLink()) {
-    throw new Error(`対象は通常directoryで指定してください: ${absoluteRoot}`);
-  }
-  return realpath(absoluteRoot);
-}
-
 async function entryExists(path: string): Promise<boolean> {
   try {
     await lstat(path);
@@ -653,10 +633,6 @@ async function entryExists(path: string): Promise<boolean> {
     }
     throw error;
   }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function isNodeError(error: unknown, code: string): boolean {

@@ -91,13 +91,14 @@ try {
     "README.ja.md",
     "CONTRIBUTING.md",
     "CONTRIBUTING.ja.md",
+    "SECURITY.md",
     "RELEASING.md",
     "RELEASING.ja.md",
     "CHANGELOG.md",
-    "docs/authoring.html",
-    "docs/authoring.ja.html",
-    "docs/charts-showcase.html",
-    "docs/mermaid-showcase.html",
+    "specs/authoring.html",
+    "specs/authoring.ja.html",
+    "specs/charts-showcase.html",
+    "specs/mermaid-showcase.html",
     "assets/LightMode.webp",
     "assets/darkMode.webp",
     "assets/source.webp",
@@ -111,8 +112,8 @@ try {
     );
   }
   if (
-    packagedPaths.includes("docs/charts-showcase.ja.html") ||
-    packagedPaths.includes("docs/mermaid-showcase.ja.html")
+    packagedPaths.includes("specs/charts-showcase.ja.html") ||
+    packagedPaths.includes("specs/mermaid-showcase.ja.html")
   ) {
     throw new Error("英語版だけを提供するshowcaseに日本語版が含まれています");
   }

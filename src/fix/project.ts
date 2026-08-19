@@ -2,6 +2,7 @@ import { lstat, realpath, rename } from "node:fs/promises";
 import { basename, dirname, extname } from "node:path";
 import {
   findHtmlDocuments,
+  type DocumentDiscoveryCache,
   type ContentDocument,
 } from "../content/documents.js";
 import {
@@ -14,6 +15,7 @@ import {
 } from "../content/safe-write.js";
 import { lintDocument } from "../lint/document.js";
 import { fixDocument } from "./document.js";
+import { messageOf } from "../shared/error-message.js";
 import {
   createFixProblem,
   createFixProjectResult,
@@ -37,8 +39,9 @@ const projectSnapshots = new WeakMap<
 /** Fix an HTML file or every HTML document in a directory without writing. */
 export async function fixProject(
   targetPath: string,
+  discoveryCache?: DocumentDiscoveryCache,
 ): Promise<FixProjectResult> {
-  const resolved = await resolveFixTargets(targetPath);
+  const resolved = await resolveFixTargets(targetPath, discoveryCache);
   const sources = new Map<string, string>();
   const snapshots = new Map<string, FileSnapshot>();
   let documents: FixDocumentResult[] = [];
@@ -190,6 +193,7 @@ export async function writeFixProject(
 
 async function resolveFixTargets(
   targetPath: string,
+  discoveryCache?: DocumentDiscoveryCache,
 ): Promise<ResolvedFixTargets> {
   let stats;
   try {
@@ -202,7 +206,7 @@ async function resolveFixTargets(
   }
   if (stats.isDirectory()) {
     const root = await realpath(targetPath);
-    return { root, documents: await findHtmlDocuments(root) };
+    return { root, documents: await findHtmlDocuments(root, discoveryCache) };
   }
   if (!stats.isFile()) {
     throw new Error(
@@ -220,8 +224,4 @@ async function resolveFixTargets(
     root: dirname(absolutePath),
     documents: [{ absolutePath, path: basename(absolutePath), format: "html" }],
   };
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

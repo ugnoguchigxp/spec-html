@@ -13,13 +13,16 @@
     <h2>Rules</h2>
     <ol>
       <li>
-        Make each file an HTML fragment with one root <code>article</code>. Set its
-        <code>lang</code> attribute to the document's primary language. Do not add
-        <code>html</code>, <code>head</code>, or <code>body</code> elements.
+        Make each file an HTML fragment with one root <code>article</code>.
+        Set its <code>lang</code> attribute to the document's primary
+        language. Do not add <code>html</code>,
+        <code>head</code>, or
+        <code>body</code> elements.
       </li>
       <li>
-        Add exactly one <code>h1</code> for the document title and choose standard HTML elements
-        that match the content. Do not invent custom elements or components.
+        Add exactly one <code>h1</code> for the document title and
+        choose standard HTML elements that match the content. Do not invent custom elements or
+        components.
       </li>
       <li>
         Put important information—requirements, conclusions, and values—in the HTML text. Use
@@ -35,11 +38,13 @@
   <section id="markdown">
     <h2>Work with existing Markdown</h2>
     <p>
-      The viewer also discovers <code>.md</code> and <code>.markdown</code> files. It renders
-      headings, paragraphs, emphasis, lists and task lists, blockquotes, code, GFM tables, links,
-      images, and <code>mermaid</code> fences. Relative URLs are resolved from the Markdown file.
-      Raw HTML is displayed literally, unsafe URL schemes are omitted, and Mermaid callback
-      directives are disabled with Mermaid's <code>strict</code> security level.
+      The viewer also discovers <code>.md</code> and
+      <code>.markdown</code> files. It renders headings, paragraphs, emphasis,
+      lists and task lists, blockquotes, code, GFM tables, links, images, and
+      <code>mermaid</code> fences. Relative URLs are resolved from the
+      Markdown file. Raw HTML is displayed literally, unsafe URL schemes are omitted, and Mermaid
+      callback directives are disabled with Mermaid's
+      <code>strict</code> security level.
     </p>
     <pre><code class="language-sh">spec-html ./specs --markdown-lang en
 spec-html convert ./specs/design.md --lang en
@@ -49,12 +54,12 @@ spec-html migrate ./specs --lang en --write
 spec-html migrate ./specs --lang en --language-map ./specs.languages.json --check
 </code></pre>
     <p>
-      Omitting <code>--output</code> writes HTML only to stdout. An explicit output must be a new
-      <code>.html</code> file in the input directory; it is never allowed to overwrite an existing
-      file or symbolic link. Conversion does not delete, rename, archive, or synchronize the
-      Markdown source, and the command reports that it was retained. The viewer lists the source and
-      generated HTML separately. Treat the generated HTML as an independent editable document
-      instead of keeping both files as sources of truth.
+      Omitting <code>--output</code> writes HTML only to stdout. An explicit
+      output must be a new <code>.html</code> file in the input directory;
+      it is never allowed to overwrite an existing file or symbolic link. Conversion does not
+      delete, rename, archive, or synchronize the Markdown source, and the command reports that it
+      was retained. The viewer lists the source and generated HTML separately. Treat the generated
+      HTML as an independent editable document instead of keeping both files as sources of truth.
     </p>
     <p>
       Conversion preserves GitHub-compatible heading IDs, including numeric prefixes, and maps GFM
@@ -63,19 +68,22 @@ spec-html migrate ./specs --lang en --language-map ./specs.languages.json --chec
       lint error.
     </p>
     <p>
-      Use <code>migrate</code> for an all-or-nothing source-of-truth switch. Check mode does not
-      write. Write mode creates same-directory HTML files, rewrites mapped document links, verifies
-      lint and content parity, and archives the Markdown only after every preflight passes. The
-      migration ID can restore the unchanged batch with <code>--rollback</code>. Once the HTML is
-      accepted, <code>--finalize</code> keeps its current contents and removes rollback backups.
-      Migration-managed Markdown remains readable in Archive but cannot be restored individually.
+      Use <code>migrate</code> for an all-or-nothing source-of-truth switch.
+      Check mode does not write. Write mode creates same-directory HTML files, rewrites mapped
+      document links, verifies lint and content parity, and archives the Markdown only after every
+      preflight passes. The migration ID can restore the unchanged batch with
+      <code>--rollback</code>. Once the HTML is accepted,
+      <code>--finalize</code> keeps its current contents and removes rollback
+      backups. Migration-managed Markdown remains readable in Archive but cannot be restored
+      individually.
     </p>
     <p>
-      Migration blocks lossy raw HTML or unsafe-URL removal unless <code>--allow-lossy</code> is
-      explicit. Unsupported front matter, footnotes, custom heading IDs, wiki links, GitHub alerts,
-      and math extensions receive source diagnostics. Tables and Mermaid diagrams use only a
-      preceding heading in the same block scope as their caption. A JSON language map can override
-      the fallback <code>--lang</code> for exact Markdown paths in mixed-language roots.
+      Migration blocks lossy raw HTML or unsafe-URL removal unless
+      <code>--allow-lossy</code> is explicit. Unsupported front matter, footnotes,
+      custom heading IDs, wiki links, GitHub alerts, and math extensions receive source diagnostics.
+      Tables and Mermaid diagrams use only a preceding heading in the same block scope as their
+      caption. A JSON language map can override the fallback
+      <code>--lang</code> for exact Markdown paths in mixed-language roots.
     </p>
     <aside>
       <p>
@@ -87,10 +95,12 @@ spec-html migrate ./specs --lang en --language-map ./specs.languages.json --chec
     </aside>
     <aside>
       <p>
-        The <code>lint</code>, <code>fix</code>, <code>format</code>, and
-        <code>check</code> commands process HTML only. A successful check of a mixed directory does
-        not mean its Markdown source was linted. Use <code>migrate --check</code> to validate the
-        complete Markdown-to-HTML plan before switching sources of truth.
+        The <code>lint</code>,
+        <code>fix</code>, <code>format</code>,
+        and <code>check</code> commands process HTML only. A successful
+        check of a mixed directory does not mean its Markdown source was linted. Use
+        <code>migrate --check</code> to validate the complete Markdown-to-HTML plan
+        before switching sources of truth.
       </p>
     </aside>
   </section>
@@ -112,8 +122,8 @@ spec-html fix ./specs --write
     <h2>Format the document</h2>
     <p>
       After authoring, use the formatter to normalize indentation and line breaks.
-      <code>--check</code> reports whether files differ without changing them;
-      <code>--write</code> updates only files that need formatting.
+      <code>--check</code> reports whether files differ without changing
+      them; <code>--write</code> updates only files that need formatting.
     </p>
     <pre><code class="language-sh">spec-html format ./specs --check
 spec-html format ./specs --write
@@ -121,7 +131,8 @@ spec-html format ./specs --write
     <p>
       Full HTML documents are also accepted. Safe document wrappers and metadata are normalized to
       fragments, but conversion is refused when the head contains
-      <code>style</code>, <code>script</code>, <code>link</code>, or
+      <code>style</code>, <code>script</code>,
+      <code>link</code>, or
       <code>base</code>
       content, or when wrapper attributes affect rendering or behavior. The formatter does not
       invent semantic choices such as alt text, captions, headings, or elements.
@@ -146,17 +157,18 @@ spec-html lint ./specs --warnings-as-errors
   <section id="check">
     <h2>Run all checks together</h2>
     <p>
-      Use <code>check</code> to run the fixer, formatter, and linter in that order. The default run
-      reports every stage without changing files. Add <code>--fix</code> to apply safe fixer and
-      formatter changes before linting the result.
+      Use <code>check</code> to run the fixer, formatter, and linter in
+      that order. The default run reports every stage without changing files. Add
+      <code>--fix</code> to apply safe fixer and formatter changes before
+      linting the result.
     </p>
     <pre><code class="language-sh">spec-html check ./specs
 spec-html check ./specs --fix
 </code></pre>
     <p>
       Stage selectors run only the requested combination. For example, use
-      <code>--fixer --lint</code> for the fixer and linter, or <code>--fixer --format</code> for the
-      fixer and formatter.
+      <code>--fixer --lint</code> for the fixer and linter, or
+      <code>--fixer --format</code> for the fixer and formatter.
     </p>
   </section>
 
@@ -176,8 +188,9 @@ spec-html check ./specs --fix
   <section id="chart-js">
     <h2>Chart.js example</h2>
     <p>
-      When Chart.js is installed, put the canvas in a <code>figure</code>, give it an accessible
-      name, and call the global <code>Chart</code> API from an inline script. Keep the exact values
+      When Chart.js is installed, put the canvas in a <code>figure</code>,
+      give it an accessible name, and call the global
+      <code>Chart</code> API from an inline script. Keep the exact values
       in normal HTML so the document remains useful without JavaScript.
     </p>
     <pre><code class="language-html">&lt;figure&gt;
@@ -200,8 +213,9 @@ spec-html check ./specs --fix
   <section id="mermaid">
     <h2>Mermaid example</h2>
     <p>
-      When a diagram is useful, put its source in <code>pre.mermaid</code> and describe it with a
-      <code>figure</code> and <code>figcaption</code>.
+      When a diagram is useful, put its source in <code>pre.mermaid</code> and
+      describe it with a <code>figure</code> and
+      <code>figcaption</code>.
     </p>
     <pre><code class="language-html">&lt;figure&gt;
   &lt;pre class=&quot;mermaid&quot;&gt;

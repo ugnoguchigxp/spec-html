@@ -31,6 +31,15 @@ export interface MarkdownMermaidCaption {
   headingId: string | null;
 }
 
+export interface MarkdownReference {
+  kind: MarkdownUrlKind;
+  value: string;
+}
+
+export interface MarkdownMermaidDiagram {
+  source: string;
+}
+
 export type MarkdownNoticeCode =
   "raw-html" | "unsafe-link-url" | "unsafe-image-url";
 
@@ -46,6 +55,8 @@ export interface MarkdownCompileResult {
   headings: readonly MarkdownHeading[];
   tableCaptions: readonly MarkdownTableCaption[];
   mermaidCaptions: readonly MarkdownMermaidCaption[];
+  mermaidDiagrams: readonly MarkdownMermaidDiagram[];
+  references: readonly MarkdownReference[];
   notices: readonly MarkdownNotice[];
 }
 
@@ -57,8 +68,10 @@ interface CompileState {
   tableCaptions: MarkdownTableCaption[];
   tableCaptionCandidates: Array<MarkdownHeading | null>;
   mermaidCaptions: MarkdownMermaidCaption[];
+  mermaidDiagrams: MarkdownMermaidDiagram[];
   mermaidCaptionCandidates: Array<MarkdownHeading | null>;
   linkResolver: ((url: string) => string) | undefined;
+  references: MarkdownReference[];
 }
 
 const markdownParser = new Marked({ async: false, breaks: false, gfm: true });
@@ -80,8 +93,10 @@ export function compileMarkdown(
     tableCaptions: [],
     tableCaptionCandidates: [...candidates.tables],
     mermaidCaptions: [],
+    mermaidDiagrams: [],
     mermaidCaptionCandidates: [...candidates.mermaid],
     linkResolver: options.linkResolver,
+    references: [],
   };
   const renderer = new MarkdownRenderer(state);
   const body = markdownParser.parse(normalizedSource, {
@@ -102,6 +117,8 @@ export function compileMarkdown(
     headings: state.headings,
     tableCaptions: state.tableCaptions,
     mermaidCaptions: state.mermaidCaptions,
+    mermaidDiagrams: state.mermaidDiagrams,
+    references: state.references,
     notices: state.notices,
   };
 }
@@ -145,6 +162,7 @@ class MarkdownRenderer extends Renderer {
   override code(token: Tokens.Code): string {
     const language = token.lang?.trim().split(/\s+/, 1)[0]?.toLowerCase();
     if (language === "mermaid") {
+      this.state.mermaidDiagrams.push({ source: token.text });
       const heading = this.state.mermaidCaptionCandidates.shift() ?? null;
       this.state.mermaidCaptions.push({
         index: this.state.mermaidCaptions.length,
@@ -175,6 +193,7 @@ class MarkdownRenderer extends Renderer {
       return label;
     }
     const resolvedHref = this.state.linkResolver?.(safeHref) ?? safeHref;
+    this.state.references.push({ kind: "link", value: safeHref });
     return `<a href="${escapeHtml(resolvedHref)}"${titleAttribute(title)}>${label}</a>`;
   }
 
@@ -185,6 +204,7 @@ class MarkdownRenderer extends Renderer {
       this.unsafeUrlNotice("image", href);
       return escapeHtml(alt);
     }
+    this.state.references.push({ kind: "image", value: safeHref });
     return `<img src="${escapeHtml(safeHref)}" alt="${escapeHtml(alt)}"${titleAttribute(title)}>`;
   }
 

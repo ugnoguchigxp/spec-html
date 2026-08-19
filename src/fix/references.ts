@@ -4,7 +4,6 @@ import {
   basename,
   dirname,
   extname,
-  isAbsolute,
   relative,
   resolve,
   sep,
@@ -18,6 +17,7 @@ import {
 } from "html-validate";
 import { isSingleEditTypo } from "./document.js";
 import type { AppliedFix } from "./diagnostics.js";
+import { isPathWithin } from "../shared/path-boundary.js";
 
 interface ReferenceAttribute {
   key: string;
@@ -275,7 +275,7 @@ async function findPathFix(
   const directoryPart = dirname(decodedPath);
   const file = basename(decodedPath);
   const candidateDirectory = resolve(dirname(absolutePath), directoryPart);
-  if (!isWithin(contentRoot, candidateDirectory)) {
+  if (!isPathWithin(contentRoot, candidateDirectory)) {
     return null;
   }
   let actualDirectory: string;
@@ -284,7 +284,7 @@ async function findPathFix(
   } catch {
     return null;
   }
-  if (!isWithin(contentRoot, actualDirectory)) {
+  if (!isPathWithin(contentRoot, actualDirectory)) {
     return null;
   }
   const entries = await readdir(actualDirectory, { withFileTypes: true });
@@ -333,14 +333,14 @@ async function isReadableFileWithin(
   root: string,
   candidate: string,
 ): Promise<boolean> {
-  if (!isWithin(root, candidate)) {
+  if (!isPathWithin(root, candidate)) {
     return false;
   }
   try {
     const actual = await realpath(candidate);
     const stats = await stat(actual);
     await access(actual, constants.R_OK);
-    return stats.isFile() && isWithin(root, actual);
+    return stats.isFile() && isPathWithin(root, actual);
   } catch {
     return false;
   }
@@ -471,14 +471,6 @@ function decode(value: string): string | null {
   } catch {
     return null;
   }
-}
-
-function isWithin(root: string, target: string): boolean {
-  const path = relative(root, target);
-  return (
-    path.length === 0 ||
-    (!isAbsolute(path) && !path.startsWith(`..${sep}`) && path !== "..")
-  );
 }
 
 function locationAt(

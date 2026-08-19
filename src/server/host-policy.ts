@@ -11,6 +11,8 @@ export class HostPolicyConfigurationError extends Error {
 export interface HostPolicy {
   readonly allowedHosts: ReadonlySet<string>;
   readonly browserHost: string;
+  /** Non-loopback listeners require an explicit same-origin Origin on mutations. */
+  readonly mutationOriginRequired: boolean;
 }
 
 export type RequestHostValidation =
@@ -36,6 +38,7 @@ export function createHostPolicy(
     return {
       allowedHosts: new Set(normalizedAllowedHosts),
       browserHost: normalizedAllowedHosts[0]!,
+      mutationOriginRequired: true,
     };
   }
 
@@ -53,11 +56,19 @@ export function createHostPolicy(
     for (const loopbackHost of LOOPBACK_HOSTS) {
       hosts.add(loopbackHost);
     }
-    return { allowedHosts: hosts, browserHost: normalizedBindHost };
+    return {
+      allowedHosts: hosts,
+      browserHost: normalizedBindHost,
+      mutationOriginRequired: false,
+    };
   }
   const hosts = new Set<string>(normalizedAllowedHosts);
   hosts.add(normalizedBindHost);
-  return { allowedHosts: hosts, browserHost: normalizedBindHost };
+  return {
+    allowedHosts: hosts,
+    browserHost: normalizedBindHost,
+    mutationOriginRequired: true,
+  };
 }
 
 export function normalizeConfiguredHostname(
@@ -125,10 +136,11 @@ export function validateRequestHost(
 export function requestOriginMatches(
   request: IncomingMessage,
   requestOrigin: string,
+  originRequired = false,
 ): boolean {
   const origins = getDistinctHeaderValues(request, "origin");
   if (origins.length === 0) {
-    return true;
+    return !originRequired;
   }
   if (origins.length !== 1) {
     return false;

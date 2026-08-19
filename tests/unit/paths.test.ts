@@ -11,6 +11,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   InvalidRequestPathError,
+  openResolvedRequestFile,
+  ResolvedRequestFileChangedError,
   resolveRequestFile,
 } from "../../src/server/static-file.js";
 
@@ -35,15 +37,15 @@ afterEach(async () => {
 
 describe("resolveRequestFile", () => {
   it("resolves nested, space, and Unicode file names", async () => {
-    await expect(resolveRequestFile(root, "nested/page.html")).resolves.toBe(
-      await realpath(join(root, "nested", "page.html")),
-    );
-    await expect(resolveRequestFile(root, "space%20file.html")).resolves.toBe(
-      await realpath(join(root, "space file.html")),
-    );
+    await expect(resolveRequestFile(root, "nested/page.html")).resolves.toMatchObject({
+      filePath: await realpath(join(root, "nested", "page.html")),
+    });
+    await expect(resolveRequestFile(root, "space%20file.html")).resolves.toMatchObject({
+      filePath: await realpath(join(root, "space file.html")),
+    });
     await expect(
       resolveRequestFile(root, encodeURIComponent("日本語.html")),
-    ).resolves.toBe(await realpath(join(root, "日本語.html")));
+    ).resolves.toMatchObject({ filePath: await realpath(join(root, "日本語.html")) });
   });
 
   it("returns null for files that do not exist", async () => {
@@ -60,9 +62,9 @@ describe("resolveRequestFile", () => {
   );
 
   it("keeps hidden paths available to package-managed static roots by default", async () => {
-    await expect(resolveRequestFile(root, ".env")).resolves.toBe(
-      await realpath(join(root, ".env")),
-    );
+    await expect(resolveRequestFile(root, ".env")).resolves.toMatchObject({
+      filePath: await realpath(join(root, ".env")),
+    });
   });
 
   it("does not follow a symlink outside the content root", async () => {
@@ -73,6 +75,20 @@ describe("resolveRequestFile", () => {
     await expect(
       resolveRequestFile(root, "outside-link.html"),
     ).resolves.toBeNull();
+  });
+
+  it("rejects a file replaced after path validation", async () => {
+    const requestedPath = join(root, "nested", "page.html");
+    const outsidePath = join(fixtureRoot, "outside.html");
+    const resolved = await resolveRequestFile(root, "nested/page.html");
+    expect(resolved).not.toBeNull();
+    await writeFile(outsidePath, "outside");
+    await rm(requestedPath);
+    await symlink(outsidePath, requestedPath);
+
+    await expect(openResolvedRequestFile(resolved!)).rejects.toBeInstanceOf(
+      ResolvedRequestFileChangedError,
+    );
   });
 
   it.each([

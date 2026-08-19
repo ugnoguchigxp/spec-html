@@ -16,7 +16,7 @@ import {
   getDocumentArchiveState,
   MigrationManagedDocumentError,
   setDocumentArchived,
-} from "../../src/content/archive.js";
+} from "../../src/migrate/archive.js";
 import { digestText } from "../../src/content/safe-write.js";
 import { rewriteMigrationLink } from "../../src/migrate/links.js";
 import {
@@ -349,6 +349,46 @@ Directive
       join(root, "guide.md"),
       "# Guide\n\n## Matrix\n\n| Kind | Value |\n| --- | --- |\n| **Strong** | *Emphasis* |\n\n```TS\nconst ready = true;\n```\n",
     );
+    const plan = await createMigrationPlan({ contentRoot: root, language: "en" });
+    expect(plan.issues).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ file: "guide.md", code: "MIG004" }),
+      ]),
+    );
+  });
+
+  it("plans interleaved structures and verbatim inline content without false parity errors", async () => {
+    const longCommand =
+      "bun run scan:profile -- --project-path <repo> --create-project true --profile agent-output --json";
+    await writeFile(
+      join(root, "guide.md"),
+      [
+        "# Guide",
+        "",
+        "## First",
+        "",
+        "### Nested",
+        "",
+        "## Second",
+        "",
+        "- Unordered",
+        "",
+        "1. Ordered",
+        "",
+        "- Unordered again",
+        "",
+        "**Strong**, *emphasis*, ~~deleted~~, and **strong again**.",
+        "",
+        "## Matrix",
+        "",
+        "| Kind | Value |",
+        "| --- | --- |",
+        "| Release | READMEと`v1.0.0`がcurrent |",
+        "",
+        `Run \`${longCommand}\`.`,
+      ].join("\n"),
+    );
+
     const plan = await createMigrationPlan({ contentRoot: root, language: "en" });
     expect(plan.issues).not.toEqual(
       expect.arrayContaining([

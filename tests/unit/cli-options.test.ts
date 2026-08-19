@@ -328,12 +328,12 @@ describe("parseCliCommand", () => {
     });
   });
 
-  it("reports parseArgs failures in Japanese", () => {
+  it("reports parseArgs failures in English", () => {
     expect(() => parseCliCommand(["--unknown"], CWD)).toThrow(
-      "未対応のoptionです: --unknown",
+      "Unknown option: --unknown",
     );
     expect(() => parseCliCommand(["--port"], CWD)).toThrow(
-      "optionの値が必要です: --port",
+      "Option requires a value: --port",
     );
   });
 

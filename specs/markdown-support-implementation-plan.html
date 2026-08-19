@@ -37,8 +37,8 @@
         reloadが一貫して動く。
       </li>
       <li>
-        明示的なCLI操作でMarkdownから1つのroot <code>article[lang]</code>を持つSpec HTML
-        draftを生成できる。
+        明示的なCLI操作でMarkdownから1つのroot
+        <code>article[lang]</code>を持つSpec HTML draftを生成できる。
       </li>
       <li>閲覧と変換が同じMarkdown parser、heading ID、URL policy、Mermaid変換を使う。</li>
       <li>既存HTMLの表示、lint、fix、format、archive、security testを回帰させない。</li>
@@ -70,11 +70,16 @@
         <tr>
           <th scope="row">document identity</th>
           <td>content rootからの相対pathを拡張子込みでidentityにする</td>
-          <td><code>design.md</code>と<code>design.html</code>を独立して参照、archiveできる。</td>
+          <td>
+            <code>design.md</code
+            >と<code>design.html</code>を独立して参照、archiveできる。
+          </td>
         </tr>
         <tr>
           <th scope="row">同名文書</th>
-          <td>両方表示し、Markdownへ常に<code>MD</code> badgeを付ける</td>
+          <td>
+            両方表示し、Markdownへ常に<code>MD</code> badgeを付ける
+          </td>
           <td>古いHTMLが新しいMarkdownを隠すstale-content問題を避ける。</td>
         </tr>
         <tr>
@@ -84,7 +89,10 @@
         </tr>
         <tr>
           <th scope="row">Parser</th>
-          <td><code>marked</code>と<code>github-slugger</code>を直接利用</td>
+          <td>
+            <code>marked</code
+            >と<code>github-slugger</code>を直接利用
+          </td>
           <td>GFM主要機能、Node.js／browser共用、GitHub互換heading IDを小さい構成で得られる。</td>
         </tr>
         <tr>
@@ -94,7 +102,9 @@
         </tr>
         <tr>
           <th scope="row">Markdownの言語</th>
-          <td>Viewerは<code>--markdown-lang</code>、converterは<code>--lang</code>で指定</td>
+          <td>
+            Viewerは<code>--markdown-lang</code>、converterは<code>--lang</code>で指定
+          </td>
           <td>自動言語判定を避けつつ、<code>article[lang]</code>を生成する。</td>
         </tr>
         <tr>
@@ -221,14 +231,21 @@ interface ContentDocument {
       <li>
         対応拡張子はcase-insensitiveな<code>.html</code>、<code>.md</code>、<code>.markdown</code>。
       </li>
-      <li><code>.htm</code>は現在の探索対象でないため、今回もdocumentとして追加しない。</li>
+      <li>
+        <code>.htm</code
+        >は現在の探索対象でないため、今回もdocumentとして追加しない。
+      </li>
       <li>
         absolute
         path、backslash、NUL、空segment、<code>.</code>、<code>..</code>は従来どおり拒否する。
       </li>
-      <li>dot directory、<code>node_modules</code>、symbolic linkは従来どおり探索しない。</li>
       <li>
-        <code>nav.html</code>の既存除外は維持し、<code>nav.md</code>は通常のMarkdown文書として扱う。
+        dot directory、<code>node_modules</code>、symbolic
+        linkは従来どおり探索しない。
+      </li>
+      <li>
+        <code>nav.html</code
+        >の既存除外は維持し、<code>nav.md</code>は通常のMarkdown文書として扱う。
       </li>
       <li>archive conflictは拡張子込みの同一pathだけを対象とする。</li>
     </ul>
@@ -242,8 +259,12 @@ findHtmlDocuments(root)   // HTML only
 documentFormatFromPath(path)
 normalizeViewerDocumentPath(path)</code></pre>
     <ul>
-      <li>navigation、archive、document stateは<code>findViewerDocuments</code>を使う。</li>
-      <li>lint、fix、formatの既存HTML処理は<code>findHtmlDocuments</code>を使う。</li>
+      <li>
+        navigation、archive、document stateは<code>findViewerDocuments</code>を使う。
+      </li>
+      <li>
+        lint、fix、formatの既存HTML処理は<code>findHtmlDocuments</code>を使う。
+      </li>
       <li>routerとserverは同じ<code>normalizeViewerDocumentPath</code>を使う。</li>
       <li>asset配信のpath検証とviewer documentの拡張子検証を混同しない。</li>
     </ul>
@@ -281,45 +302,75 @@ interface MarkdownCompileResult {
       <tbody>
         <tr>
           <th scope="row">heading</th>
-          <td><code>h1</code>〜<code>h6</code>とGitHub互換ID</td>
-          <td>重複は<code>-1</code>、<code>-2</code>で一意化し、日本語を保持する。</td>
+          <td>
+            <code>h1</code
+            >〜<code>h6</code>とGitHub互換ID
+          </td>
+          <td>
+            重複は<code>-1</code>、<code>-2</code>で一意化し、日本語を保持する。
+          </td>
         </tr>
         <tr>
           <th scope="row">paragraph、emphasis、strong、delete</th>
           <td>対応する標準HTML</td>
-          <td>soft line breakを自動的な<code>br</code>へ変えない。</td>
+          <td>
+            soft line breakを自動的な<code>br</code>へ変えない。
+          </td>
         </tr>
         <tr>
           <th scope="row">list、task list</th>
-          <td><code>ul</code>／<code>ol</code>とdisabled checkbox</td>
+          <td>
+            <code>ul</code
+            >／<code>ol</code>とdisabled checkbox
+          </td>
           <td>checkbox状態の保存や編集UIは提供しない。</td>
         </tr>
         <tr>
           <th scope="row">blockquote、horizontal rule</th>
-          <td><code>blockquote</code>、<code>hr</code></td>
+          <td>
+            <code>blockquote</code>、<code
+              >hr</code
+            >
+          </td>
           <td>既存document CSSを再利用する。</td>
         </tr>
         <tr>
           <th scope="row">inline／fenced code</th>
-          <td><code>code</code>、<code>pre &gt; code</code></td>
+          <td>
+            <code>code</code>、<code
+              >pre &gt; code</code
+            >
+          </td>
           <td>language classは保持するがsyntax highlightは追加しない。</td>
         </tr>
         <tr>
           <th scope="row">GFM table</th>
-          <td><code>table</code>と<code>th scope="col"</code></td>
-          <td>captionを推測しないため、変換後HTMLでは<code>TBL001</code>が残り得る。</td>
+          <td>
+            <code>table</code>と<code
+              >th scope="col"</code
+            >
+          </td>
+          <td>
+            captionを推測しないため、変換後HTMLでは<code>TBL001</code>が残り得る。
+          </td>
         </tr>
         <tr>
           <th scope="row">link、image、autolink</th>
-          <td><code>a</code>、<code>img</code></td>
+          <td>
+            <code>a</code>、<code
+              >img</code
+            >
+          </td>
           <td>URL schemeを検査し、相対URLを保持する。</td>
         </tr>
         <tr>
           <th scope="row"><code>mermaid</code> fence</th>
           <td><code>pre.mermaid[data-spec-html-source="markdown"]</code></td>
           <td>
-            sourceをescapeし、Markdown由来のframeではMermaidの<code>strict</code> security
-            levelを使ってcallback directiveを無効化する。
+            sourceをescapeし、Markdown由来のframeではMermaidの<code
+              >strict</code
+            >
+            security levelを使ってcallback directiveを無効化する。
           </td>
         </tr>
         <tr>
@@ -336,7 +387,10 @@ interface MarkdownCompileResult {
         linkはrelative
         URL、fragment、<code>http</code>、<code>https</code>、<code>mailto</code>、<code>tel</code>を許可する。
       </li>
-      <li>imageはrelative URL、<code>http</code>、<code>https</code>を許可する。</li>
+      <li>
+        imageはrelative
+        URL、<code>http</code>、<code>https</code>を許可する。
+      </li>
       <li>
         <code>javascript</code
         >、<code>vbscript</code>、<code>file</code>、<code>data</code>と不正URLは属性へ出力しない。
@@ -348,8 +402,7 @@ interface MarkdownCompileResult {
     <h3>言語指定</h3>
     <ul>
       <li>
-        Viewerへ<code>--markdown-lang &lt;language-tag&gt;</code
-        >を追加し、既定値は現在のframeと同じ<code>en</code>にする。
+        Viewerへ<code>--markdown-lang &lt;language-tag&gt;</code>を追加し、既定値は現在のframeと同じ<code>en</code>にする。
       </li>
       <li>converterの<code>--lang</code>は必須とする。</li>
       <li>両optionは同じBCP 47 validatorを使い、可能ならcanonical formへ揃える。</li>
@@ -368,7 +421,10 @@ interface MarkdownCompileResult {
         <code>index</code
         >、<code>overview</code>、<code>readme</code>の優先順位は拡張子に依存させない。
       </li>
-      <li>Markdown項目には常に可視の<code>MD</code> badgeとaccessible nameを付ける。</li>
+      <li>
+        Markdown項目には常に可視の<code>MD</code> badgeとaccessible
+        nameを付ける。
+      </li>
       <li>同じstemのHTMLとMarkdownは両方表示し、同順位ではpath順でHTMLを先にする。</li>
     </ul>
 
@@ -421,7 +477,10 @@ interface MarkdownCompileResult {
     <h3>Archiveと同名文書</h3>
     <ul>
       <li>archive／restoreは拡張子込みpathへ作用する。</li>
-      <li><code>design.md</code>のarchiveは<code>design.html</code>へ影響しない。</li>
+      <li>
+        <code>design.md</code
+        >のarchiveは<code>design.html</code>へ影響しない。
+      </li>
       <li>activeとarchiveに同一pathが同時に存在する場合だけ409 conflictにする。</li>
       <li>archive fallback routeは3つのdocument拡張子を同じ規則で扱う。</li>
     </ul>
@@ -448,7 +507,9 @@ spec-html convert --help</code></pre>
         <tr>
           <th scope="row"><code>input</code></th>
           <td>
-            1つの通常UTF-8 file。<code>.md</code>または<code>.markdown</code>。symbolic linkは拒否。
+            1つの通常UTF-8
+            file。<code>.md</code>または<code>.markdown</code>。symbolic
+            linkは拒否。
           </td>
         </tr>
         <tr>
@@ -464,7 +525,9 @@ spec-html convert --help</code></pre>
         </tr>
         <tr>
           <th scope="row">既定出力名</th>
-          <td>暗黙には作らない。file生成には明示的な<code>--output</code>を必要とする。</td>
+          <td>
+            暗黙には作らない。file生成には明示的な<code>--output</code>を必要とする。
+          </td>
         </tr>
       </tbody>
     </table>
@@ -511,7 +574,10 @@ sequenceDiagram
       </li>
       <li>lint errorが残る場合はexit code 1、usageまたはI/O failureはexit code 2とする。</li>
       <li>Markdown tableのcaptionなど、sourceにない意味を捏造してexit code 0にしない。</li>
-      <li>project全体のrelative reference検査は、作成後の<code>spec-html check</code>へ委ねる。</li>
+      <li>
+        project全体のrelative
+        reference検査は、作成後の<code>spec-html check</code>へ委ねる。
+      </li>
     </ul>
 
     <h3>Safe create</h3>
@@ -632,7 +698,8 @@ sequenceDiagram
           全拡張子、case、hidden、symlink、<code>nav.md</code>。
         </li>
         <li>
-          <code>tests/unit/router.test.ts</code>: Markdown pathのvalid／invalid、URL round-trip。
+          <code>tests/unit/router.test.ts</code>: Markdown pathのvalid／invalid、URL
+          round-trip。
         </li>
         <li>format／fix／lint project test: mixed directoryでMarkdownを変更しない。</li>
       </ul>
@@ -653,7 +720,9 @@ sequenceDiagram
       </p>
       <h3>変更</h3>
       <ul>
-        <li>GFM optionを固定したlocal <code>Marked</code> instanceを作る。</li>
+        <li>
+          GFM optionを固定したlocal <code>Marked</code> instanceを作る。
+        </li>
         <li><code>github-slugger</code>でheading IDと重複suffixを生成する。</li>
         <li>heading、table header、Mermaid、raw HTML、link、imageのrenderer hookを実装する。</li>
         <li>language tagを検証し、1つの<code>article[lang]</code>へwrapする。</li>
@@ -665,7 +734,10 @@ sequenceDiagram
         <li>日本語heading、記号、空heading、重複heading。</li>
         <li>Markdown内HTML block、inline HTML、script、event handler。</li>
         <li>unsafe scheme、malformed URL、relative path、fragment、Unicode path。</li>
-        <li>Mermaid sourceの<code>&lt;</code>、<code>&gt;</code>、<code>&amp;</code>。</li>
+        <li>
+          Mermaid
+          sourceの<code>&lt;</code>、<code>&gt;</code>、<code>&amp;</code>。
+        </li>
         <li>同一入力の複数回compileがbyte-identical。</li>
       </ul>
       <h3>完了条件</h3>
@@ -699,10 +771,14 @@ sequenceDiagram
           <code>tests/unit/archive.test.ts</code>: Markdown
           archive／restore、形式間非干渉、conflict。
         </li>
-        <li><code>tests/unit/mime.test.ts</code>: <code>.md</code>と<code>.markdown</code>。</li>
         <li>
-          <code>tests/server/server.test.ts</code>: raw source配信、navigation、state API、archived
-          source。
+          <code>tests/unit/mime.test.ts</code>:
+          <code>.md</code
+          >と<code>.markdown</code>。
+        </li>
+        <li>
+          <code>tests/server/server.test.ts</code>: raw source配信、navigation、state
+          API、archived source。
         </li>
         <li>
           <code>tests/unit/cli-options.test.ts</code>:
@@ -784,7 +860,10 @@ sequenceDiagram
       </p>
       <h3>変更</h3>
       <ul>
-        <li><code>convert</code> command、help、options type、dispatchを追加する。</li>
+        <li>
+          <code>convert</code> command、help、options
+          type、dispatchを追加する。
+        </li>
         <li>stdout modeではHTMLをstdout、diagnosticsをstderrへ分離する。</li>
         <li>file modeでは作成結果とdiagnosticsを明確にreportする。</li>
         <li>成功、lint残存、usage／operation failureのexit codeを固定する。</li>
@@ -804,7 +883,7 @@ sequenceDiagram
       <h3>主なfile</h3>
       <p>
         <code>README.md</code
-        >、<code>README.ja.md</code>、<code>docs/authoring.html</code>、<code>docs/authoring.ja.html</code>、<code>CHANGELOG.md</code>、<code>scripts/test-pack.mjs</code>、browser
+        >、<code>README.ja.md</code>、<code>specs/authoring.html</code>、<code>specs/authoring.ja.html</code>、<code>CHANGELOG.md</code>、<code>scripts/test-pack.mjs</code>、browser
         fixture
       </p>
       <h3>変更</h3>
@@ -951,7 +1030,8 @@ npx spec-html check ./specs --fix --warnings-as-errors</code></pre>
     <h2>既存projectへの導入workflow</h2>
     <ol>
       <li>
-        既存のMarkdown directoryをそのまま<code>spec-html</code>で開き、navigation、relative
+        既存のMarkdown
+        directoryをそのまま<code>spec-html</code>で開き、navigation、relative
         link、画像、Mermaidの互換性を確認する。
       </li>
       <li>Markdownをsource of truthのまま使う文書は変換しない。</li>
@@ -960,7 +1040,9 @@ npx spec-html check ./specs --fix --warnings-as-errors</code></pre>
         HTML固有表現が必要な文書だけ<code>convert</code>する。
       </li>
       <li>MD badge付きの元文書と生成HTMLをViewer上で比較する。</li>
-      <li>生成HTMLへ不足するsemantic情報を追加し、<code>spec-html check</code>を通す。</li>
+      <li>
+        生成HTMLへ不足するsemantic情報を追加し、<code>spec-html check</code>を通す。
+      </li>
       <li>
         HTMLへ移行すると決めた後だけ、元Markdownを利用者自身がcontent root外へ移すかarchiveする。
       </li>

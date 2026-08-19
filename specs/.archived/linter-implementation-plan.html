@@ -99,7 +99,7 @@
       既定の<code>compact</code>形式はfile
       pathを一度だけ表示し、診断を1行に収める。messageは「違反している」ではなく「何へ直すか」を先に書く。
     </p>
-    <pre><code class="language-text">docs/sample.html
+    <pre><code class="language-text">specs/sample.html
   1:1 E DOC001 root-article — 最上位を article[lang] 1個にする
   8:3 W DOC101 section-anchor — h2を含むsectionへidを付ける
 summary files=1 errors=1 warnings=1
@@ -158,7 +158,7 @@ summary files=1 errors=1 warnings=1
   },
   "diagnostics": [
     {
-      "file": "docs/sample.html",
+      "file": "specs/sample.html",
       "line": 1,
       "column": 1,
       "severity": "error",
@@ -1099,7 +1099,7 @@ export type CliCommand =
       </li>
       <li>
         <code>package.json#files</code
-        >へ<code>docs/linter-implementation-plan.html</code>を追加する。
+        >へ<code>specs/.archived/linter-implementation-plan.html</code>を追加する。
       </li>
     </ol>
     <p>
@@ -1110,7 +1110,7 @@ export type CliCommand =
     <p>
       対象:
       <code>examples/charts/latency.html</code
-      >、<code>docs/authoring.html</code>、<code>README.md</code>、<code>CHANGELOG.md</code>。
+      >、<code>specs/authoring.html</code>、<code>README.md</code>、<code>CHANGELOG.md</code>。
     </p>
     <ol>
       <li>
@@ -1118,7 +1118,7 @@ export type CliCommand =
         >のcanvasで<code>aria-describedby="latency-chart-caption"</code>を<code>aria-labelledby="latency-chart-caption"</code>へ変更し、既知のINT001を解消する。
       </li>
       <li>
-        <code>docs/authoring.html</code>内のChart
+        <code>specs/authoring.html</code>内のChart
         code例も同じく<code>aria-labelledby</code>へ直し、Linter
         command、severity、<code>--explain</code>への短い案内を追加する。
       </li>

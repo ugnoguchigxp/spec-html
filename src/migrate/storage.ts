@@ -2,12 +2,10 @@ import { randomBytes } from "node:crypto";
 import {
   lstat,
   mkdir,
-  open,
   readdir,
   readFile,
   rename,
   rm,
-  type FileHandle,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { atomicCreate, atomicReplace } from "../content/safe-write.js";
@@ -15,10 +13,16 @@ import {
   documentFormatFromPath,
   removeDocumentExtension,
 } from "../content/document-format.js";
+import {
+  acquireContentMutationLock,
+  CONTENT_STATE_DIRECTORY,
+  ContentMutationLockedError,
+  type ContentMutationLock,
+} from "../content/mutation-lock.js";
+import { messageOf } from "../shared/error-message.js";
 
-export const MIGRATION_STATE_DIRECTORY = ".spec-html";
+export const MIGRATION_STATE_DIRECTORY = CONTENT_STATE_DIRECTORY;
 export const MIGRATION_DIRECTORY = "migrations";
-export const MIGRATION_LOCK_FILE = "migrate.lock";
 
 export type MigrationJournalState =
   | "prepared"
@@ -67,13 +71,8 @@ export interface MigrationOwnership {
   readonly state: Exclude<MigrationJournalState, "rolled-back">;
 }
 
-export class ContentMutationLockedError extends Error {
-  override name = "ContentMutationLockedError";
-}
-
-export interface MigrationLock {
-  release(): Promise<void>;
-}
+export { ContentMutationLockedError };
+export type MigrationLock = ContentMutationLock;
 
 export function createMigrationId(now = new Date()): string {
   return `${now.toISOString().replace(/[-:.]/g, "").replace("Z", "Z")}-${randomBytes(3).toString("hex")}`;
@@ -82,59 +81,7 @@ export function createMigrationId(now = new Date()): string {
 export async function acquireMigrationLock(
   contentRoot: string,
 ): Promise<MigrationLock> {
-  const stateRoot = await ensureStateRoot(contentRoot);
-  const lockPath = join(stateRoot, MIGRATION_LOCK_FILE);
-  let handle: FileHandle;
-  try {
-    handle = await open(lockPath, "wx", 0o600);
-  } catch (error: unknown) {
-    if (!isNodeError(error, "EEXIST")) {
-      throw error;
-    }
-    if (!(await removeStaleLock(lockPath))) {
-      throw new ContentMutationLockedError(
-        `別のcontent mutationが実行中です: ${lockPath}`,
-      );
-    }
-    try {
-      handle = await open(lockPath, "wx", 0o600);
-    } catch (retryError: unknown) {
-      if (isNodeError(retryError, "EEXIST")) {
-        throw new ContentMutationLockedError(
-          `別のcontent mutationが実行中です: ${lockPath}`,
-        );
-      }
-      throw retryError;
-    }
-  }
-  try {
-    await handle.writeFile(
-      `${JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() })}\n`,
-      "utf8",
-    );
-    await handle.sync();
-  } catch (error: unknown) {
-    try {
-      await handle.close();
-    } finally {
-      await rm(lockPath, { force: true });
-    }
-    throw error;
-  }
-  let released = false;
-  return {
-    async release(): Promise<void> {
-      if (released) {
-        return;
-      }
-      released = true;
-      try {
-        await handle.close();
-      } finally {
-        await rm(lockPath, { force: true });
-      }
-    },
-  };
+  return acquireContentMutationLock(contentRoot);
 }
 
 export async function ensureMigrationsRoot(contentRoot: string): Promise<string> {
@@ -611,47 +558,6 @@ async function listMigrationIds(contentRoot: string): Promise<string[]> {
     .sort((left, right) => left.localeCompare(right, "en"));
 }
 
-async function removeStaleLock(lockPath: string): Promise<boolean> {
-  let stats;
-  try {
-    stats = await lstat(lockPath);
-  } catch (error: unknown) {
-    if (isNodeError(error, "ENOENT")) return true;
-    throw error;
-  }
-  if (!stats.isFile() || stats.isSymbolicLink()) {
-    return false;
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(await readFile(lockPath, "utf8"));
-  } catch {
-    return false;
-  }
-  if (
-    !isRecord(parsed) ||
-    typeof parsed.pid !== "number" ||
-    !Number.isSafeInteger(parsed.pid) ||
-    parsed.pid <= 0
-  ) {
-    return false;
-  }
-  try {
-    process.kill(parsed.pid, 0);
-    return false;
-  } catch (error: unknown) {
-    if (!isNodeError(error, "ESRCH")) {
-      return false;
-    }
-  }
-  await rm(lockPath);
-  return true;
-}
-
 function isNodeError(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

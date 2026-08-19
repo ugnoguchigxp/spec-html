@@ -18,6 +18,7 @@ describe("host policy", () => {
       "localhost",
     ]);
     expect(policy.browserHost).toBe("127.0.0.1");
+    expect(policy.mutationOriginRequired).toBe(false);
     expect(() => createHostPolicy("localhost", ["viewer.example"])).toThrow(
       "loopback hostでは--allowed-hostを指定できません",
     );
@@ -30,6 +31,7 @@ describe("host policy", () => {
       "192.0.2.10",
       "viewer.example",
     ]);
+    expect(policy.mutationOriginRequired).toBe(true);
   });
 
   it("requires an explicit hostname for a wildcard bind", () => {
@@ -38,6 +40,7 @@ describe("host policy", () => {
     );
     expect(createHostPolicy("::", ["viewer.local"])).toMatchObject({
       browserHost: "viewer.local",
+      mutationOriginRequired: true,
     });
   });
 
@@ -79,6 +82,13 @@ describe("host policy", () => {
       origin: "http://localhost:4173",
     });
     expect(requestOriginMatches(request, "http://localhost:4173")).toBe(true);
+    expect(
+      requestOriginMatches(
+        requestWithRawHeaders(["Host", "localhost:4173"]),
+        "http://localhost:4173",
+        true,
+      ),
+    ).toBe(false);
   });
 
   it("rejects duplicate security headers through the raw-header fallback", () => {

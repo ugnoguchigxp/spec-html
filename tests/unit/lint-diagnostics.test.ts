@@ -41,8 +41,8 @@ describe("lint diagnostics", () => {
       createDiagnostic("a.html", 1, 1, "DOC002"),
     ])), 2);
     expect(output).toBe(`a.html
-  1:1 E DOC002 document-language — 本文の主言語を指定する
-  2:1 W DOC101 section-anchor — 安定したdeep link用の id をsectionへ付ける
+  1:1 E DOC002 document-language — Declare the document's primary language
+  2:1 W DOC101 section-anchor — Add a stable deep-link id to the section
 summary files=2 errors=2 warnings=1 displayed=2 omitted=1
 `);
   });
@@ -51,6 +51,23 @@ summary files=2 errors=2 warnings=1 displayed=2 omitted=1
     expect(formatCompact(result([]), 50)).toBe(
       "summary files=2 errors=0 warnings=0\n",
     );
+  });
+
+  it("reports inspected Markdown files instead of silently skipping them", () => {
+    expect(
+      formatCompact(
+        {
+          diagnostics: [],
+          summary: {
+            files: 3,
+            markdownFiles: 2,
+            errors: 0,
+            warnings: 0,
+          },
+        },
+        50,
+      ),
+    ).toBe("summary files=3 markdown=2 errors=0 warnings=0\n");
   });
 
   it("formats parseable JSON without parsing message strings", () => {

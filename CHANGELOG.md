@@ -2,6 +2,14 @@
 
 Notable changes to Spec HTML are recorded here. The project follows [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- Migration content parity now collects headings, mixed ordered/unordered lists, and inline marks in document order instead of selector-group order
+- Table, heading, and link text parity no longer invents spaces at inline element boundaries while preserving explicit line breaks
+- Formatting preserves inline code contents verbatim and protects only the outermost range when protected elements are nested
+
 ## 0.1.2 - 2026-08-19
 
 ### Added

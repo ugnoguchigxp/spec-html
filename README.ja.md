@@ -120,7 +120,7 @@ npx spec-html check ./specs --fixer --format --fix
 
 ## Markdown互換機能
 
-Markdown previewは見出しと安定したID、段落、強調、取り消し線、listとtask list、blockquote、code、GFM table、link、画像、`mermaid` fenceに対応します。raw HTMLは実行せずliteral textとして表示し、`javascript:`、`data:`、`file:`などの危険なlink・画像schemeは除去します。Markdownから生成したMermaidにはMermaidの`strict` security levelを適用してcallback directiveを無効化し、信頼済みHTML文書の既存Mermaid挙動は維持します。相対linkとassetは元Markdownの位置から解決し、MarkdownとHTMLの相互linkもViewer内で遷移します。
+Markdown previewは見出しと安定したID、段落、強調、取り消し線、listとtask list、blockquote、code、GFM table、link、画像、`mermaid` fenceに対応します。raw HTMLは実行せずliteral textとして表示し、`javascript:`、`data:`、`file:`などの危険なlink・画像schemeは除去します。MarkdownとHTMLの両方から生成したMermaidに`strict` security levelを適用し、callback directiveを無効化します。相対linkとassetは元Markdownの位置から解決し、MarkdownとHTMLの相互linkもViewer内で遷移します。
 
 生成するMarkdown articleの言語は既定で`en`です。content root全体の言語を変更できます。
 
@@ -182,7 +182,7 @@ committed migrationまたは復旧可能な未完了migrationが管理するArch
 }
 ```
 
-詳しい記述規約、リンク解決、integrationの使い方は[日本語のAuthoring guide](./docs/authoring.ja.html)を参照してください。[英語版](./docs/authoring.html)もあります。
+詳しい記述規約、リンク解決、integrationの使い方は[日本語のAuthoring guide](./specs/authoring.ja.html)を参照してください。[英語版](./specs/authoring.html)もあります。
 
 ## AI agent向けの指示
 
@@ -290,13 +290,23 @@ spec-html migrate [directory] --rollback <migration-id>
 spec-html migrate [directory] --finalize <migration-id>
 ```
 
+help、usage error、lint診断の既定出力言語は英語です。directoryまたはpathを省略できるcommandでは`./specs`を既定値にします。`lint`は`--format <compact|json>`と`--max-issues <number>`、`format`、`fix`、`check`、`migrate`は`--reporter <compact|json>`を受け付けます。`check`のlint stageでも`--max-issues`を使用できます。
+
+終了codeはCLI contractの一部です。
+
+- `0`: commandが完了し、指定した品質gateを通過した。
+- `1`: lint／migrationの指摘、check modeでの差分、fix／formatのblock、またはViewer実行時の失敗があった。
+- `2`: subcommandの引数不正、またはsubcommand完了前の運用上の失敗があった。
+
+`lint`と`check`のlint stageはHTMLとMarkdownの両方を検査します。Markdownでは空でないh1が1つあること、local参照、危険URL、Mermaid構文を検査し、compact／JSON summaryに検査したMarkdown件数を含めます。
+
 ## Security model
 
 Spec HTMLはローカルの信頼済みHTMLを対象にします。HTML設計書内のinline scriptは実行されるため、第三者から受け取ったHTMLを確認せずに開かないでください。Markdownのraw HTMLはescapeし、危険なURL schemeを除去し、Markdown Mermaidのcallback directiveを描画・変換時に無効化しますが、remoteのHTTP(S) linkと画像は許可します。
 
 不慣れな文書へFixerを使う場合は、先に`--check`で変更を確認してください。`scritp`や`onclik`の訂正は対応するHTMLの動作を意図どおり有効にしますが、JavaScript source自体は変更しません。
 
-既定では`127.0.0.1`だけで待ち受けます。loopback bindで許可するHTTP Hostは`127.0.0.1`、`localhost`、`::1`だけです。具体的な非loopback bindでは、repeat可能な`--allowed-host <hostname>`を追加できます。`--host 0.0.0.0`のようなwildcard bindには1件以上の指定が必須です。この設定を使っても、信頼できないnetworkへ公開しないでください。cross-originの文書状態更新も拒否します。
+既定では`127.0.0.1`だけで待ち受けます。loopback bindで許可するHTTP Hostは`127.0.0.1`、`localhost`、`::1`だけです。具体的な非loopback bindでは、repeat可能な`--allowed-host <hostname>`を追加できます。`--host 0.0.0.0`のようなwildcard bindには1件以上の指定が必須です。この設定を使っても、信頼できないnetworkへ公開しないでください。cross-originの文書状態更新を拒否し、非loopback listenerの状態変更requestには一致する`Origin` headerを必須にします。
 
 content directory外を指すpath traversalとsymbolic linkは配信しません。名前が`.`で始まるfileとdirectoryは、percent encodeされた場合もcontent routeから配信しません。
 
@@ -304,7 +314,7 @@ content directory外を指すpath traversalとsymbolic linkは配信しません
 
 - 検索とfront matterの解釈は含まず、migrationではfront matterを非対応として診断します。
 - Viewerは文書単位のMarkdown言語metadataを推測しません。一括移行では明示的なlanguage mapを指定できます。
-- HTML向けlint／fix／format／checkはMarkdown source自体を検査しません。
+- fix／format stageはHTMLだけを書き換えますが、lint／checkはMarkdownも書き換えずに検査します。
 - Formatterはsemantic tag、alt、caption、見出しなど意味判断が必要な内容を自動修正しません。
 - Fixerは文章やJavaScriptを修正せず、HTMLの修正候補が複数ある場合は推測しません。
 - browser自動テストはChromiumで全件、FirefoxとWebKitで重要導線のsmoke testを実行します。

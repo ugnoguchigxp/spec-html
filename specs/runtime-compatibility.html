@@ -42,8 +42,8 @@
       </tbody>
     </table>
     <p>
-      BunではNode.js用shebangをBun runtimeへ切り替えるため、利用時に<code>bunx --bun spec-html</code
-      >を使用する。
+      BunではNode.js用shebangをBun
+      runtimeへ切り替えるため、利用時に<code>bunx --bun spec-html</code>を使用する。
     </p>
   </section>
 
@@ -53,7 +53,10 @@
       <li>
         packageのNode.js engine条件はruntime dependencyが対応する最小minor versionと一致させる。
       </li>
-      <li>CLI bundleは最小対応Node.jsである<code>node20</code>をbuild targetとする。</li>
+      <li>
+        CLI bundleは最小対応Node.jsである<code>node20</code>をbuild
+        targetとする。
+      </li>
       <li>Node.js固有APIを使う場合は、Bunで同等APIがない場合の安全なfallbackをtestする。</li>
       <li>optional dependencyが存在しない状態でも、通常のHTML表示とViewer起動を成功させる。</li>
       <li>
@@ -70,8 +73,8 @@
         Bunで<code>IncomingMessage.headersDistinct</code>がない場合は<code>rawHeaders</code>からHostとOriginを取得し、重複headerの拒否を維持する。
       </li>
       <li>
-        Bunのmodule解決errorが<code>Error</code>を継承しない場合も、error codeでoptional
-        dependency未導入を判定する。
+        Bunのmodule解決errorが<code>Error</code>を継承しない場合も、error
+        codeでoptional dependency未導入を判定する。
       </li>
       <li>
         filesystem

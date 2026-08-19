@@ -10,14 +10,11 @@ void renderMermaid().catch((error: unknown) => {
 async function renderMermaid(): Promise<void> {
   await domReady();
   const moduleUrl = new URL(
-    "/_spec-html/integrations/mermaid/mermaid.esm.min.mjs",
+    MERMAID_MODULE_PATH,
     document.baseURI,
   ).href;
   const imported: unknown = await import(moduleUrl);
   const mermaid = getMermaidApi(imported);
-  const markdownDiagram = document.querySelector(
-    '.mermaid[data-spec-html-source="markdown"]',
-  );
   const selectedTheme = document.documentElement.dataset.theme;
   const dark =
     selectedTheme === "dark" ||
@@ -25,7 +22,7 @@ async function renderMermaid(): Promise<void> {
       matchMedia("(prefers-color-scheme: dark)").matches);
   mermaid.initialize({
     startOnLoad: false,
-    securityLevel: markdownDiagram === null ? "loose" : "strict",
+    securityLevel: "strict",
     theme: dark ? "base" : "default",
     ...(dark
       ? {
@@ -79,3 +76,4 @@ function getMermaidApi(value: unknown): MermaidApi {
   }
   return value.default as MermaidApi;
 }
+import { MERMAID_MODULE_PATH } from "../shared/runtime-paths.js";

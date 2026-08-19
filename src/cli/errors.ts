@@ -2,7 +2,7 @@ import { CliUsageError } from "./options.js";
 
 export function messageForCliError(error: unknown): string {
   if (error instanceof CliUsageError) {
-    return `引数が不正です: ${error.message}`;
+    return `Invalid arguments: ${error.message}`;
   }
   if (
     error instanceof Error &&
@@ -11,7 +11,7 @@ export function messageForCliError(error: unknown): string {
     "port" in error &&
     typeof error.port === "number"
   ) {
-    return `ポートを使用できません: ${error.port}`;
+    return `Port is unavailable: ${error.port}`;
   }
   return error instanceof Error ? error.message : String(error);
 }

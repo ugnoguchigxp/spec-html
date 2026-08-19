@@ -126,7 +126,7 @@ function parseMigrateCommand(args: readonly string[], cwd: string): CliCommand {
     throw new CliUsageError(messageForParseArgsError(error));
   }
   if (parsed.positionals.length > 1) {
-    throw new CliUsageError("directoryは1つだけ指定してください");
+    throw new CliUsageError("Specify at most one directory");
   }
   const hasOptions =
     parsed.values.check === true ||
@@ -141,7 +141,7 @@ function parseMigrateCommand(args: readonly string[], cwd: string): CliCommand {
   if (parsed.values.help === true) {
     if (parsed.positionals.length > 0 || hasOptions) {
       throw new CliUsageError(
-        "--helpはdirectoryやmigrate optionと同時に指定できません",
+        "--help cannot be combined with a directory or migrate options",
       );
     }
     return { kind: "migrate-help" };
@@ -157,18 +157,18 @@ function parseMigrateCommand(args: readonly string[], cwd: string): CliCommand {
   );
   if (actions.length !== 1) {
     throw new CliUsageError(
-      "--check、--write、--rollback、--finalizeのどれか1つを指定してください",
+      "Specify exactly one of --check, --write, --rollback, or --finalize",
     );
   }
   const action = actions[0]!;
   const reporter = parsed.values.reporter ?? "compact";
   if (reporter !== "compact" && reporter !== "json") {
-    throw new CliUsageError("reporterはcompactまたはjsonで指定してください");
+    throw new CliUsageError("reporter must be compact or json");
   }
   const contentRoot = resolve(cwd, parsed.positionals[0] ?? "./specs");
   if (action === "check" || action === "write") {
     if (parsed.values.lang === undefined) {
-      throw new CliUsageError("--langを指定してください");
+      throw new CliUsageError("Specify --lang");
     }
     return {
       kind: "migrate",
@@ -194,14 +194,14 @@ function parseMigrateCommand(args: readonly string[], cwd: string): CliCommand {
     parsed.values["allow-lossy"] === true
   ) {
     throw new CliUsageError(
-      "--lang、--language-map、--allow-lossy、--warnings-as-errorsはcheckまたはwriteで指定してください",
+      "--lang, --language-map, --allow-lossy, and --warnings-as-errors are only valid with --check or --write",
     );
   }
   const migrationId = action === "rollback"
     ? parsed.values.rollback
     : parsed.values.finalize;
   if (migrationId === undefined || migrationId.trim().length === 0) {
-    throw new CliUsageError("migration IDを指定してください");
+    throw new CliUsageError("Specify a migration ID");
   }
   return {
     kind: "migrate",
@@ -222,24 +222,24 @@ function parseConvertCommand(args: readonly string[], cwd: string): CliCommand {
   if (parsed.values.help === true) {
     if (parsed.positionals.length > 0 || hasOptions) {
       throw new CliUsageError(
-        "--helpはinputやconvert optionと同時に指定できません",
+        "--help cannot be combined with an input or convert options",
       );
     }
     return { kind: "convert-help" };
   }
   if (parsed.positionals.length !== 1) {
-    throw new CliUsageError("Markdown inputを1つ指定してください");
+    throw new CliUsageError("Specify exactly one Markdown input");
   }
   const input = parsed.positionals[0]!;
   if (documentFormatFromPath(input) !== "markdown") {
-    throw new CliUsageError("inputは.mdまたは.markdownで指定してください");
+    throw new CliUsageError("input must use the .md or .markdown extension");
   }
   if (parsed.values.lang === undefined) {
-    throw new CliUsageError("--langを指定してください");
+    throw new CliUsageError("Specify --lang");
   }
   const output = parsed.values.output;
   if (output !== undefined && !isHtmlDocumentPath(output)) {
-    throw new CliUsageError("--outputは.htmlで指定してください");
+    throw new CliUsageError("--output must use the .html extension");
   }
 
   return {
@@ -261,7 +261,7 @@ function parseCheckCommand(args: readonly string[], cwd: string): CliCommand {
   }
 
   if (parsed.positionals.length > 1) {
-    throw new CliUsageError("pathは1つだけ指定してください");
+    throw new CliUsageError("Specify at most one path");
   }
   const hasOptions =
     parsed.values.fix === true ||
@@ -274,7 +274,7 @@ function parseCheckCommand(args: readonly string[], cwd: string): CliCommand {
   if (parsed.values.help === true) {
     if (parsed.positionals.length > 0 || hasOptions) {
       throw new CliUsageError(
-        "--helpはpathやcheck optionと同時に指定できません",
+        "--help cannot be combined with a path or check options",
       );
     }
     return { kind: "check-help" };
@@ -298,11 +298,11 @@ function parseCheckCommand(args: readonly string[], cwd: string): CliCommand {
     parsed.values.fix === true &&
     !stages.some((stage) => stage === "fixer" || stage === "formatter")
   ) {
-    throw new CliUsageError("--fixには--fixerまたは--formatが必要です");
+    throw new CliUsageError("--fix requires --fixer or --format");
   }
   const reporter = parsed.values.reporter ?? "compact";
   if (reporter !== "compact" && reporter !== "json") {
-    throw new CliUsageError("reporterはcompactまたはjsonで指定してください");
+    throw new CliUsageError("reporter must be compact or json");
   }
   const target = parsed.positionals[0] ?? "./specs";
   return {
@@ -327,7 +327,7 @@ function parseFixCommand(args: readonly string[], cwd: string): CliCommand {
   }
 
   if (parsed.positionals.length > 1) {
-    throw new CliUsageError("pathは1つだけ指定してください");
+    throw new CliUsageError("Specify at most one path");
   }
   if (parsed.values.help === true) {
     if (
@@ -336,7 +336,7 @@ function parseFixCommand(args: readonly string[], cwd: string): CliCommand {
       parsed.values.write === true ||
       parsed.values.reporter !== undefined
     ) {
-      throw new CliUsageError("--helpはpathやfix optionと同時に指定できません");
+      throw new CliUsageError("--help cannot be combined with a path or fix options");
     }
     return { kind: "fix-help" };
   }
@@ -344,12 +344,12 @@ function parseFixCommand(args: readonly string[], cwd: string): CliCommand {
   const write = parsed.values.write === true;
   if (check === write) {
     throw new CliUsageError(
-      "--checkまたは--writeのどちらか1つを指定してください",
+      "Specify exactly one of --check or --write",
     );
   }
   const reporter = parsed.values.reporter ?? "compact";
   if (reporter !== "compact" && reporter !== "json") {
-    throw new CliUsageError("reporterはcompactまたはjsonで指定してください");
+    throw new CliUsageError("reporter must be compact or json");
   }
   const target = parsed.positionals[0] ?? "./specs";
   return {
@@ -371,7 +371,7 @@ function parseFormatCommand(args: readonly string[], cwd: string): CliCommand {
   }
 
   if (parsed.positionals.length > 1) {
-    throw new CliUsageError("pathは1つだけ指定してください");
+    throw new CliUsageError("Specify at most one path");
   }
   if (parsed.values.help === true) {
     if (
@@ -381,7 +381,7 @@ function parseFormatCommand(args: readonly string[], cwd: string): CliCommand {
       parsed.values.reporter !== undefined
     ) {
       throw new CliUsageError(
-        "--helpはpathやformat optionと同時に指定できません",
+        "--help cannot be combined with a path or format options",
       );
     }
     return { kind: "format-help" };
@@ -390,12 +390,12 @@ function parseFormatCommand(args: readonly string[], cwd: string): CliCommand {
   const write = parsed.values.write === true;
   if (check === write) {
     throw new CliUsageError(
-      "--checkまたは--writeのどちらか1つを指定してください",
+      "Specify exactly one of --check or --write",
     );
   }
   const reporter = parsed.values.reporter ?? "compact";
   if (reporter !== "compact" && reporter !== "json") {
-    throw new CliUsageError("reporterはcompactまたはjsonで指定してください");
+    throw new CliUsageError("reporter must be compact or json");
   }
   const target = parsed.positionals[0] ?? "./specs";
   return {
@@ -417,11 +417,11 @@ function parseRunCommand(args: readonly string[], cwd: string): CliCommand {
   }
 
   if (parsed.positionals.length > 1) {
-    throw new CliUsageError("directoryは1つだけ指定してください");
+    throw new CliUsageError("Specify at most one directory");
   }
 
   if (parsed.values.help === true && parsed.values.version === true) {
-    throw new CliUsageError("--helpと--versionは同時に指定できません");
+    throw new CliUsageError("--help and --version cannot be combined");
   }
 
   if (parsed.values.help === true) {
@@ -433,29 +433,29 @@ function parseRunCommand(args: readonly string[], cwd: string): CliCommand {
   }
 
   if (parsed.values.open === true && parsed.values["no-open"] === true) {
-    throw new CliUsageError("--openと--no-openは同時に指定できません");
+    throw new CliUsageError("--open and --no-open cannot be combined");
   }
 
   const portValue = parsed.values.port ?? "4173";
   if (!/^[0-9]+$/.test(portValue)) {
-    throw new CliUsageError("portは0から65535までの整数で指定してください");
+    throw new CliUsageError("port must be an integer from 0 to 65535");
   }
 
   const port = Number(portValue);
   if (!Number.isSafeInteger(port) || port < 0 || port > 65_535) {
-    throw new CliUsageError("portは0から65535までの整数で指定してください");
+    throw new CliUsageError("port must be an integer from 0 to 65535");
   }
 
   const host = (parsed.values.host ?? "127.0.0.1").trim();
   if (host.length === 0) {
-    throw new CliUsageError("hostを空にすることはできません");
+    throw new CliUsageError("host cannot be empty");
   }
 
   const directory = parsed.positionals[0] ?? "./specs";
   const allowedHosts = (parsed.values["allowed-host"] ?? []).map((value) => {
     const hostValue = value.trim();
     if (hostValue.length === 0) {
-      throw new CliUsageError("allowed-hostを空にすることはできません");
+      throw new CliUsageError("allowed-host cannot be empty");
     }
     return hostValue;
   });
@@ -480,7 +480,7 @@ function parseLanguageTag(value: string, option: string): string {
   try {
     return canonicalizeLanguageTag(value);
   } catch {
-    throw new CliUsageError(`${option}は有効なBCP 47言語tagで指定してください`);
+    throw new CliUsageError(`${option} must be a valid BCP 47 language tag`);
   }
 }
 
@@ -493,7 +493,7 @@ function parseLintCommand(args: readonly string[], cwd: string): CliCommand {
   }
 
   if (parsed.positionals.length > 1) {
-    throw new CliUsageError("directoryは1つだけ指定してください");
+    throw new CliUsageError("Specify at most one directory");
   }
 
   const hasExplain = parsed.values.explain !== undefined;
@@ -503,11 +503,11 @@ function parseLintCommand(args: readonly string[], cwd: string): CliCommand {
     parsed.values["max-issues"] !== undefined;
   if (hasExplain && (parsed.positionals.length > 0 || hasLintOptions)) {
     throw new CliUsageError(
-      "--explainはdirectoryやlint optionと同時に指定できません",
+      "--explain cannot be combined with a directory or lint options",
     );
   }
   if (parsed.values.help === true && hasExplain) {
-    throw new CliUsageError("--helpと--explainは同時に指定できません");
+    throw new CliUsageError("--help and --explain cannot be combined");
   }
   if (parsed.values.help === true) {
     return { kind: "lint-help" };
@@ -515,14 +515,14 @@ function parseLintCommand(args: readonly string[], cwd: string): CliCommand {
   if (hasExplain) {
     const rule = parsed.values.explain;
     if (rule === undefined || !RULE_BY_ID.has(rule as RuleId)) {
-      throw new CliUsageError(`未対応のruleです: ${rule ?? ""}`);
+      throw new CliUsageError(`Unknown rule: ${rule ?? ""}`);
     }
     return { kind: "explain", rule: rule as RuleId };
   }
 
   const format = parsed.values.format ?? "compact";
   if (format !== "compact" && format !== "json") {
-    throw new CliUsageError("formatはcompactまたはjsonで指定してください");
+    throw new CliUsageError("format must be compact or json");
   }
   const maxIssues = parseMaxIssues(parsed.values["max-issues"]);
   const directory = parsed.positionals[0] ?? "./specs";
@@ -542,11 +542,11 @@ function parseMaxIssues(value: string | undefined): number {
     return 50;
   }
   if (!/^(?:0|[1-9][0-9]*)$/.test(value)) {
-    throw new CliUsageError("max-issuesは0以上の整数で指定してください");
+    throw new CliUsageError("max-issues must be a non-negative integer");
   }
   const maxIssues = Number(value);
   if (!Number.isSafeInteger(maxIssues)) {
-    throw new CliUsageError("max-issuesは0以上の安全な整数で指定してください");
+    throw new CliUsageError("max-issues exceeds the safe integer range");
   }
   return maxIssues;
 }
@@ -559,8 +559,8 @@ function messageForParseArgsError(error: unknown): string {
   ) {
     const option = /'([^']+)'/.exec(error.message)?.[1];
     return option === undefined
-      ? "未対応のoptionが指定されました"
-      : `未対応のoptionです: ${option}`;
+      ? "An unknown option was specified"
+      : `Unknown option: ${option}`;
   }
   if (
     error instanceof Error &&
@@ -569,10 +569,10 @@ function messageForParseArgsError(error: unknown): string {
   ) {
     const option = /Option '([^']+)'/.exec(error.message)?.[1];
     return option === undefined
-      ? "optionの値が不正です"
-      : `optionの値が必要です: ${option}`;
+      ? "An option value is invalid"
+      : `Option requires a value: ${option}`;
   }
-  return "引数を解釈できません";
+  return "Could not parse arguments";
 }
 
 function parseCommandArgs(args: string[]) {

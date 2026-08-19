@@ -1,5 +1,6 @@
 import { watch } from "node:fs";
 import type { FSWatcher } from "node:fs";
+import { realpath } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 const RELOAD_DEBOUNCE_MS = 50;
@@ -9,7 +10,24 @@ export interface LiveReload {
   close(): void;
 }
 
-export function createLiveReload(contentRoot: string): LiveReload {
+export interface LiveReloadOperations {
+  realpath(path: string): Promise<string>;
+  watch(
+    path: string,
+    options: { recursive: true },
+    listener: (eventType: string, filename: string | Buffer | null) => void,
+  ): FSWatcher;
+}
+
+const defaultOperations: LiveReloadOperations = {
+  realpath,
+  watch: (path, options, listener) => watch(path, options, listener),
+};
+
+export async function createLiveReload(
+  contentRoot: string,
+  operations: LiveReloadOperations = defaultOperations,
+): Promise<LiveReload> {
   const clients = new Set<ServerResponse>();
   let reloadTimer: ReturnType<typeof setTimeout> | undefined;
   let closed = false;
@@ -39,8 +57,11 @@ export function createLiveReload(contentRoot: string): LiveReload {
     reloadTimer = setTimeout(reload, RELOAD_DEBOUNCE_MS);
   };
 
-  const watcher: FSWatcher = watch(
-    contentRoot,
+  // Expand Windows 8.3 paths before fs.watch. Node 24.16-24.18 can assert
+  // when an event resolves to a long path that no longer shares a short root.
+  const canonicalRoot = await operations.realpath(contentRoot);
+  const watcher = operations.watch(
+    canonicalRoot,
     { recursive: true },
     scheduleReload,
   );

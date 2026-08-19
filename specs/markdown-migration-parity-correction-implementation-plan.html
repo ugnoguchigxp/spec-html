@@ -1,0 +1,760 @@
+<article lang="ja">
+  <h1>Markdown migration parity補正 実装計画</h1>
+
+  <aside data-type="success" aria-labelledby="plan-decision">
+    <strong id="plan-decision"
+      >採用方針: 比較条件を緩めず、fact抽出とformatterを正して厳密parityを維持する</strong
+    >
+    <p>
+      vulnWorkbench
+      17文書で再現した13件の<code>MIG004</code>は、DOM取得順、inline
+      text連結、inline
+      code整形に起因する。Markdown本文を変更したり、配列をsortして構造順を捨てたり、code内空白を一律normalizeしたりせず、生成HTMLがMarkdownの意味とverbatim
+      dataを保持するよう<code>spec-html</code>側を修正する。
+    </p>
+    <p>
+      受入条件は、同じread-only preflightでcontent
+      parityが4/17から17/17へ改善し、意図的な見出し順変更、list種別変更、table文字列変更、inline
+      code変更は引き続き不一致になることである。
+    </p>
+  </aside>
+
+  <section id="status">
+    <h2>計画状態</h2>
+    <table>
+      <caption>
+        計画metadata
+      </caption>
+      <tbody>
+        <tr>
+          <th scope="row">状態</th>
+          <td>実装・code review・local検証完了、release gateは並行変更の統合待ち</td>
+        </tr>
+        <tr>
+          <th scope="row">対象version</th>
+          <td>
+            <code>0.1.2</code>からのpatch
+            fix。release候補は<code>0.1.3</code>。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">基準commit</th>
+          <td><code>0873fd55c42c6a148e7885f0c78720b74d586c27</code></td>
+        </tr>
+        <tr>
+          <th scope="row">外部canary</th>
+          <td><code>../vulnWorkbench/spec</code>のactive Markdown 17件</td>
+        </tr>
+        <tr>
+          <th scope="row">関連調査</th>
+          <td>
+            <a href="./vulnworkbench-migration-parity-root-cause-2026-08-19.html"
+              >vulnWorkbench一括migrationのparity不一致・根本原因調査</a
+            >
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <aside data-type="success">
+      <p>
+        <code>src/migrate/parity.ts</code
+        >と<code>src/format/printer.ts</code>へ計画どおり実装し、focused test
+        51件、全unit／coverage 429件、browser 33件、pack、build、spec
+        13件の厳格checkが成功した。再buildしたCLIによるvulnWorkbenchのread-only
+        canaryは<code>parity=17/17</code>、<code>errors=0</code>、<code>ready=true</code>で、対象repositoryに変更はなかった。
+      </p>
+    </aside>
+    <aside data-type="note">
+      <strong>code reviewで追加修正した点</strong>
+      <ul>
+        <li>
+          nested <code>code</code>を個別にmaskするとsource
+          rangeが重なってHTMLを破損するため、保護候補の最外要素だけをmaskするよう修正した。
+        </li>
+        <li>
+          separator除去後もMarkdownの明示的な改行を保持するため、<code>accessibleHtmlText</code>では<code>br</code>の位置へ空白を追加するよう修正した。
+        </li>
+        <li>両方の再現testとline break削除のnegative testを追加し、strict parityを維持した。</li>
+      </ul>
+    </aside>
+  </section>
+
+  <section id="problem">
+    <h2>解決する問題</h2>
+    <p>
+      plannerはMarkdownをHTMLへcompile・formatした後、Markdown tokenとHTML DOMから15種類のcontent
+      factを生成し、配列を含む値を完全一致で比較する。この仕組みはsilent
+      lossを防ぐ安全装置として必要だが、現行実装には次の4つの不整合がある。
+    </p>
+    <table>
+      <caption>
+        再現済みroot causeと修正責任
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">ID</th>
+          <th scope="col">現象</th>
+          <th scope="col">原因</th>
+          <th scope="col">修正先</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">RC1</th>
+          <td>headings 8文書</td>
+          <td>複合selectorの結果が文書順ではなくtag group順になる。</td>
+          <td><code>src/migrate/parity.ts</code></td>
+        </tr>
+        <tr>
+          <th scope="row">RC2</th>
+          <td>lists 9文書</td>
+          <td>
+            <code>ol, ul</code
+            >が文書順から再配列される。同型の潜在問題がinline marksにもある。
+          </td>
+          <td><code>src/migrate/parity.ts</code></td>
+        </tr>
+        <tr>
+          <th scope="row">RC3</th>
+          <td>tables 3文書</td>
+          <td>
+            <code>accessibleHtmlText</code>がDOM node境界へsourceにない空白を加える。
+          </td>
+          <td><code>src/migrate/parity.ts</code></td>
+        </tr>
+        <tr>
+          <th scope="row">RC4</th>
+          <td>inline-code 2文書</td>
+          <td>Prettierが長いinline code本文へ改行・indentを挿入する。</td>
+          <td><code>src/format/printer.ts</code></td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      現行preflightは<code>markdown=17</code>、<code>parity=4/17</code>、<code>errors=13</code>、<code>ready=false</code>で終了する。全errorは<code>MIG004</code>であり、filesystem、link、caption、lint、容量、pathに別のblockerはない。
+    </p>
+  </section>
+
+  <section id="goals">
+    <h2>目標と非目標</h2>
+    <table>
+      <caption>
+        実装scope
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">区分</th>
+          <th scope="col">内容</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">目標</th>
+          <td>headings、lists、inline marksをMarkdownと同じdocument orderで比較する。</td>
+        </tr>
+        <tr>
+          <th scope="row">目標</th>
+          <td>text nodeと画像altを元の位置関係どおり連結し、inline要素境界へ空白を発明しない。</td>
+        </tr>
+        <tr>
+          <th scope="row">目標</th>
+          <td>
+            project共通の改行code正規化後、formatter前後でinline
+            <code>code</code>本文を完全保持する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">目標</th>
+          <td>
+            偽陽性を除去しても、構造・値・順序の実変更を<code>MIG004</code>でblockする。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">非目標</th>
+          <td>vulnWorkbenchのMarkdown本文、見出し順、list順、inline codeを変更する。</td>
+        </tr>
+        <tr>
+          <th scope="row">非目標</th>
+          <td>
+            <code>JSON.stringify</code>比較をset／multiset比較へ変え、document
+            orderを無視する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">非目標</th>
+          <td>inline codeの空白を一律collapseして、verbatim差を見えなくする。</td>
+        </tr>
+        <tr>
+          <th scope="row">非目標</th>
+          <td>migration journal、Archive、rollback、link rewrite、CLI optionを変更する。</td>
+        </tr>
+        <tr>
+          <th scope="row">別判断</th>
+          <td>vulnWorkbenchでMarkdownを正本から退役させるか、Archive taxonomyをどうするか。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="contract">
+    <h2>維持するcontent parity contract</h2>
+    <p>
+      修正後も、parityは「同じ要素が存在すればよい」というbag比較にはしない。文書の意味を構成する順序、種類、値を保持する。
+    </p>
+    <table>
+      <caption>
+        factごとの比較契約
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">fact</th>
+          <th scope="col">保持するもの</th>
+          <th scope="col">許容する差</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">headings</th>
+          <td>document order、level、ID、visible text</td>
+          <td>HTML sourceのindentだけ</td>
+        </tr>
+        <tr>
+          <th scope="row">lists</th>
+          <td>document order、ordered／unordered、start、nest depth、direct item数</td>
+          <td>HTML sourceのindentだけ</td>
+        </tr>
+        <tr>
+          <th scope="row">inline marks</th>
+          <td>document order、strong／em／delの種類</td>
+          <td>HTML sourceのindentだけ</td>
+        </tr>
+        <tr>
+          <th scope="row">heading／link／table cell text</th>
+          <td>inline tokenと画像altの位置、意図された空白、句読点との隣接</td>
+          <td>連続するHTML layout whitespaceの表示上の正規化</td>
+        </tr>
+        <tr>
+          <th scope="row">inline code</th>
+          <td>Markdown lexerが確定したcode textの全文</td>
+          <td>なし。formatterが変更しない。</td>
+        </tr>
+      </tbody>
+    </table>
+    <aside data-type="warning">
+      <p>
+        inline
+        codeは「画面では同じに見える」ことを理由に空白normalizeしない。command、path、placeholderはcopy、search、後続編集でverbatim
+        dataとして使われるため、formatter側で保持する。
+      </p>
+    </aside>
+  </section>
+
+  <section id="design">
+    <h2>実装設計</h2>
+    <figure>
+      <pre class="mermaid">
+flowchart LR
+  A[Markdown tokens] --> B[expected facts in token order]
+  C[compiled HTML] --> D[protect verbatim element contents]
+  D --> E[Prettier]
+  E --> F[restore exact code contents]
+  F --> G[HTML DOM]
+  G --> H[one document-order traversal]
+  H --> I[headings / lists / marks]
+  G --> J[position-preserving inline text]
+  J --> K[heading / link / table facts]
+  B --> L{strict equality}
+  I --> L
+  K --> L
+  L -- actual loss --> M[MIG004]
+  L -- equal --> N[remaining migration preflight]
+      </pre>
+      <figcaption>
+        canonicalizationはHTML source layoutだけを除去する。文書順とcode dataは比較前に捨てない。
+      </figcaption>
+    </figure>
+
+    <h3>1. heterogeneous要素をDOM順で収集する</h3>
+    <p>
+      <code>querySelectorAll("h1, …")</code
+      >のような複合selectorへ順序を依存させない。<code>article</code>以下をpre-orderで一度走査し、<code>HtmlElement</code>の配列を作る。同じ配列をheadings、lists、marksのfilter元にする。
+    </p>
+    <details>
+      <summary>実装形の擬似code</summary>
+      <pre><code class="language-ts">function descendantElementsInDocumentOrder(root: HtmlElement): HtmlElement[] {
+  const result: HtmlElement[] = [];
+  const visit = (parent: HtmlElement): void =&gt; {
+    for (const child of parent.childElements) {
+      result.push(child);
+      visit(child);
+    }
+  };
+  visit(root);
+  return result;
+}
+</code></pre>
+    </details>
+    <ul>
+      <li>
+        headingsは<code>h1</code>〜<code>h6</code>だけをfilterする。
+      </li>
+      <li>
+        listsは<code>ol</code>または<code>ul</code>をfilterする。
+      </li>
+      <li>
+        marksは<code>strong</code>、<code>em</code>、<code>del</code>をfilterする。
+      </li>
+      <li>配列をtag名でsortしない。nested elementは親より後、後続siblingより前になる。</li>
+      <li>単一selectorで現在問題のないtable、row、image等は不要に書き換えない。</li>
+    </ul>
+
+    <h3>2. accessible inline textを位置どおり連結する</h3>
+    <p>
+      <code>accessibleHtmlText</code>はtext
+      nodeをそのまま追加し、画像ではその位置にaltを追加する。最後は<code>join("")</code>とし、node境界を理由にseparatorを入れない。既存call
+      siteの<code>normalizeVisibleText</code>が実在するHTML
+      whitespaceだけを1個へ正規化する。
+    </p>
+    <ul>
+      <li>
+        <code>A&lt;code&gt;B&lt;/code&gt;C</code>は<code>ABC</code>。
+      </li>
+      <li>
+        <code>A &lt;code&gt;B&lt;/code&gt; C</code>は<code>A B C</code>。
+      </li>
+      <li>
+        <code>A&lt;img alt="B"&gt;C</code>は<code>ABC</code>。
+      </li>
+      <li>日本語の助詞・読点・括弧の前後へ英語向けseparatorを追加しない。</li>
+    </ul>
+    <p>
+      broad smoke
+      checkである<code>visibleHtmlText</code>は今回変更しない。役割の異なる正規化まで同時に変えると、既存15
+      factのどれが回帰したか分かりにくくなるためである。
+    </p>
+
+    <h3>3. inline code本文をformatterから保護する</h3>
+    <p>
+      <code>formatHtml</code
+      >が既に<code>pre</code>、<code>textarea</code>、<code>script</code>、<code>style</code>へ使うmarker方式を、standalone
+      <code>code</code
+      >のcontentにも適用する。Prettierへは短い一意markerだけを渡し、format後に元source
+      sliceを完全復元する。
+    </p>
+    <ul>
+      <li>
+        <code>code</code
+        >が別の保護対象<code>code</code>またはraw
+        elementのdescendantなら、outer要素だけを保護してoverlapを避ける。
+      </li>
+      <li>
+        保護候補のうち保護対象ancestorを持たない最外要素だけを採用し、source
+        offsetの降順でmaskする。
+      </li>
+      <li>複数inline code、entity、連続空白、100文字超、既存marker prefixをtestする。</li>
+      <li>markerが0件または複数件になった場合は、現在と同様にformatter errorとして停止する。</li>
+      <li>復元後のformatter idempotenceを確認する。</li>
+    </ul>
+    <p>
+      全inline
+      codeに属性を付ける案、Prettierの<code>htmlWhitespaceSensitivity</code>を変更する案、parity側で空白をcollapseする案は採用しない。実測では<code>css</code>、<code>strict</code>、<code>ignore</code>のいずれも長いcode本文を保持せず、global
+      option変更は通常HTMLのlayoutへ波及する。
+    </p>
+
+    <h3>4. 厳密比較と診断codeを維持する</h3>
+    <p>
+      <code>compareFact</code
+      >と<code>MIG004</code>の外部contractは変更しない。今回の修正はexpected／actualを同じ意味表現へ揃えるもので、比較器を寛容にするものではない。messageへ文書本文を含む詳細diffを出す変更も、このpatchには含めない。機密文字列のlog出力とreport
+      schema変更を避ける。
+    </p>
+  </section>
+
+  <section id="work-packages">
+    <h2>実装work package</h2>
+    <table>
+      <caption>
+        順序、変更file、完了条件
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">順序</th>
+          <th scope="col">作業</th>
+          <th scope="col">主なfile</th>
+          <th scope="col">完了条件</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">WP0</th>
+          <td>変更前baselineを固定する。</td>
+          <td>外部canary、test log</td>
+          <td>
+            <code>parity=4/17</code>と13件のfact分類を保存し、target
+            repositoryがcleanである。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">WP1</th>
+          <td>DOM順走査helperとposition-preserving text連結を実装する。</td>
+          <td><code>src/migrate/parity.ts</code></td>
+          <td>RC1〜RC3のfocused testが通り、実変更を入れたnegative testは失敗する。</td>
+        </tr>
+        <tr>
+          <th scope="row">WP2</th>
+          <td>
+            standalone <code>code</code>本文をformatter
+            markerで保護する。
+          </td>
+          <td><code>src/format/printer.ts</code></td>
+          <td>長いinline codeのsource sliceとDOM textがformat前後で一致し、idempotentである。</td>
+        </tr>
+        <tr>
+          <th scope="row">WP3</th>
+          <td>parity unit testとmigration integration testを追加する。</td>
+          <td>
+            <code>tests/unit/migrate-parity.test.ts</code
+            >、<code>tests/unit/format-printer.test.ts</code>、<code
+              >tests/unit/migrate.test.ts</code
+            >
+          </td>
+          <td>偽陽性fixtureと実欠落fixtureの両方が期待どおり判定される。</td>
+        </tr>
+        <tr>
+          <th scope="row">WP4</th>
+          <td>full checkとvulnWorkbench read-only canaryを実行する。</td>
+          <td>生成済み<code>dist/cli.js</code></td>
+          <td>
+            <code>parity=17/17</code
+            >、<code>errors=0</code>、<code>ready=true</code>。入力digestとgit
+            status不変。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">WP5</th>
+          <td>bug fixを記録し、patch releaseへ載せる。</td>
+          <td><code>CHANGELOG.md</code>、必要に応じてrelease metadata</td>
+          <td>変更内容と「vulnWorkbench本文変更不要」がrelease noteから判断できる。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="tests">
+    <h2>テスト計画</h2>
+    <p>
+      新規<code>tests/unit/migrate-parity.test.ts</code>ではparity contractを直接検証し、lifecycle
+      testから原因を分離する。<code>tests/unit/migrate.test.ts</code>にはplannerまで通す代表fixtureだけを置く。
+    </p>
+    <table>
+      <caption>
+        偽陽性抑制と欠落検出の対
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">領域</th>
+          <th scope="col">通すcase</th>
+          <th scope="col">必ずblockするcase</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">headings</th>
+          <td><code>h1 → h2 → h3 → h2</code>を同じ順序で変換</td>
+          <td>HTML側だけh3を後続h2の後へ移動、level変更、ID変更</td>
+        </tr>
+        <tr>
+          <th scope="row">lists</th>
+          <td><code>ul → ol → ul</code>とnested mixed list</td>
+          <td>
+            HTML側だけ<code>ol</code>を<code>ul</code>へ変更、start／depth／item数変更
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">inline marks</th>
+          <td><code>strong → em → del → strong</code></td>
+          <td>mark削除、種類変更、順序変更</td>
+        </tr>
+        <tr>
+          <th scope="row">table text</th>
+          <td>
+            <code>READMEと`v1.0.0`が</code>、<code
+              >(`2.17.0`)</code
+            >
+          </td>
+          <td>実在する前後空白の削除、code text変更、句読点削除</td>
+        </tr>
+        <tr>
+          <th scope="row">heading／link label</th>
+          <td>text、code、image altが空白なしで隣接</td>
+          <td>alt削除、label順序変更</td>
+        </tr>
+        <tr>
+          <th scope="row">inline code</th>
+          <td>100文字超、entity、連続空白、複数要素</td>
+          <td>1文字削除、空白追加、改行追加</td>
+        </tr>
+        <tr>
+          <th scope="row">formatter nesting</th>
+          <td>
+            <code>pre &gt; code</code>、nested
+            <code>code</code>、standalone code、複数code
+          </td>
+          <td>marker欠落・重複をerrorにし、nested rangeは最外要素へ集約する</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      negative
+      testでは完成したHTML文字列を意図的に1箇所だけ変更して<code>compareMarkdownWithHtml</code>へ渡し、期待したfact名が<code>mismatches</code>へ残ることを確認する。これにより、17/17達成だけで安全性を判断しない。
+    </p>
+  </section>
+
+  <section id="file-map">
+    <h2>file別変更計画</h2>
+    <table>
+      <caption>
+        変更範囲と理由
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">file</th>
+          <th scope="col">変更</th>
+          <th scope="col">risk</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><code>src/migrate/parity.ts</code></th>
+          <td>DOM順helper、headings／lists／marksのfilter、accessible textのseparator除去</td>
+          <td>parity false negativeを作らないようnegative test必須</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>src/format/printer.ts</code></th>
+          <td>
+            standalone <code>code</code>をverbatim
+            content保護対象へ追加し、nested rangeを除外
+          </td>
+          <td>marker復元とprotected elementのnested range</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>tests/unit/migrate-parity.test.ts</code></th>
+          <td>新規。fact-levelのpositive／negative matrix</td>
+          <td>private implementationではなくexport済み比較APIをtestする</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>tests/unit/format-printer.test.ts</code></th>
+          <td>長いinline code、multiple code、nested raw、idempotence</td>
+          <td>Prettier version更新時の回帰gateになる</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>tests/unit/migrate.test.ts</code></th>
+          <td>4 root causeをまとめた小さなplanner fixture</td>
+          <td>external repositoryへCIを依存させない</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>CHANGELOG.md</code></th>
+          <td>parity false positiveとinline code保持をFixedへ記録</td>
+          <td>release version確定前に既存release節を書き換えない</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      <code>src/migrate/planner.ts</code
+      >、<code>runner.ts</code>、<code>storage.ts</code>、<code>links.ts</code>、Archive実装、CLI
+      optionには変更を入れない。既存のblocker判定とno-write保証をそのまま利用する。
+    </p>
+  </section>
+
+  <section id="sequence">
+    <h2>実装順序とcommit構成</h2>
+    <ol>
+      <li>
+        <strong>test: capture parity ordering and inline-text regressions</strong><br />
+        RC1〜RC3のpositive／negative testを先に追加し、修正前に意図したfailureを確認する。
+      </li>
+      <li>
+        <strong>fix: collect heterogeneous parity facts in document order</strong><br />
+        DOM順helperとaccessible text連結を実装し、RC1〜RC3を閉じる。
+      </li>
+      <li>
+        <strong>fix: preserve inline code content through formatting</strong><br />
+        formatter marker対象を拡張し、RC4とnested range testを閉じる。
+      </li>
+      <li>
+        <strong>test: verify migration planner and real-corpus canary</strong><br />
+        synthetic integration fixture、full check、vulnWorkbench 17文書を検証する。
+      </li>
+      <li>
+        <strong>docs: record corrected migration parity behavior</strong><br />
+        changelogと調査文書の実装状態を更新する。
+      </li>
+    </ol>
+    <p>
+      1つのfocused
+      PRにまとめ、commitは上記単位でreview可能にする。WP1とWP2は原因とrollback単位が異なるためcommitを分けるが、片方だけをreleaseして17/17と宣言しない。
+    </p>
+  </section>
+
+  <section id="verification">
+    <h2>検証手順</h2>
+    <h3>Focused verification</h3>
+    <pre><code class="language-sh">npx vitest run \
+  tests/unit/migrate-parity.test.ts \
+  tests/unit/format-printer.test.ts \
+  tests/unit/migrate.test.ts
+</code></pre>
+    <h3>Repository gate</h3>
+    <pre><code class="language-sh">npm run check
+npx spec-html check ./specs --fix --warnings-as-errors
+</code></pre>
+    <h3>External read-only canary</h3>
+    <pre><code class="language-sh">node ./dist/cli.js migrate ../vulnWorkbench/spec \
+  --lang ja \
+  --check \
+  --reporter json
+</code></pre>
+    <table>
+      <caption>
+        canaryの期待値
+      </caption>
+      <tbody>
+        <tr>
+          <th scope="row">終了code</th>
+          <td>0</td>
+        </tr>
+        <tr>
+          <th scope="row">markdown／creates／archives</th>
+          <td>17 / 17 / 17</td>
+        </tr>
+        <tr>
+          <th scope="row">parity</th>
+          <td>17 / 17</td>
+        </tr>
+        <tr>
+          <th scope="row">errors／warnings</th>
+          <td>0 / 0</td>
+        </tr>
+        <tr>
+          <th scope="row">ready</th>
+          <td><code>true</code></td>
+        </tr>
+        <tr>
+          <th scope="row">filesystem</th>
+          <td>vulnWorkbenchのgit status、active file集合、digestが実行前後で不変</td>
+        </tr>
+      </tbody>
+    </table>
+    <aside data-type="note">
+      <p>
+        このcanaryの<code>--lang ja</code>はparity修正確認用であり、実際のwrite条件ではない。英語主体4文書には別途language
+        mapが必要で、Archive運用判断も未完了である。<code>ready=true</code>になっても自動的に<code>--write</code>へ進まない。
+      </p>
+    </aside>
+  </section>
+
+  <section id="risks">
+    <h2>riskと対策</h2>
+    <table>
+      <caption>
+        実装risk register
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">risk</th>
+          <th scope="col">影響</th>
+          <th scope="col">対策</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">document order修正が実変更を見逃す</th>
+          <td>見出し・list・markの移動がsilent passする。</td>
+          <td>sort／multisetを使わずpre-order配列を厳密比較し、reorder negative testを置く。</td>
+        </tr>
+        <tr>
+          <th scope="row">separator除去で意図した空白まで消す</th>
+          <td>table／link labelの値差を見逃す。</td>
+          <td>DOMに実在するtext node whitespaceは保持し、node間に追加していた空白だけを除く。</td>
+        </tr>
+        <tr>
+          <th scope="row">code marker rangeがoverlapする</th>
+          <td>復元位置の破損、formatter error。</td>
+          <td>protected ancestor配下の要素を個別保護せず、最外の非交差rangeだけを降順処理する。</td>
+        </tr>
+        <tr>
+          <th scope="row">markerが利用者textと衝突する</th>
+          <td>誤ったcontentを復元する。</td>
+          <td>
+            既存<code>uniqueMarker</code>でsource全文との非衝突を保証し、複数出現を拒否する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">formatter一般挙動の変化</th>
+          <td>手書きHTMLのcode内部layoutが以前と変わる。</td>
+          <td>codeはverbatim dataとして保持すると明示し、format idempotenceとpack testを通す。</td>
+        </tr>
+        <tr>
+          <th scope="row">external canaryへの過適合</th>
+          <td>17件だけ通り、一般caseが弱くなる。</td>
+          <td>
+            CIはproject名を含まない最小fixtureとnegative
+            mutationを正本にし、17件は追加canaryとする。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="rollback">
+    <h2>rollback方針</h2>
+    <p>
+      source変更は2つの独立commitへ分ける。回帰時はmigration
+      safety機構を変更せず、該当commitをrevertする。parity修正の途中versionをreleaseせず、17/17とnegative
+      testの両方を満たさなければ現行<code>ready=false</code>の安全側挙動を維持する。
+    </p>
+    <ul>
+      <li>WP1 rollback: DOM順helperとtext連結だけを戻す。</li>
+      <li>WP2 rollback: inline codeのmarker保護だけを戻す。</li>
+      <li>vulnWorkbench側はread-only canaryだけなのでrollback対象の変更を作らない。</li>
+      <li>
+        release後に回帰が見つかった場合は<code>migrate --write</code>の推奨を止め、patch
+        releaseで修正する。
+      </li>
+    </ul>
+  </section>
+
+  <section id="acceptance">
+    <h2>Definition of Done</h2>
+    <ol>
+      <li>RC1〜RC4を再現するfocused testが修正前に失敗し、修正後に成功する。</li>
+      <li>headings、lists、marksの意図的な順序・種類・値変更がparity不一致になる。</li>
+      <li>table／heading／link内のinline要素隣接でsourceにない空白を生成しない。</li>
+      <li>100文字を超えるinline code、entity、連続空白がformat前後で完全一致する。</li>
+      <li>
+        <code>pre &gt; code</code>を含む既存raw content保護とformatter
+        idempotenceが回帰しない。
+      </li>
+      <li>既存migration lifecycle、rollback、link、security testがすべて成功する。</li>
+      <li><code>npm run check</code>が3 OS相当のCI matrixで成功する。</li>
+      <li>
+        vulnWorkbenchのread-only
+        preflightが<code>parity=17/17</code>、<code>errors=0</code>、<code>ready=true</code>になる。
+      </li>
+      <li>vulnWorkbenchのMarkdown本文、file配置、digest、git statusが変更されていない。</li>
+      <li>language mapとArchive判断を完了するまで、外部canaryの成功をwrite承認として扱わない。</li>
+    </ol>
+    <aside data-type="warning">
+      <p>
+        localのtypecheck、対象fileのlint、coverage 429 tests、build、browser 33
+        tests、pack、現行<code>specs/</code> 13件の<code
+          >--warnings-as-errors</code
+        >
+        checkは成功した。repository全体の<code>npm run
+        check</code>は、この変更と別に進行中のbrowser
+        module分割とplanner変更に残る未使用import
+        3件でlintが停止する。また、<code>docs/</code>から<code>specs/</code>への移動に対して<code>docs:check</code>は旧pathを参照している。いずれもparity実装のfailureではないが、release完了条件としては並行変更の統合後にfull
+        checkを再実行する。
+      </p>
+    </aside>
+  </section>
+</article>

@@ -41,7 +41,7 @@ tests/unit/          pure unit tests
 tests/server/        local HTTP server tests
 tests/browser/       Playwright tests
 scripts/             local build and test scripts
-docs/                authoring guide and implementation notes
+specs/               authoring guide and implementation notes
 examples/            example specifications
 dist/                generated package files
 ```

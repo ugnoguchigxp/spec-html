@@ -1,0 +1,492 @@
+<article lang="ja">
+  <h1>vulnWorkbench一括migrationのparity不一致・根本原因調査（2026-08-19）</h1>
+
+  <aside data-type="warning" aria-labelledby="root-cause-conclusion">
+    <strong id="root-cause-conclusion">結論: 現行0.1.2のmigrate --writeは実行しない</strong>
+    <p>
+      <code>../vulnWorkbench/spec</code>へのread-only
+      preflightは、17文書中4文書だけをcontent
+      parity一致とし、13文書を<code>MIG004</code>でblockした。ただし、13文書に共通する原因はMarkdownからHTMLへの内容欠落ではない。見出しとlistのDOM取得順、table内のinline要素境界への空白挿入、formatterが長いinline
+      codeへ加える改行と、parity比較規則の不整合である。
+    </p>
+    <p>
+      診断用にこの4点だけを補正して同じ生成HTMLを再比較すると、content
+      parityは17/17件で一致した。したがって安全装置は正しくwriteを止めているが、停止根拠の大半はparity実装の偽陽性である。parity実装修正前の<code>--write</code>強行やblocker回避は行わない。
+    </p>
+  </aside>
+
+  <section id="implementation-result">
+    <h2>実装結果</h2>
+    <aside data-type="success">
+      <p>
+        working treeへDOM順fact収集、inline textの位置保持、inline
+        codeのformatter保護を実装した。code要素のnested rangeと明示的なline breakを含むcode
+        review後のfocused test 51件が成功し、再build後のread-only
+        preflightは<code>parity=17/17</code>、<code>errors=0</code>、<code>ready=true</code>になった。vulnWorkbench側のfile変更は0件である。
+      </p>
+    </aside>
+    <p>
+      これにより本書のRC1〜RC4は実装上解消した。ただし、公開済み<code>0.1.2</code>には修正が含まれず、language
+      mapとArchive
+      taxonomyの運用判断も別途必要である。canary成功だけを根拠に<code>migrate --write</code>へ進まない。
+    </p>
+  </section>
+
+  <section id="scope-and-baseline">
+    <h2>調査範囲と再現結果</h2>
+    <p>
+      対象は<code>spec-html</code> commit
+      <code>0873fd55c42c6a148e7885f0c78720b74d586c27</code>、version
+      <code>0.1.2</code>と、<code>vulnWorkbench</code>
+      commit
+      <code>dce887b9d7af335cd6bf37555fed8e3f1793bbc9</code
+      >の<code>spec/</code>である。調査中は<code>migrate --check</code>とstdout出力の<code>convert</code>だけを使い、vulnWorkbenchのfileは変更していない。
+    </p>
+    <pre><code class="language-sh">node ./dist/cli.js migrate ../vulnWorkbench/spec --lang ja --check --reporter json
+</code></pre>
+    <table>
+      <caption>
+        現行実装のpreflight実測
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">指標</th>
+          <th scope="col">実測値</th>
+          <th scope="col">解釈</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">終了code</th>
+          <td>1</td>
+          <td>13件の<code>MIG004</code>がblockerになった。</td>
+        </tr>
+        <tr>
+          <th scope="row">Markdown</th>
+          <td>17</td>
+          <td>active Markdown全件が一括移行対象である。</td>
+        </tr>
+        <tr>
+          <th scope="row">content parity</th>
+          <td>4 / 17</td>
+          <td>13件を安全側にblockした。</td>
+        </tr>
+        <tr>
+          <th scope="row">error / warning</th>
+          <td>13 / 0</td>
+          <td>
+            全errorが<code>MIG004</code>で、他のpreflight errorはない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">予定operation</th>
+          <td>HTML create 17、Archive 17</td>
+          <td>既存HTML rewriteは0件。writeは開始されていない。</td>
+        </tr>
+        <tr>
+          <th scope="row">個別convert</th>
+          <td>17 / 17で終了code 0</td>
+          <td>stdout出力を使い、filesystemへ書き込まず生成HTMLを採取した。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="pipeline">
+    <h2>どこでblockされるか</h2>
+    <figure>
+      <pre class="mermaid">
+flowchart LR
+  A[Markdown source] --> B[marked lexer]
+  A --> C[compileMarkdown]
+  C --> D[Prettier HTML formatter]
+  D --> E[generated HTML]
+  B --> F[expected facts]
+  E --> G[html-validate DOM]
+  G --> H[actual facts]
+  F --> I{JSON exact equality}
+  H --> I
+  I -- mismatch --> J[MIG004]
+  J --> K[write開始前にblock]
+  I -- match --> L[link・lint・filesystem preflight]
+      </pre>
+      <figcaption>
+        変換処理そのものとparity判定は別経路である。今回の13件は、主にactual
+        factsの抽出と整列で差が作られている。
+      </figcaption>
+    </figure>
+    <p>
+      plannerは生成HTMLをformatした後、Markdown側とHTML側から15種類のfactを作り、各配列を<code>JSON.stringify</code>した完全一致で比較する。不一致が1項目でもあれば<code>MIG004</code>を追加し、runnerはblockerがあるplanへmutationを行わない。この制御自体は期待どおりである。
+    </p>
+  </section>
+
+  <section id="root-causes">
+    <h2>4つの根本原因</h2>
+    <table>
+      <caption>
+        parity不一致の原因、影響、実測証拠
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">ID</th>
+          <th scope="col">対象fact</th>
+          <th scope="col">実装上の原因</th>
+          <th scope="col">実測</th>
+          <th scope="col">判定</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">RC1</th>
+          <td>headings</td>
+          <td>
+            HTML側は<code>querySelectorAll("h1, h2, h3, h4, h5, h6")</code>の結果をそのまま配列にする。このparserでは複合selectorの結果が文書順ではなくselector
+            group順になり、Markdown側の出現順と一致しない。
+          </td>
+          <td>
+            8文書。例ではexpectedが<code>h2 Outputs → h3 Agent Planning Context → h3 Guardrail… → h2 Bridge Workflow</code>、actualが<code>h2 Outputs → h2 Bridge Workflow → h2 Distillation Rules…</code>となる。要素数30と各要素の値は保持され、順序だけが異なる。
+          </td>
+          <td>偽陽性</td>
+        </tr>
+        <tr>
+          <th scope="row">RC2</th>
+          <td>lists</td>
+          <td>
+            HTML側の<code>querySelectorAll("ol, ul")</code>も同じ順序問題を持つ。Markdown側は文書順でlistを収集する一方、HTML側はordered
+            list群とunordered list群が再配列される。
+          </td>
+          <td>
+            9文書。例ではexpectedの先頭が<code>ul(4 items) → ul(14) → ol(6)</code>、actualは<code>ol(6) → ul(4) → ul(14)</code>である。件数、list種別、開始番号、深さ、item数は同じmultisetだった。
+          </td>
+          <td>偽陽性</td>
+        </tr>
+        <tr>
+          <th scope="row">RC3</th>
+          <td>tables</td>
+          <td>
+            Markdown側のtable cell textはinline
+            tokenをseparatorなしで連結する。HTML側の<code>accessibleHtmlText</code>はtext
+            nodeと<code>code</code>等の境界を常に半角空白で連結するため、sourceにない空白を作る。
+          </td>
+          <td>
+            3文書。<code>READMEと`v1.0.0`が</code>がactualでは<code>READMEと v1.0.0 が</code>、<code>(`2.17.0`)</code>が<code>( 2.17.0 )</code>になる。DOM
+            nodeを出現位置でseparatorなしに連結すると全tableが一致した。
+          </td>
+          <td>偽陽性</td>
+        </tr>
+        <tr>
+          <th scope="row">RC4</th>
+          <td>inline-code</td>
+          <td>
+            formatterは<code>pre</code>等のraw
+            contentを保護するが、inline
+            <code>code</code>は保護しない。print width 100で長いcode
+            textへ改行とindentを入れる。parity側はMarkdown tokenとHTML
+            <code>textContent</code>を空白正規化せず比較する。
+          </td>
+          <td>
+            2文書。<code>--profile agent-output --json</code>が<code>--profile\n agent-output --json</code>になり、長い&lt;Explain…&gt;
+            placeholderにも改行が入った。現在のCSSではrender時に空白がcollapseするが、DOM
+            textは完全一致しない。
+          </td>
+          <td>formatterとparity contractの不整合</td>
+        </tr>
+      </tbody>
+    </table>
+    <aside data-type="note">
+      <p>
+        <code>querySelectorAll("strong, em, del")</code
+        >もRC1・RC2と同型であり、今回の17文書では発火しなかった潜在的な順序不一致である。現在のfixtureはtable内に単独の強調要素を置くため、複数種類を文書中で交互に使うcaseを覆っていない。
+      </p>
+    </aside>
+  </section>
+
+  <section id="documents">
+    <h2>13文書の分類</h2>
+    <table>
+      <caption>
+        <code>MIG004</code
+        >になった文書と根本原因
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">文書</th>
+          <th scope="col">reportされたfact</th>
+          <th scope="col">原因</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><code>contextstill-static-intelligence-bridge-concept.md</code></th>
+          <td>headings</td>
+          <td>RC1</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>nightworkers-cli-diagnostic-contract-instructions.md</code></th>
+          <td>inline-code、lists</td>
+          <td>RC4、RC2</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>phase-56-capability-product-completion-plan.md</code></th>
+          <td>headings、tables、lists</td>
+          <td>RC1、RC3、RC2</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>project-intelligence-ontology-evolution-roadmap.md</code></th>
+          <td>headings、lists</td>
+          <td>RC1、RC2</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>project-intelligence-rollout-decision-2026-08-09.md</code></th>
+          <td>lists</td>
+          <td>RC2</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>project-scan-exploration-reduction-mcp-concept.md</code></th>
+          <td>headings、lists</td>
+          <td>RC1、RC2</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>security-intelligence-initial-implementation-roadmap.md</code></th>
+          <td>tables、lists</td>
+          <td>RC3、RC2</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>security-intelligence-integration-concept.md</code></th>
+          <td>headings、lists</td>
+          <td>RC1、RC2</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>security-intelligence-pilot-decision-template.md</code></th>
+          <td>inline-code</td>
+          <td>RC4</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>security-intelligence-pr4-nightworkers-pilot-plan.md</code></th>
+          <td>headings、lists</td>
+          <td>RC1、RC2</td>
+        </tr>
+        <tr>
+          <th scope="row">
+            <code>static-intelligence-coding-agent-consumer-companion-plan.md</code>
+          </th>
+          <td>headings、lists</td>
+          <td>RC1、RC2</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>static-intelligence-layer-concept.md</code></th>
+          <td>headings</td>
+          <td>RC1</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>third-party-scanners.md</code></th>
+          <td>tables</td>
+          <td>RC3</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      合格した4文書は<code>README.md</code>、<code>vuln-workbench-concept.md</code>、<code>evidence/phase-42-vulnworkbench-catalog-mcp-go.md</code>、<code>evidence/phase-46-release-readiness.md</code>である。これらだけ変換品質が高いのではなく、RC1〜RC4を発火させる構文の組合せがなかった。
+    </p>
+  </section>
+
+  <section id="corrected-diagnostic">
+    <h2>補正診断で17/17になった理由</h2>
+    <p>
+      production
+      codeは変更せず、診断用bundleだけに次の仮補正を適用し、各文書を現行<code>convert</code>でformatしたHTMLと再比較した。
+    </p>
+    <ol>
+      <li>見出しとlistを全要素のDOM順走査からtagでfilterする。</li>
+      <li>
+        <code>accessibleHtmlText</code>でDOM
+        node境界へ空白を発明せず、nodeの出現位置どおりに連結する。
+      </li>
+      <li>inline codeは現在のrendering semanticsに合わせ、連続空白を1個へ正規化して比較する。</li>
+    </ol>
+    <p>
+      この補正後は、visible text、headings、code block、inline
+      code、Mermaid、task、image、link、table、paragraph、blockquote、list、inline mark、horizontal
+      rule、line
+      breakの全factが17/17文書で一致した。これは現行blockが内容欠落を検出した証拠ではなく、比較器の表現差を検出した証拠である。
+    </p>
+    <p>
+      ただし3番目は最終仕様ではない。inline codeをverbatim
+      dataと定義するなら、比較を緩めずformatterからcode textを保護すべきである。rendered text
+      parityを契約にするなら、Markdown側とHTML側の双方へ同じHTML
+      whitespace規則を適用する必要がある。
+    </p>
+  </section>
+
+  <section id="why-not-write">
+    <h2>内容が保持されていても現行migrateを採用できない理由</h2>
+    <ol>
+      <li>
+        <strong>正規手順ではwriteへ到達しない。</strong>
+        <code>MIG004</code
+        >はerrorであり、<code>--allow-lossy</code>の対象ではない。回避optionもない。これは安全装置を無効化すべき状況ではなく、parity実装を修正すべき状況である。
+      </li>
+      <li>
+        <strong>4/17という数値は移行品質の実測値として誤解を招く。</strong>
+        実測したのは現行collectorの一致率であり、生成HTMLの意味保持率ではない。補正診断の17/17と、RC4のliteral差を分けて報告する必要がある。
+      </li>
+      <li>
+        <strong>inline codeの契約が未決定である。</strong>
+        画面表示の同値とDOM
+        textの完全一致のどちらを保証するかを決めないまま比較だけを緩めると、本当のcode改変を見逃す。
+      </li>
+      <li>
+        <strong>whole-root operationである。</strong>
+        <code>migrate</code>は選択した数文書だけでなくactive
+        Markdown全件を対象にし、commit直前にactive
+        Markdownが0件であることを要求する。このrepositoryでMarkdownを正本として継続する判断とは両立しない。
+      </li>
+    </ol>
+  </section>
+
+  <section id="archive-semantics">
+    <h2>vulnWorkbenchのArchive意味との衝突</h2>
+    <p>
+      現在の<code>spec/.archived/</code>には20文書があり、<code>spec/README.md</code>は「完了、置換、またはactive
+      backlogを後続計画へ移管した歴史的計画」と定義している。また「全ての構想を実装した」という意味ではないことも明記済みである。したがって、既存定義を単純に「実装済み」と読むのは正確ではない。
+    </p>
+    <p>
+      それでもmigrationとの衝突は残る。writeするとroot直下の15
+      Markdownが既存<code>spec/.archived/</code>へ、evidence配下の2
+      Markdownが<code>spec/evidence/.archived/</code>へ移る。そこへ追加される理由は「完了・置換・後続移管」ではなく「内容はactive
+      HTMLへ移り、Markdown表現を正本から退役させた」である。計画lifecycleのArchiveとsource-format
+      lifecycleのArchiveが同じdirectory名に混在する。
+    </p>
+    <table>
+      <caption>
+        Archive taxonomyの差
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">区分</th>
+          <th scope="col">現在のvulnWorkbench</th>
+          <th scope="col">migrate後に加わる意味</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">対象</th>
+          <td>歴史的なimplementation plan</td>
+          <td>active plan、concept、evidence、indexを含む全Markdown source</td>
+        </tr>
+        <tr>
+          <th scope="row">退役理由</th>
+          <td>完了、置換、backlog移管</td>
+          <td>HTMLへ正本formatを変更</td>
+        </tr>
+        <tr>
+          <th scope="row">戻し方</th>
+          <td>repository運用で必要に応じて扱う</td>
+          <td>migration単位のrollbackのみ。個別Restore不可</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      よって「Archiveは非active文書全般」と再定義するなら技術的には共存できるが、現在のREADMEと運用queryを更新する必要がある。計画状態とsource形式を分離したいなら、一括migrationを使わずMarkdown直接表示を継続する方が自然である。
+    </p>
+  </section>
+
+  <section id="language">
+    <h2>追加で見つかったlanguage指定の問題</h2>
+    <p>
+      今回の再現commandは全生成文書へ<code>lang="ja"</code>を設定する。少なくとも次の4文書は本文が英語主体であり、writeするなら<code>--language-map</code>で<code>en</code>を指定する必要がある。
+    </p>
+    <ul>
+      <li><code>evidence/phase-42-vulnworkbench-catalog-mcp-go.md</code></li>
+      <li><code>evidence/phase-46-release-readiness.md</code></li>
+      <li><code>security-intelligence-pilot-decision-template.md</code></li>
+      <li><code>third-party-scanners.md</code></li>
+    </ul>
+    <p>
+      content parity
+      factは<code>article[lang]</code>を比較しないため、この誤指定は4/17という結果に現れない。これはmigrateの欠陥ではなく呼出し設定の不足だが、実移行前に別途解消すべきaccessibility条件である。
+    </p>
+  </section>
+
+  <section id="fix-and-gates">
+    <h2>修正方針と再採用gate</h2>
+    <ol>
+      <li>複合selectorに依存せず、headings、lists、inline marksをDOM出現順で収集する。</li>
+      <li>
+        <code>accessibleHtmlText</code>はtext
+        nodeと画像altを位置どおり連結し、必要な正規化をfactごとに明示する。
+      </li>
+      <li>
+        inline codeをverbatim保持するかrendered
+        whitespaceで比較するかを仕様化し、compiler、formatter、parityを同じ契約へ揃える。
+      </li>
+      <li>
+        <code>h2 → h3 → h2</code
+        >、<code>ul → ol → ul</code>、inline codeに隣接する日本語・句読点、print
+        widthを超えるinline codeの回帰testを追加する。
+      </li>
+      <li>
+        同じvulnWorkbench corpusで<code>migrate --check</code>がparity 17/17、error
+        0になることを確認する。
+      </li>
+      <li>
+        language mapとArchive
+        taxonomyを合意し、Markdownを正本から退役させる明示判断がある場合だけ<code>--write</code>を実行する。
+      </li>
+    </ol>
+    <aside data-type="success">
+      <p>
+        現時点の運用推奨はMarkdown直接表示である。HTML固有表現が必要な文書だけを個別<code>convert</code>し、生成HTMLの正本化を文書単位で判断する。一括migrationはparity修正後も、repository全体のsource-of-truth変更として別途承認する。
+      </p>
+    </aside>
+  </section>
+
+  <section id="ownership-decision">
+    <h2>修正責任の分界</h2>
+    <aside data-type="success" aria-labelledby="ownership-conclusion">
+      <strong id="ownership-conclusion"
+        >parityを通すためにvulnWorkbenchのMarkdown本文を変更しない</strong
+      >
+      <p>
+        RC1〜RC3は有効なMarkdownを正しく比較できないspec-html側の一般的な欠陥であり、RC4もformatterとparity
+        contractの不整合である。入力文書を並べ替える、inline
+        codeの前後へ空白を足す、長いcodeを短くする、といった変更は診断器への迎合であり、別の文書でも再発する。
+      </p>
+    </aside>
+    <table>
+      <caption>
+        projectごとの修正責任
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">project</th>
+          <th scope="col">修正すること</th>
+          <th scope="col">修正しないこと</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">spec-html</th>
+          <td>
+            DOM順のfact収集、inline要素境界のtext連結、inline
+            codeの保持契約、回帰test、実corpusでの17/17確認
+          </td>
+          <td>特定repository名や特定文書名に依存する例外処理</td>
+        </tr>
+        <tr>
+          <th scope="row">vulnWorkbench</th>
+          <td>
+            文書別language map、Markdownを正本から退役させるかの判断、Archive taxonomyとREADMEの更新
+          </td>
+          <td>
+            見出し・list順の変更、inline
+            code周辺への空白追加、formatterの折返しを避けるための文章改変
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      vulnWorkbench本文を変更してよいのは、migrationと独立した文書品質上の理由がある場合だけである。たとえば誤記、壊れたlink、誤った仕様、言語metadata、文書lifecycleの説明不足は入力側の責任である。変更理由が「現行<code>MIG004</code>を消すため」だけなら修正しない。
+    </p>
+  </section>
+</article>

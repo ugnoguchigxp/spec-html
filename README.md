@@ -127,7 +127,7 @@ npx spec-html check ./specs --fixer --format --fix
 
 ## Markdown compatibility
 
-Markdown preview supports headings with stable IDs, paragraphs, emphasis, strikethrough, lists and task lists, blockquotes, code, GFM tables, links, images, and `mermaid` fences. Raw HTML is shown as literal text rather than executed. Unsafe link and image schemes such as `javascript:`, `data:`, and `file:` are omitted. Mermaid generated from Markdown uses Mermaid's `strict` security level, which disables callback directives; trusted HTML documents retain the existing Mermaid behavior. Relative links and assets resolve from the original Markdown file, including links between Markdown and HTML documents.
+Markdown preview supports headings with stable IDs, paragraphs, emphasis, strikethrough, lists and task lists, blockquotes, code, GFM tables, links, images, and `mermaid` fences. Raw HTML is shown as literal text rather than executed. Unsafe link and image schemes such as `javascript:`, `data:`, and `file:` are omitted. Mermaid uses Mermaid's `strict` security level for both Markdown and HTML documents, which disables callback directives. Relative links and assets resolve from the original Markdown file, including links between Markdown and HTML documents.
 
 The viewer uses `en` for generated Markdown articles by default. Set one root-wide language when needed:
 
@@ -189,7 +189,7 @@ For regular use, add scripts to the consuming project's `package.json`:
 }
 ```
 
-See the [authoring guide](./docs/authoring.html) for writing rules, link resolution, and integrations. A [Japanese version](./docs/authoring.ja.html) is also available.
+See the [authoring guide](./specs/authoring.html) for writing rules, link resolution, and integrations. A [Japanese version](./specs/authoring.ja.html) is also available.
 
 ## AI agent instructions
 
@@ -297,13 +297,23 @@ spec-html migrate [directory] --rollback <migration-id>
 spec-html migrate [directory] --finalize <migration-id>
 ```
 
+The CLI uses English for help, usage errors, and lint diagnostics. When a command accepts an optional directory or path, it defaults to `./specs`. `lint` accepts `--format <compact|json>` and `--max-issues <number>`; `format`, `fix`, `check`, and `migrate` use `--reporter <compact|json>`. `check` also accepts `--max-issues` for its lint stage.
+
+Exit codes are part of the CLI contract:
+
+- `0`: the command completed and its requested quality gate passed.
+- `1`: lint or migration findings, check-mode changes, blocked fixes/formatting, or a viewer runtime failure.
+- `2`: invalid subcommand arguments or an operational failure before a subcommand could complete.
+
+`lint` and the lint stage of `check` inspect both HTML and Markdown. Markdown checks cover a single non-empty h1, local references, unsafe URLs, and Mermaid syntax; compact and JSON summaries include the number of inspected Markdown files.
+
 ## Security model
 
 Spec HTML is designed for trusted local HTML. Inline scripts in an HTML specification are executed, so do not open HTML from an untrusted source without reviewing it first. Markdown raw HTML is escaped, unsafe URL schemes are removed, and Markdown Mermaid callback directives are disabled during rendering and conversion; remote HTTP(S) links and images are still allowed.
 
 Review fixer changes with `--check` before writing unfamiliar documents. Correcting a typo such as `scritp` or `onclik` intentionally activates the corresponding HTML behavior, while leaving the JavaScript source itself unchanged.
 
-The server listens only on `127.0.0.1` by default and accepts only the loopback names `127.0.0.1`, `localhost`, and `::1` for loopback binds. A concrete non-loopback bind can add repeatable `--allowed-host <hostname>` values. A wildcard bind such as `--host 0.0.0.0` requires at least one; it still must not be used on an untrusted network. Cross-origin document-state updates are rejected.
+The server listens only on `127.0.0.1` by default and accepts only the loopback names `127.0.0.1`, `localhost`, and `::1` for loopback binds. A concrete non-loopback bind can add repeatable `--allowed-host <hostname>` values. A wildcard bind such as `--host 0.0.0.0` requires at least one; it still must not be used on an untrusted network. Cross-origin document-state updates are rejected, and non-loopback listeners require an explicit matching `Origin` header for every state-changing request.
 
 Requests that traverse outside the content directory, including symbolic-link escapes, are rejected. Files and directories whose names start with `.` are never served from the content route, even when the segment is percent-encoded.
 
@@ -311,7 +321,7 @@ Requests that traverse outside the content directory, including symbolic-link es
 
 - Search and front matter interpretation are not included; migration diagnoses front matter as unsupported.
 - The Viewer does not infer per-document Markdown language metadata; batch migration accepts an explicit language map.
-- HTML lint/fix/format/check commands do not inspect Markdown source directly.
+- Fix and format stages modify HTML only; lint and check still inspect Markdown without rewriting it.
 - The formatter does not invent semantic choices such as alt text, captions, or headings.
 - The fixer does not correct prose or JavaScript and does not guess when multiple HTML repairs are possible.
 - Browser automation runs the complete suite in Chromium and critical smoke paths in Firefox and WebKit.

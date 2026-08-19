@@ -1,4 +1,5 @@
 import { lintDocument } from "../lint/document.js";
+import { messageOf } from "../shared/error-message.js";
 import {
   createFormatProblem,
   sortAndDedupeFormatProblems,
@@ -106,8 +107,4 @@ function prettierLocation(error: unknown): { line: number; column: number } {
     }
   }
   return { line: 1, column: 1 };
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

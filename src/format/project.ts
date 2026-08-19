@@ -2,6 +2,7 @@ import { lstat, realpath, rename } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import {
   findHtmlDocuments,
+  type DocumentDiscoveryCache,
   type ContentDocument,
 } from "../content/documents.js";
 import {
@@ -13,6 +14,7 @@ import {
   type FileSnapshot,
 } from "../content/safe-write.js";
 import { formatDocument } from "./document.js";
+import { messageOf } from "../shared/error-message.js";
 import {
   createFormatProjectResult,
   type FormatProjectResult,
@@ -28,8 +30,9 @@ const projectSnapshots = new WeakMap<
 /** Format an HTML file or every HTML document in a directory without writing. */
 export async function formatProject(
   targetPath: string,
+  discoveryCache?: DocumentDiscoveryCache,
 ): Promise<FormatProjectResult> {
-  const targets = await resolveFormatTargets(targetPath);
+  const targets = await resolveFormatTargets(targetPath, discoveryCache);
   const documents = [];
   const snapshots = new Map<string, FileSnapshot>();
   for (const target of targets) {
@@ -113,6 +116,7 @@ export async function writeFormatProject(
 
 async function resolveFormatTargets(
   targetPath: string,
+  discoveryCache?: DocumentDiscoveryCache,
 ): Promise<ContentDocument[]> {
   let stats;
   try {
@@ -126,7 +130,7 @@ async function resolveFormatTargets(
 
   if (stats.isDirectory()) {
     const root = await realpath(targetPath);
-    return findHtmlDocuments(root);
+    return findHtmlDocuments(root, discoveryCache);
   }
   if (!stats.isFile()) {
     throw new Error(
@@ -141,8 +145,4 @@ async function resolveFormatTargets(
   }
   const absolutePath = await realpath(targetPath);
   return [{ absolutePath, path: basename(absolutePath), format: "html" }];
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

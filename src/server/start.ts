@@ -4,6 +4,7 @@ import { createLiveReload } from "./live-reload.js";
 import type { LiveReload } from "./live-reload.js";
 import { createHostPolicy } from "./host-policy.js";
 import { createRequestHandler } from "./routes.js";
+import { NavigationTitleCache } from "./navigation.js";
 import type { RunningServer, StartServerOptions } from "./types.js";
 
 export async function startServer(
@@ -13,13 +14,14 @@ export async function startServer(
     options.markdownLanguage ?? "en",
   );
   const hostPolicy = createHostPolicy(options.host, options.allowedHosts);
-  const liveReload = createLiveReload(options.contentRoot);
+  const liveReload = await createLiveReload(options.contentRoot);
   const server = createServer(
     createRequestHandler({
       ...options,
       markdownLanguage,
       hostPolicy,
       liveReload,
+      navigationTitleCache: new NavigationTitleCache(),
     }),
   );
 
