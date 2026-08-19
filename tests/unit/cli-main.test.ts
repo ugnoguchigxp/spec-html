@@ -1,5 +1,12 @@
 import { EventEmitter } from "node:events";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -372,7 +379,7 @@ describe("convert CLI execution", () => {
     ).resolves.toBe(1);
 
     expect(logs).toHaveBeenCalledWith(
-      expect.stringMatching(/Created: .*\/table\.html$/),
+      `Created: ${join(await realpath(root), "table.html")}`,
     );
     expect(logs).toHaveBeenCalledWith(
       "summary lint-errors=1 lint-warnings=0 markdown-notices=0",

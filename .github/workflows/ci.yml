@@ -63,18 +63,24 @@ jobs:
       - run: bun ./scripts/test-pack.mjs
 
   platform:
-    name: Node 24 / ${{ matrix.os }}
+    name: Node ${{ matrix.node-version }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - os: macos-latest
+            node-version: 24
+          # nodejs/node#63638: Node 24.16+ regressed recursive fs.watch with Windows short paths.
+          # Remove this pin after nodejs/node#65118 ships in a Node 24 release.
+          - os: windows-latest
+            node-version: 24.15.0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
       - run: npm run typecheck

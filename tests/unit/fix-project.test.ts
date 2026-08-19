@@ -196,6 +196,7 @@ describe("writeFixProject", () => {
     );
     await writeFile(unchanged, '<article lang="en"><h1>B</h1></article>');
     await chmod(changed, 0o640);
+    const changedMode = (await lstat(changed)).mode & 0o777;
     const old = new Date("2020-01-01T00:00:00.000Z");
     await utimes(unchanged, old, old);
     const beforeUnchanged = await lstat(unchanged);
@@ -204,7 +205,7 @@ describe("writeFixProject", () => {
     await writeFixProject(root, result);
 
     expect(await readFile(changed, "utf8")).toContain("<section>X</section>");
-    expect((await lstat(changed)).mode & 0o777).toBe(0o640);
+    expect((await lstat(changed)).mode & 0o777).toBe(changedMode);
     expect((await lstat(unchanged)).mtimeMs).toBe(beforeUnchanged.mtimeMs);
     expect(
       (await readdir(root)).some((name) => name.includes(".spec-html-fix-")),
