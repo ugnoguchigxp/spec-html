@@ -35,7 +35,7 @@ Viewerと生成した文書は、手元の信頼済み環境で利用します�
 
 - Node.js 20.19以上、22.16以上、または24以上
 - Bun 1.3以上（CLIを`--bun`付きで実行）
-- ローカルの信頼済みHTML
+- ローカルの信頼済みHTMLとMarkdown
 
 ## Installation
 
@@ -63,7 +63,7 @@ specs/
 
 Viewerはdirectory内の`.html`、`.md`、`.markdown`を再帰的に読み取り、最初の`h1`を表示名とするnavigationを実行時に構成します。Markdownには`MD` badgeが付き、`design.html`と`design.md`のような同名stemも別文書として表示します。メニュー用fileを作成したりrepositoryで管理したりする必要はありません。起動中は指定directory配下だけを監視し、文書や画像を変更・追加・削除するとbrowserを自動reloadします。
 
-各設計書はHTML document全体ではなく、`article`などから始まるfragmentとして保存します。
+新しく作成するHTML設計書はdocument全体ではなく、`article`などから始まるfragmentとして保存します。既存のMarkdown文書は変更せず利用できます。
 
 ```html
 <article lang="en">
@@ -274,7 +274,6 @@ content directory外を指すpath traversalとsymbolic linkは配信しません
 - Formatterはsemantic tag、alt、caption、見出しなど意味判断が必要な内容を自動修正しません。
 - Fixerは文章やJavaScriptを修正せず、HTMLの修正候補が複数ある場合は推測しません。
 - browser自動テストはChromiumで全件、FirefoxとWebKitで重要導線のsmoke testを実行します。
-- Node.js 24未満はサポートしません。
 
 ## Development
 

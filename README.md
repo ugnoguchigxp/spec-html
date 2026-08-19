@@ -35,7 +35,7 @@ The viewer and its documents are intended for trusted local environments. The np
 
 - Node.js 20.19+, 22.16+, or 24+
 - Bun 1.3+ is also supported when the CLI is run with `--bun`
-- Trusted local HTML
+- Trusted local HTML and Markdown
 
 ## Installation
 
@@ -65,7 +65,7 @@ specs/
    └─ diagram.svg
 ```
 
-Each specification should be an HTML fragment rather than a complete HTML document:
+New HTML specifications should be fragments rather than complete HTML documents. Existing Markdown documents can remain unchanged:
 
 ```html
 <article lang="en">
@@ -281,7 +281,6 @@ Requests that traverse outside the content directory, including symbolic-link es
 - The formatter does not invent semantic choices such as alt text, captions, or headings.
 - The fixer does not correct prose or JavaScript and does not guess when multiple HTML repairs are possible.
 - Browser automation runs the complete suite in Chromium and critical smoke paths in Firefox and WebKit.
-- Node.js versions earlier than 24 are not supported.
 
 ## Development
 

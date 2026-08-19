@@ -2,13 +2,31 @@
 
 Notable changes to Spec HTML are recorded here. The project follows [Semantic Versioning](https://semver.org/).
 
-## 0.1.0 - Unreleased
+## Unreleased
+
+## 0.1.1 - 2026-08-19
+
+### Added
+
+- Direct `.md` and `.markdown` preview with shared GFM rendering, stable heading IDs, source display, cross-format links, and visible navigation badges
+- `spec-html convert` for create-only Markdown-to-HTML conversion with deterministic formatting and semantic lint diagnostics
+
+### Security
+
+- Literal rendering of Markdown raw HTML and removal of unsafe Markdown link and image schemes
+- Strict Mermaid rendering for Markdown fences, preventing callback directives while preserving trusted HTML behavior
+- Snapshot-checked, race-safe Markdown conversion that never overwrites existing files or symbolic links
+
+### Fixed
+
+- Cross-platform release tests now compare native paths and preserve each platform's original file mode
+- Release validation now rejects inconsistent, dirty, or previously published package versions
+
+## 0.1.0 - 2026-08-19
 
 ### Added
 
 - Local viewer CLI that renders HTML fragments and builds navigation from a content directory
-- Direct `.md` and `.markdown` preview with shared GFM rendering, stable heading IDs, source display, cross-format links, and visible navigation badges
-- `spec-html convert` for create-only Markdown-to-HTML conversion with deterministic formatting and semantic lint diagnostics
 - Browser reloads scoped to changes within the content directory
 - Cross-document navigation, browser history, images, and relative-link resolution
 - Optional Chart.js integration
@@ -32,9 +50,6 @@ Notable changes to Spec HTML are recorded here. The project follows [Semantic Ve
 - Rejection of path traversal and symbolic-link escapes outside the content root
 - Host allowlisting for every request, with explicit allowed hosts required for wildcard binds
 - Rejection of dot-prefixed content paths and cross-origin document-state updates
-- Literal rendering of Markdown raw HTML and removal of unsafe Markdown link and image schemes
-- Strict Mermaid rendering for Markdown fences, preventing callback directives while preserving trusted HTML behavior
-- Snapshot-checked, race-safe Markdown conversion that never overwrites existing files or symbolic links
 
 ### Fixed
 

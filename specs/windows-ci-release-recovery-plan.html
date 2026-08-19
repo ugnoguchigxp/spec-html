@@ -1,0 +1,323 @@
+<article lang="ja">
+  <h1>Windows CI復旧と0.1.1 release改善計画</h1>
+
+  <aside data-type="success" aria-labelledby="plan-decision">
+    <strong id="plan-decision">決定: 修正する</strong>
+    <p>
+      先にWindows
+      CIを最小変更でgreenへ戻し、その修正を含むreview済みcommitから<code>0.1.1</code>をreleaseする。公開済み<code>0.1.0</code>は変更せず、初期開発中のpatch
+      releaseとしてMarkdown previewとconversionを届ける。
+    </p>
+  </aside>
+
+  <section id="baseline">
+    <h2>修正前baseline</h2>
+    <table>
+      <caption>
+        2026-08-19時点の状態
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">対象</th>
+          <th scope="col">状態</th>
+          <th scope="col">判定</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Repository HEAD</th>
+          <td><code>309587f</code>、<code>package.json</code>は<code>0.1.0</code></td>
+          <td>Markdown機能を含む</td>
+        </tr>
+        <tr>
+          <th scope="row">npm latest</th>
+          <td><code>0.1.0</code>、2026-08-19 12:34 JST公開</td>
+          <td>Markdown機能を含まない</td>
+        </tr>
+        <tr>
+          <th scope="row">Changelog</th>
+          <td><code>0.1.0 - Unreleased</code></td>
+          <td>公開事実と不一致</td>
+        </tr>
+        <tr>
+          <th scope="row">Local full check</th>
+          <td>Node.js 24.11.1で成功</td>
+          <td>local baselineはgreen</td>
+        </tr>
+        <tr>
+          <th scope="row">GitHub Actions</th>
+          <td>Node 20.19、22.16、Bun 1.3、macOS成功。Windows失敗</td>
+          <td>release不可</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="failure-analysis">
+    <h2>Windows失敗の原因分離</h2>
+    <table>
+      <caption>
+        Log上の失敗と所有者
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">失敗</th>
+          <th scope="col">原因</th>
+          <th scope="col">分類</th>
+          <th scope="col">対応</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">convert CLI test</th>
+          <td><code>/table.html</code>を正規表現で固定し、Windowsのbackslashと一致しない。</td>
+          <td>Project側のtest defect</td>
+          <td>既知の<code>output</code> pathを使った完全一致にする。</td>
+        </tr>
+        <tr>
+          <th scope="row">fix／format mode test</th>
+          <td>
+            Windowsでも変更後modeをPOSIX
+            <code>0640</code>と仮定する。実測は<code>0666</code>。
+          </td>
+          <td>Project側のtest defect</td>
+          <td>書込前modeを保存し、書込後が同値であることをplatform非依存で検証する。</td>
+        </tr>
+        <tr>
+          <th scope="row">libuv <code>fs-event.c:72</code></th>
+          <td>Node 24.16以降のWindows short／long pathを含むrecursive watcher regression。</td>
+          <td>Upstream confirmed bug</td>
+          <td>
+            修正を含むNode releaseまでWindows CIを24.15.0へ固定し、project
+            codeの無根拠な変更は行わない。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      libuv assertionは<code>nodejs/node#63638</code>としてconfirmed
+      bugになり、upstream修正は<code>nodejs/node#65118</code>で2026-08-14にmerge済みである。ただし失敗runのWindows
+      runnerはNode
+      24.19.0で、まだ修正を含んでいない。したがって、retryで隠すのではなく、既知の正常versionへ一時固定する。
+    </p>
+  </section>
+
+  <section id="phase-1">
+    <h2>Phase 1: Windows CIをgreenへ戻す</h2>
+    <ol>
+      <li>
+        <code>tests/unit/cli-main.test.ts</code>の生成path assertionを次の契約へ変える。
+        <pre><code>expect(logs).toHaveBeenCalledWith(`Created: ${output}`);</code></pre>
+      </li>
+      <li>
+        fix／format testでは<code>chmod</code>後のmodeを取得し、atomic
+        write後も同値であることを確認する。
+        <pre><code>const beforeChanged = await lstat(changed);
+// write operation
+expect((await lstat(changed)).mode).toBe(beforeChanged.mode);</code></pre>
+        <p>
+          POSIXでは<code>chmod(0640)</code>が反映されることも別途確認できるが、WindowsへPOSIX
+          permission semanticsを要求しない。
+        </p>
+      </li>
+      <li>
+        GitHub ActionsのWindows jobだけNode
+        <code>24.15.0</code>へ固定する。job名にもpatch versionを表示し、workflow
+        commentへ<code>nodejs/node#63638</code>と解除条件を記録する。
+      </li>
+      <li>
+        同じcommitをpushし、Windows jobが360 tests、build、packed consumer
+        testまで完走することを確認する。
+      </li>
+    </ol>
+    <aside data-type="warning" aria-labelledby="upstream-pin-policy">
+      <strong id="upstream-pin-policy">一時pinの解除条件</strong>
+      <p>
+        Nodeのrelease
+        noteまたは実runで<code>nodejs/node#65118</code>を含むversionを確認した後、Windowsをそのversionへ上げる。<code>24</code>へ即座に戻さず、1回の明示的なcompatibility
+        changeとしてreviewする。
+      </p>
+    </aside>
+  </section>
+
+  <section id="phase-2">
+    <h2>Phase 2: 0.1.1 release準備</h2>
+    <ol>
+      <li>
+        <code>CHANGELOG.md</code>を実際の公開境界で分割する。
+        <ul>
+          <li>先頭へ空の<code>Unreleased</code> sectionを置く。</li>
+          <li>
+            <code>0.1.1 - 2026-08-19</code>へMarkdown preview、convert、Markdown security
+            hardening、Windows CI portabilityを記載する。
+          </li>
+          <li><code>0.1.0 - 2026-08-19</code>には既に公開されたHTML viewer機能だけを残す。</li>
+        </ul>
+      </li>
+      <li>
+        <code>npm version 0.1.1 --no-git-tag-version</code
+        >で<code>package.json</code>と<code>package-lock.json</code>を同時更新する。
+      </li>
+      <li>
+        npm
+        metadataを新しい製品scopeへ合わせる。descriptionへHTMLとMarkdownを含め、keywordsへ<code>markdown</code>と<code>conversion</code>を追加する。
+      </li>
+      <li>
+        README英日版のNode要件矛盾を解消する。RequirementsのNode
+        20.19／22.16／24対応を正とし、limitationsの「24未満は非対応」を削除する。
+      </li>
+      <li>
+        release guideの「初回公開前」を通常のregistry
+        preflightへ更新し、対象versionが未公開であることをreleaseごとに確認する。
+      </li>
+    </ol>
+  </section>
+
+  <section id="release-guard">
+    <h2>再発防止</h2>
+    <p>
+      手順書だけでなく、明示的な<code>release:check</code>
+      commandを追加する価値がある。networkを必要とするため<code>prepack</code>や通常の<code>check</code>へは混ぜず、maintainerがrelease直前に実行する。
+    </p>
+    <table>
+      <caption>
+        release:checkで検証するcontract
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">検証</th>
+          <th scope="col">失敗条件</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Local version一致</th>
+          <td><code>package.json</code>とlockfile root packageのversionが異なる。</td>
+        </tr>
+        <tr>
+          <th scope="row">Changelog</th>
+          <td>同じversionとrelease dateのheadingがない。</td>
+        </tr>
+        <tr>
+          <th scope="row">Registry vacancy</th>
+          <td><code>npm view spec-html@&lt;version&gt;</code>が既存versionを返す。</td>
+        </tr>
+        <tr>
+          <th scope="row">Git state</th>
+          <td>default branch上でない、またはtracked fileに未commit変更がある。</td>
+        </tr>
+        <tr>
+          <th scope="row">Packed CLI</th>
+          <td>tarball内versionと<code>spec-html --version</code>が一致しない。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="sequence">
+    <h2>Release sequence</h2>
+    <figure>
+      <pre class="mermaid">
+sequenceDiagram
+  participant M as Maintainer
+  participant G as GitHub Actions
+  participant N as npm registry
+  participant R as GitHub Release
+
+  M->>G: Windows portability fixをpush
+  G-->>M: 全job green
+  M->>M: 0.1.1 version・changelog・metadata更新
+  M->>G: release commitをpush
+  G-->>M: 全job green
+  M->>M: clean worktreeでrelease:check
+  M->>N: npm publish --dry-run
+  M->>N: npm publish
+  N-->>M: 0.1.1公開成功
+  M->>N: clean consumerでinstall・CLI・Markdown確認
+  M->>R: signed v0.1.1 tagとRelease作成
+      </pre>
+      <figcaption>
+        npm publishは不可逆なため、2回目の全CI成功とregistry vacancy確認より前には行わない。
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="verification">
+    <h2>Verification matrix</h2>
+    <table>
+      <caption>
+        Releaseを許可する完了条件
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Gate</th>
+          <th scope="col">完了条件</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Local</th>
+          <td><code>npm ci</code>、<code>npm run check</code>、Spec HTML checkが成功する。</td>
+        </tr>
+        <tr>
+          <th scope="row">Windows</th>
+          <td>path、mode、worker errorがなく、unit、build、packがすべて成功する。</td>
+        </tr>
+        <tr>
+          <th scope="row">Compatibility</th>
+          <td>Node 20.19、22.16、24、Bun 1.3、macOS、Windowsのrequired jobがgreen。</td>
+        </tr>
+        <tr>
+          <th scope="row">Package</th>
+          <td>
+            tarballが<code>0.1.1</code>で、<code>marked</code>と<code>github-slugger</code>を含み、optional
+            peersをbundleしない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Registry</th>
+          <td>
+            <code>latest=0.1.1</code>、CLI helpに<code>convert</code>があり、Markdown-only
+            fixtureを直接previewできる。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Release identity</th>
+          <td>
+            npm version、commitのpackage version、signed tag、GitHub
+            Releaseがすべて<code>0.1.1</code>。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="commit-plan">
+    <h2>推奨commit分割</h2>
+    <ol>
+      <li><code>fix: restore Windows CI portability</code> — test assertionとNode一時pinだけ。</li>
+      <li>
+        <code>chore: add release consistency checks</code> — release
+        guideと<code>release:check</code>。
+      </li>
+      <li>
+        <code>chore: prepare 0.1.1 release</code> — version、changelog、metadata、README整合。
+      </li>
+    </ol>
+    <p>
+      この順序なら、Windows修正の成否をrelease metadata変更から切り離せる。公開操作、tag、GitHub
+      Releaseはcommitには含めず、最後のmaintainer手順として実行する。
+    </p>
+  </section>
+
+  <section id="non-goals">
+    <h2>今回行わないこと</h2>
+    <ul>
+      <li>公開済み<code>0.1.0</code>の上書きまたはunpublish</li>
+      <li>upstream libuv bugを推測で回避するproduction watcherの大規模変更</li>
+      <li>Windows jobのretryや<code>continue-on-error</code>によるfailureの隠蔽</li>
+      <li>Markdown lint、bundle分割、navigation cacheなど次release向け機能改善</li>
+      <li>CIからの自動npm publishへの移行</li>
+    </ul>
+  </section>
+</article>

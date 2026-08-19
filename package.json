@@ -1,10 +1,12 @@
 {
   "name": "spec-html",
-  "version": "0.1.0",
-  "description": "Local HTML document viewer for AI-generated specifications.",
+  "version": "0.1.1",
+  "description": "Local HTML and Markdown viewer for AI-generated specifications.",
   "keywords": [
     "documentation",
     "html",
+    "markdown",
+    "conversion",
     "viewer",
     "mermaid",
     "chart.js"
@@ -55,6 +57,7 @@
     "test:coverage": "vitest run --coverage",
     "test:browser": "playwright test",
     "test:pack": "node ./scripts/test-pack.mjs",
+    "release:check": "node ./scripts/release-check.mjs",
     "fix:check": "node ./dist/cli.js fix ./docs --check && node ./dist/cli.js fix ./examples --check && node ./dist/cli.js fix ./tests/fixtures/browser --check",
     "format:check": "node ./dist/cli.js format ./docs --check && node ./dist/cli.js format ./examples --check && node ./dist/cli.js format ./tests/fixtures/browser --check",
     "lint:docs": "node ./dist/cli.js lint ./docs --warnings-as-errors && node ./dist/cli.js lint ./examples --warnings-as-errors",

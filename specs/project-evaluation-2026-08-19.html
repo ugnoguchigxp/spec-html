@@ -1,0 +1,409 @@
+<article lang="ja">
+  <h1>Spec HTML プロジェクト評価（2026-08-19）</h1>
+
+  <aside data-type="warning" aria-labelledby="evaluation-conclusion">
+    <strong id="evaluation-conclusion">総合評価: 82 / 100</strong>
+    <p>
+      製品の焦点、共有Markdown compiler、安全な変換、回帰テストは高水準である。最新commit
+      <code>309587f</code
+      >により、既存Markdownを変換せず閲覧できるようになり、repository上の導入容易性は明確に改善した。
+    </p>
+    <p>
+      一方、公開済みnpm
+      <code>0.1.0</code>にはMarkdown機能が含まれず、HEADも同じversion
+      <code>0.1.0</code>のままである。さらに最新commitのWindows
+      CIが失敗している。したがって、改善はまだ一般利用者へ届いておらず、現時点のrelease判定は「保留」とする。
+    </p>
+  </aside>
+
+  <section id="scope">
+    <h2>評価範囲と方法</h2>
+    <p>
+      現行HEADと直前commitの差分、source、英日README、authoring guide、release手順、package
+      metadata、test、CI、npm registry上の公開packageを確認した。Markdown機能の設計意図は<a
+        href="./markdown-viewer-evaluation.html"
+        >Markdown閲覧対応案の評価</a
+      >と<a href="./markdown-support-implementation-plan.html">実装計画</a>も参照した。
+    </p>
+    <ul>
+      <li>
+        <code>npm ci</code>と<code>npm run check</code>をNode.js
+        24.11.1で実行し、localでは成功した。
+      </li>
+      <li>unit／server testは26 files、360 testsが成功した。</li>
+      <li>coverageはlines 89.47%、statements 89.50%、functions 94.38%、branches 84.06%だった。</li>
+      <li>browser testは31 testsが成功し、Chromium全件とFirefox／WebKit smokeを確認した。</li>
+      <li>packed consumer testはinstall、Viewer、Markdown変換、no-clobberを含めて成功した。</li>
+      <li><code>npm ci</code>のaudit結果は脆弱性0件だった。</li>
+      <li>GitHub ActionsではNode 20.19、Node 22.16、Bun 1.3、macOSが成功し、Windowsが失敗した。</li>
+    </ul>
+  </section>
+
+  <section id="score">
+    <h2>観点別評点</h2>
+    <table>
+      <caption>
+        100点満点の内訳
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">観点</th>
+          <th scope="col">評点</th>
+          <th scope="col">評価</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">製品価値とscope</th>
+          <td>18 / 20</td>
+          <td>
+            「Markdownの置換」ではなく、既存Markdownと表現力の高いHTMLの橋渡しに絞った位置付けが明確である。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">architectureと保守性</th>
+          <td>18 / 20</td>
+          <td>
+            共有compiler、document format
+            model、previewとconvertの責務分離が良い。bundle増加とnavigationの全Markdown再parseには改善余地がある。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">securityとdata safety</th>
+          <td>18 / 20</td>
+          <td>
+            raw HTMLのliteral化、unsafe URL除去、Markdown Mermaidのstrict mode、snapshotとatomic
+            createによるno-clobberが堅い。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">testと互換性</th>
+          <td>15 / 20</td>
+          <td>
+            test層とcoverageは非常に強いが、最新commitのWindows CIが3 testsと2 worker
+            errorsで失敗している。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">導入文書とrelease運用</th>
+          <td>13 / 20</td>
+          <td>
+            英日文書とconsumer testは充実しているが、公開version、changelog、tag、README、package
+            metadataに不整合がある。
+          </td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <th scope="row">合計</th>
+          <td>82 / 100</td>
+          <td>実装品質は高い。release blockerを解消すれば80点台後半を見込める。</td>
+        </tr>
+      </tfoot>
+    </table>
+  </section>
+
+  <section id="adoption-impact">
+    <h2>最新commitによる導入容易性の変化</h2>
+    <table>
+      <caption>
+        既存Markdownを持つprojectの導入体験
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">状態</th>
+          <th scope="col">評点</th>
+          <th scope="col">必要な作業</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">変更前</th>
+          <td>5.5 / 10</td>
+          <td>既存MarkdownをHTML fragmentへ移行してからViewerを利用する必要があった。</td>
+        </tr>
+        <tr>
+          <th scope="row">変更後のrepository code</th>
+          <td>8.5 / 10</td>
+          <td>
+            既存directoryをそのまま開ける。必要な文書だけcreate-onlyの<code>convert</code>でHTMLへ移行できる。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">現時点のnpm利用者</th>
+          <td>5.5 / 10</td>
+          <td>
+            npm latestの<code>0.1.0</code>は変更前のpackageであり、Markdown
+            previewと<code>convert</code>を利用できない。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>
+      repository
+      codeに限れば、導入容易性は3.0点改善したと評価する。特に、既存資産を変更しないpreview、同名HTML／Markdownの併存、<code
+        >MD</code
+      >
+      badge、相対link、source表示、安全な一方向変換は、試用から段階移行までの手戻りを減らしている。
+    </p>
+
+    <figure>
+      <pre class="mermaid">
+flowchart LR
+  A[既存Markdown directory] --> B[spec-htmlで直接preview]
+  B --> C{HTML固有表現が必要か}
+  C -- いいえ --> D[Markdownをsource of truthとして維持]
+  C -- はい --> E[選択した文書だけconvert]
+  E --> F[独立したSpec HTMLとして編集]
+  H[repository HEAD] --> R[version更新とgreen CI]
+  R --> N[npm publish]
+  N --> A
+      </pre>
+      <figcaption>
+        製品内の段階移行導線は完成しているが、HEADからnpm利用者へ届けるrelease工程が未完了である。
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="strengths">
+    <h2>強み</h2>
+    <ol>
+      <li>
+        <strong>移行を強制しない。</strong>
+        Markdown previewとHTML conversionを分離し、利用者が文書単位で移行時期を選べる。
+      </li>
+      <li>
+        <strong>previewとconvertの意味が揃っている。</strong>
+        <code>marked</code>、heading ID、URL
+        policy、Mermaid処理を共有し、二重実装による差を抑えている。
+      </li>
+      <li>
+        <strong>書込安全性が高い。</strong>
+        変換は同一directoryへのcreate-onlyとし、既存file／symbolic
+        link、入力変更、result改変、競合を拒否する。
+      </li>
+      <li>
+        <strong>security modelが現実的である。</strong>
+        trusted
+        HTMLの既存機能を維持しつつ、一般的なMarkdownをscript実行対象へ広げない設計になっている。
+      </li>
+      <li>
+        <strong>検証が実利用に近い。</strong>
+        unitだけでなく、server、browser、複数runtime、複数OS、pack後のconsumer
+        projectまで検証している。
+      </li>
+      <li>
+        <strong>設計判断が保存されている。</strong>
+        非目標、risk、rollback、release gateまでSpec HTMLで追跡でき、将来の変更理由が分かる。
+      </li>
+    </ol>
+  </section>
+
+  <section id="blockers">
+    <h2>release blocker</h2>
+
+    <aside data-type="danger" aria-labelledby="windows-ci-blocker">
+      <strong id="windows-ci-blocker">P0: Windows CIをgreenにする</strong>
+      <p>
+        最新commitのWindows jobでは360 tests中3 testsが失敗し、libuvの<code>fs-event.c</code>
+        assertionによるworker
+        errorが2件発生した。この状態ではcross-platform対応をrelease条件として満たしていない。
+      </p>
+    </aside>
+    <ul>
+      <li>
+        新規convert
+        testが<code>/table.html</code>を期待し、Windowsの<code>\table.html</code>と一致しない。path
+        separator非依存のassertionへ変更する。
+      </li>
+      <li>
+        fix／format testがWindowsでもPOSIX mode
+        <code>0640</code
+        >を期待するが、実測は<code>0666</code>だった。POSIXだけでmode保持を検証するか、platform別contractを定義する。
+      </li>
+      <li>
+        <code>fs-event.c</code>
+        assertionはrunner／Node／並列worker／watcherのどれが原因かを切り分け、再実行だけで恒常的に無視しない。
+      </li>
+    </ul>
+
+    <aside data-type="danger" aria-labelledby="release-version-blocker">
+      <strong id="release-version-blocker">P0: 公開versionとsourceを一致させる</strong>
+      <p>
+        npm <code>0.1.0</code>は2026-08-19 12:34 JSTに公開され、Markdown commitは同日16:28
+        JSTである。registry
+        packageのdependenciesには<code>marked</code>と<code>github-slugger</code>がなく、CLI
+        helpにも<code>convert</code>がない。しかしHEADの<code>package.json</code>も<code>0.1.0</code>で、changelogは<code
+          >0.1.0 - Unreleased</code
+        >のままである。
+      </p>
+    </aside>
+    <p>
+      公開済みversionは再利用できないため、Windows
+      CI修正後に新機能releaseを<code>0.1.1</code>として準備する。version更新、changelogの日付と項目分離、dry-run、publish、signed
+      tag、GitHub release、clean consumerでのregistry install確認を一続きのrelease gateにする。
+    </p>
+  </section>
+
+  <section id="improvements">
+    <h2>さらなる改善点</h2>
+    <table>
+      <caption>
+        影響と優先度に基づく改善backlog
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">優先度</th>
+          <th scope="col">改善</th>
+          <th scope="col">理由と完了条件</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">P0</th>
+          <td>Windows CI修正とrelease version整合</td>
+          <td>前節の2 blockerを解消し、全CI成功後にMarkdown対応版を新versionで公開する。</td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>READMEのNode要件矛盾を修正</td>
+          <td>
+            RequirementsはNode
+            20.19／22.16／24を対応とする一方、limitationsは24未満を非対応としている。英日両方をCI
+            matrixと一致させる。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>既存Markdown向けzero-migration quick start</td>
+          <td>
+            現行Quick startはMarkdownを含むtreeの直後に「各文書はHTML
+            fragment」と説明する。既存Markdownと新規Spec HTMLの2導線へ分け、前者をinstallと1
+            commandで示す。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>npm検索metadataを更新</td>
+          <td>
+            <code>description</code>はHTML
+            viewerのままで、keywordsにMarkdownとconversionがない。npm利用者が新しい価値を発見できるmetadataにする。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P1</th>
+          <td>Markdownを無検査でgreenにしない</td>
+          <td>
+            <code>check</code
+            >がMarkdownを対象外にする場合も、<code>markdown-skipped=N</code>を明示する。次段階でh1、local
+            link／image、unsafe URL、Mermaid parseを検査するMarkdown lintを追加する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>Markdown compilerをbrowserでlazy-load</td>
+          <td>
+            viewer bundleは41,978 bytesから114,893 bytesへ173.7%増えた。HTML-only利用ではparser
+            chunkを取得せず、最初のMarkdown表示時だけ読み込む構成を検討する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>navigation titleのparse cache</td>
+          <td>
+            navigation生成はrequestごとに全Markdownをcompileする。mtime／sizeまたはdigestをkeyにtitle
+            metadataをcacheし、大規模directoryでの待ち時間を測定する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>文書単位のlanguage metadata</td>
+          <td>
+            現在の<code>--markdown-lang</code>はroot全体に1言語だけで、多言語directoryでは正しい<code>article[lang]</code>を表せない。限定的なfront
+            matter等で上書き可能にする。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P2</th>
+          <td>英語利用者向けCLI体験を統一</td>
+          <td>
+            英語READMEを提供する一方、CLI
+            helpとerrorは日本語である。既定英語＋locale選択、または英日切替方針を定める。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">P3</th>
+          <td>検索と規模別benchmark</td>
+          <td>
+            文書数が増えた後の主要価値は検索になる。50／500／5,000
+            documentsの起動、navigation、reload時間を先に測り、必要なindex方式を決める。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="size-impact">
+    <h2>変更規模とcost</h2>
+    <table>
+      <caption>
+        公開済み0.1.0と現行HEADのpackage比較
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">指標</th>
+          <th scope="col">公開済み0.1.0</th>
+          <th scope="col">現行HEAD</th>
+          <th scope="col">差</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">CLI bundle</th>
+          <td>165,763 bytes</td>
+          <td>251,136 bytes</td>
+          <td>+85,373 bytes、+51.5%</td>
+        </tr>
+        <tr>
+          <th scope="row">Browser viewer bundle</th>
+          <td>41,978 bytes</td>
+          <td>114,893 bytes</td>
+          <td>+72,915 bytes、+173.7%</td>
+        </tr>
+        <tr>
+          <th scope="row">npm tarball</th>
+          <td>418,420 bytes</td>
+          <td>465,263 bytes</td>
+          <td>+46,843 bytes、+11.2%</td>
+        </tr>
+        <tr>
+          <th scope="row">Unpacked package</th>
+          <td>654,878 bytes</td>
+          <td>822,924 bytes</td>
+          <td>+168,046 bytes、+25.7%</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      最新commit全体は53 files、4,137 additions、283 deletionsで、test
+      declarationは178件から213件へ35件増えた。機能規模に対して検証追加は十分だが、review単位としては大きいため、今後はdocument
+      model、preview、convert、release整備を分割すると回帰原因を追いやすい。
+    </p>
+  </section>
+
+  <section id="final-judgment">
+    <h2>最終判断</h2>
+    <p>
+      最新commitは、Spec
+      HTMLの弱点だった「既存Markdownを持つprojectほど試しにくい」という問題へ正面から対応しており、製品方向として採用を強く支持する。実装も、単にparserを追加するのではなく、format
+      model、navigation、archive、source表示、security、conversion、package
+      consumerまで一貫させている。
+    </p>
+    <p>
+      ただし、現時点では「導入しやすくなった」のはrepository HEADを直接使う利用者に限られる。Windows
+      CIをgreenにし、versionを<code>0.1.1</code>へ進めてnpmへ公開した時点で、一般利用者についても「改善」と判定できる。release
+      blocker解消後の再評価目安は88〜90 / 100である。
+    </p>
+  </section>
+</article>
