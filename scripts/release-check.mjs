@@ -7,7 +7,20 @@ import { fileURLToPath } from "node:url";
 const execFileAsync = promisify(execFile);
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDirectory, "..");
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const npmCommand = process.platform === "win32" ? process.execPath : "npm";
+const npmArgumentPrefix =
+  process.platform === "win32"
+    ? [
+        process.env.npm_execpath ??
+          resolve(
+            dirname(process.execPath),
+            "node_modules",
+            "npm",
+            "bin",
+            "npm-cli.js",
+          ),
+      ]
+    : [];
 
 try {
   await checkRelease();
@@ -54,12 +67,7 @@ async function checkRelease() {
 
   await assertRegistryVersionIsUnused(packageJson.name, version);
 
-  const pack = await run(npmCommand, [
-    "pack",
-    "--dry-run",
-    "--json",
-    "--silent",
-  ]);
+  const pack = await runNpm(["pack", "--dry-run", "--json", "--silent"]);
   const packedPackage = parsePackOutput(pack.stdout)[0];
   if (
     packedPackage?.name !== packageJson.name ||
@@ -89,7 +97,7 @@ async function checkRelease() {
 
 async function assertRegistryVersionIsUnused(name, version) {
   try {
-    await run(npmCommand, ["view", `${name}@${version}`, "version", "--json"]);
+    await runNpm(["view", `${name}@${version}`, "version", "--json"]);
   } catch (error) {
     if (messageOf(error).includes("E404")) {
       return;
@@ -123,6 +131,10 @@ function run(command, args) {
     encoding: "utf8",
     maxBuffer: 20 * 1024 * 1024,
   });
+}
+
+function runNpm(args) {
+  return run(npmCommand, [...npmArgumentPrefix, ...args]);
 }
 
 function escapeRegExp(value) {

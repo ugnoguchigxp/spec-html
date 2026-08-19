@@ -20,6 +20,7 @@ Notable changes to Spec HTML are recorded here. The project follows [Semantic Ve
 ### Fixed
 
 - Cross-platform release tests now compare native paths and preserve each platform's original file mode
+- Packed consumer validation now invokes npm without directly spawning the Windows command shim
 - Release validation now rejects inconsistent, dirty, or previously published package versions
 
 ## 0.1.0 - 2026-08-19

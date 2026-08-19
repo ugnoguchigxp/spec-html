@@ -6,7 +6,20 @@ import { fileURLToPath } from "node:url";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDirectory, "..");
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const npmCommand = process.platform === "win32" ? process.execPath : "npm";
+const npmArgumentPrefix =
+  process.platform === "win32"
+    ? [
+        process.env.npm_execpath ??
+          resolve(
+            dirname(process.execPath),
+            "node_modules",
+            "npm",
+            "bin",
+            "npm-cli.js",
+          ),
+      ]
+    : [];
 
 let temporaryRoot;
 let tarballPath;
@@ -393,7 +406,7 @@ async function writeConsumerFixture(root) {
 
 function run(command, args, cwd) {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(command, args, {
+    const child = spawn(command, commandArguments(command, args), {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -422,7 +435,7 @@ function run(command, args, cwd) {
 
 async function expectExitCode(command, args, cwd, expected) {
   const result = await new Promise((resolvePromise, reject) => {
-    const child = spawn(command, args, {
+    const child = spawn(command, commandArguments(command, args), {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -434,6 +447,10 @@ async function expectExitCode(command, args, cwd, expected) {
       `${command} ${args.join(" ")} returned ${result}, expected ${expected}`,
     );
   }
+}
+
+function commandArguments(command, args) {
+  return command === npmCommand ? [...npmArgumentPrefix, ...args] : args;
 }
 
 function waitForViewerUrl(child) {

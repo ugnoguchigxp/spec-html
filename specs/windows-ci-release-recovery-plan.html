@@ -92,6 +92,16 @@
             codeの無根拠な変更は行わない。
           </td>
         </tr>
+        <tr>
+          <th scope="row">packed consumer <code>spawn EINVAL</code></th>
+          <td>
+            <code>child_process.spawn</code>でWindowsの<code>npm.cmd</code>を直接起動していた。
+          </td>
+          <td>Project側のtest defect</td>
+          <td>
+            shellを介さず、<code>process.execPath</code>から<code>npm-cli.js</code>を実行する。
+          </td>
+        </tr>
       </tbody>
     </table>
     <p>
