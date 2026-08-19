@@ -48,6 +48,12 @@ try {
   if (installedPackageJson.bin?.["spec-html"] !== "dist/cli.js") {
     throw new Error("packしたpackageでspec-html CLIが公開されていません");
   }
+  if (installedPackageJson.dependencies?.prettier !== "3.9.6") {
+    throw new Error("packしたpackageのPrettier versionが固定されていません");
+  }
+  if (!packagedPaths.includes("docs/formatter-implementation-plan.html")) {
+    throw new Error("Formatter実装計画がpackageへ含まれていません");
+  }
   if (
     installedPackageJson.peerDependenciesMeta?.["chart.js"]?.optional !== true ||
     installedPackageJson.peerDependenciesMeta?.mermaid?.optional !== true
@@ -72,6 +78,43 @@ try {
   await expectExitCode(
     npmCommand,
     ["exec", "--", "spec-html", "lint", "./missing"],
+    temporaryRoot,
+    2,
+  );
+  await expectExitCode(
+    npmCommand,
+    ["exec", "--", "spec-html", "format", "./specs", "--check"],
+    temporaryRoot,
+    1,
+  );
+  await run(
+    npmCommand,
+    ["exec", "--", "spec-html", "format", "./specs", "--write"],
+    temporaryRoot,
+  );
+  await run(
+    npmCommand,
+    ["exec", "--", "spec-html", "format", "./specs", "--check"],
+    temporaryRoot,
+  );
+  await run(
+    npmCommand,
+    ["exec", "--", "spec-html", "format", "./full", "--write"],
+    temporaryRoot,
+  );
+  const normalizedDocument = await readFile(join(temporaryRoot, "full", "document.html"), "utf8");
+  if (normalizedDocument.includes("<html") || normalizedDocument.includes("<body")) {
+    throw new Error("full HTML documentがfragmentへ正規化されていません");
+  }
+  await expectExitCode(
+    npmCommand,
+    ["exec", "--", "spec-html", "format", "./blocked", "--write"],
+    temporaryRoot,
+    1,
+  );
+  await expectExitCode(
+    npmCommand,
+    ["exec", "--", "spec-html", "format", "./missing", "--check"],
     temporaryRoot,
     2,
   );
@@ -151,6 +194,8 @@ async function writeConsumerFixture(root) {
   const specsRoot = join(root, "specs");
   await mkdir(join(specsRoot, "assets"), { recursive: true });
   await mkdir(join(root, "invalid"), { recursive: true });
+  await mkdir(join(root, "full"), { recursive: true });
+  await mkdir(join(root, "blocked"), { recursive: true });
   await Promise.all([
     writeFile(
       join(specsRoot, "overview.html"),
@@ -163,6 +208,14 @@ async function writeConsumerFixture(root) {
     writeFile(
       join(root, "invalid", "bad.html"),
       '<article lang="en"><h1>Bad</h1><img src="missing.svg"></article>',
+    ),
+    writeFile(
+      join(root, "full", "document.html"),
+      '<!doctype html><html lang="en"><head><title>Full</title></head><body><article><h1>Full</h1></article></body></html>',
+    ),
+    writeFile(
+      join(root, "blocked", "document.html"),
+      '<html><head><style>body { color: red }</style></head><body><article lang="en"><h1>Blocked</h1></article></body></html>',
     ),
   ]);
 }

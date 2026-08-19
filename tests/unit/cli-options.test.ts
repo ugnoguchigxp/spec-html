@@ -59,6 +59,30 @@ describe("parseCliCommand", () => {
     });
   });
 
+  it("parses format commands without changing a viewer directory named format", () => {
+    expect(parseCliCommand(["format", "docs", "--check", "--reporter", "json"], CWD)).toEqual({
+      kind: "format",
+      options: {
+        targetPath: resolve(CWD, "docs"),
+        mode: "check",
+        reporter: "json",
+      },
+    });
+    expect(parseCliCommand(["format", "--write"], CWD)).toEqual({
+      kind: "format",
+      options: {
+        targetPath: resolve(CWD, "specs"),
+        mode: "write",
+        reporter: "compact",
+      },
+    });
+    expect(parseCliCommand(["./format", "--no-open"], CWD)).toMatchObject({
+      kind: "run",
+      options: { contentRoot: resolve(CWD, "format") },
+    });
+    expect(parseCliCommand(["format", "--help"], CWD)).toEqual({ kind: "format-help" });
+  });
+
   it("accepts the documented port boundaries and explicit --open", () => {
     expect(parseCliCommand(["--port", "0"], CWD)).toMatchObject({
       kind: "run",
@@ -93,6 +117,11 @@ describe("parseCliCommand", () => {
     ["lint", "--max-issues", "1e2"],
     ["lint", "--explain", "UNKNOWN"],
     ["lint", "docs", "--explain", "DOC001"],
+    ["format"],
+    ["format", "--check", "--write"],
+    ["format", "--check", "--reporter", "other"],
+    ["format", "first", "second", "--check"],
+    ["format", "docs", "--help"],
   ])("rejects invalid arguments: %j", (...args: string[]) => {
     expect(() => parseCliCommand(args, CWD)).toThrow(CliUsageError);
   });

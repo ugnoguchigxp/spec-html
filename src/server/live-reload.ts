@@ -34,7 +34,16 @@ export function createLiveReload(contentRoot: string): LiveReload {
   const watcher: FSWatcher = watch(
     contentRoot,
     { recursive: true },
-    scheduleReload,
+    (_eventType, filename) => {
+      const relativePath = filename?.toString().replaceAll("\\", "/");
+      if (
+        relativePath === ".spec-html" ||
+        relativePath?.startsWith(".spec-html/") === true
+      ) {
+        return;
+      }
+      scheduleReload();
+    },
   );
 
   return {

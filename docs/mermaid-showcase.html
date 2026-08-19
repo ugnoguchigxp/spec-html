@@ -1,19 +1,25 @@
 <article lang="ja">
   <header>
     <h1>Mermaid showcase</h1>
-    <p>設計書でよく使うMermaid diagramの表示例です。図はHTML fragment内のsourceからViewerが描画し、OSのlight／dark設定へ自動的に追従します。</p>
+    <p>
+      設計書でよく使うMermaid diagramの表示例です。図はHTML
+      fragment内のsourceからViewerが描画し、OSのlight／dark設定へ自動的に追従します。
+    </p>
   </header>
 
   <aside aria-labelledby="mermaid-note">
     <strong id="mermaid-note">このページについて</strong>
-    <p>すべての図は<code>&lt;pre class="mermaid"&gt;</code>で記述しています。生成済みSVGを管理する必要はありません。</p>
+    <p>
+      すべての図は<code>&lt;pre class="mermaid"&gt;</code
+      >で記述しています。生成済みSVGを管理する必要はありません。
+    </p>
   </aside>
 
   <section id="system-flow">
-  <h2>System flow</h2>
-  <p>利用者の操作から永続化までの主要componentとdata flowを俯瞰します。</p>
-  <figure>
-    <pre class="mermaid">
+    <h2>System flow</h2>
+    <p>利用者の操作から永続化までの主要componentとdata flowを俯瞰します。</p>
+    <figure>
+      <pre class="mermaid">
 flowchart LR
   User([利用者]) --> Browser[Browser]
   Browser -->|HTTPS| Viewer[Spec HTML Viewer]
@@ -22,15 +28,15 @@ flowchart LR
   Viewer -->|optional| Chart[Chart.js]
   Document --> Asset[(Local assets)]
     </pre>
-    <figcaption>Viewerがdocumentと任意integrationを読み込む流れ。</figcaption>
-  </figure>
+      <figcaption>Viewerがdocumentと任意integrationを読み込む流れ。</figcaption>
+    </figure>
   </section>
 
   <section id="request-sequence">
-  <h2>Request sequence</h2>
-  <p>navigationから文書を選択したときの読み込み順序を示します。</p>
-  <figure>
-    <pre class="mermaid">
+    <h2>Request sequence</h2>
+    <p>navigationから文書を選択したときの読み込み順序を示します。</p>
+    <figure>
+      <pre class="mermaid">
 sequenceDiagram
   actor User as 利用者
   participant Shell as Viewer Shell
@@ -44,15 +50,15 @@ sequenceDiagram
   Server-->>Frame: runtime assets
   Frame-->>User: 文書と図表を表示
     </pre>
-    <figcaption>文書選択からiframe内の描画完了まで。</figcaption>
-  </figure>
+      <figcaption>文書選択からiframe内の描画完了まで。</figcaption>
+    </figure>
   </section>
 
   <section id="document-state">
-  <h2>Document state</h2>
-  <p>Viewer内で文書が遷移する代表的な状態です。</p>
-  <figure>
-    <pre class="mermaid">
+    <h2>Document state</h2>
+    <p>Viewer内で文書が遷移する代表的な状態です。</p>
+    <figure>
+      <pre class="mermaid">
 stateDiagram-v2
   [*] --> Loading
   Loading --> Ready: 読み込み成功
@@ -61,15 +67,15 @@ stateDiagram-v2
   Error --> Loading: 再試行
   Ready --> [*]: Viewerを閉じる
     </pre>
-    <figcaption>読み込み、表示、error、再試行の状態遷移。</figcaption>
-  </figure>
+      <figcaption>読み込み、表示、error、再試行の状態遷移。</figcaption>
+    </figure>
   </section>
 
   <section id="content-model">
-  <h2>Content model</h2>
-  <p>content directoryを構成する主なentityと関係を表します。</p>
-  <figure>
-    <pre class="mermaid">
+    <h2>Content model</h2>
+    <p>content directoryを構成する主なentityと関係を表します。</p>
+    <figure>
+      <pre class="mermaid">
 erDiagram
   CONTENT_DIRECTORY ||--|| NAVIGATION : contains
   CONTENT_DIRECTORY ||--o{ DOCUMENT : contains
@@ -86,7 +92,7 @@ erDiagram
     string mediaType
   }
     </pre>
-    <figcaption>Navigation、document、assetの配置と参照関係。</figcaption>
-  </figure>
+      <figcaption>Navigation、document、assetの配置と参照関係。</figcaption>
+    </figure>
   </section>
 </article>

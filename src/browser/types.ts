@@ -1,18 +1,25 @@
 import type { ThemePreference } from "./theme.js";
+import type { NavigationView } from "../content/document-path.js";
 
 export interface RouteState {
   doc: string | null;
   hash: string;
+  view: NavigationView;
 }
 
 export type RouteParseResult =
   | { kind: "missing"; route: RouteState }
   | { kind: "valid"; route: RouteState & { doc: string } }
-  | { kind: "invalid"; rawDoc: string; hash: string };
+  | { kind: "invalid"; rawDoc: string; hash: string; view: NavigationView };
 
 export interface ViewerElements {
   root: HTMLDivElement;
   menuButton: HTMLButtonElement;
+  documentActions: HTMLDivElement;
+  documentActionsButton: HTMLButtonElement;
+  documentActionsMenu: HTMLDivElement;
+  documentArchiveButton: HTMLButtonElement;
+  documentActionStatus: HTMLDivElement;
   documentModeButton: HTMLButtonElement;
   sourceDialog: HTMLDialogElement;
   sourceDialogCode: HTMLPreElement;
@@ -20,6 +27,7 @@ export interface ViewerElements {
   sortButtons: Record<SortPreference, HTMLButtonElement>;
   themeButtons: Record<ThemePreference, HTMLButtonElement>;
   sidebar: HTMLElement;
+  navigationViewButton: HTMLButtonElement;
   navigation: HTMLDivElement;
   status: HTMLDivElement;
   frame: HTMLIFrameElement;

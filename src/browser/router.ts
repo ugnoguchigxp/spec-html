@@ -1,48 +1,34 @@
 import { CONTENT_PREFIX } from "./constants.js";
+import { normalizeDocumentPath } from "../content/document-path.js";
 import type { RouteParseResult, RouteState } from "./types.js";
+
+export { normalizeDocumentPath } from "../content/document-path.js";
 
 export function parseRoute(url: URL): RouteParseResult {
   const hash = url.hash;
+  const view = url.searchParams.get("view") === "archive"
+    ? "archive"
+    : "documents";
   if (!url.searchParams.has("doc")) {
-    return { kind: "missing", route: { doc: null, hash } };
+    return { kind: "missing", route: { doc: null, hash, view } };
   }
 
   const rawDoc = url.searchParams.get("doc") ?? "";
   const doc = normalizeDocumentPath(rawDoc);
   if (doc === null) {
-    return { kind: "invalid", rawDoc, hash };
+    return { kind: "invalid", rawDoc, hash, view };
   }
 
-  return { kind: "valid", route: { doc, hash } };
-}
-
-export function normalizeDocumentPath(value: string): string | null {
-  if (value.length === 0 || value.startsWith("/") || value.startsWith("\\")) {
-    return null;
-  }
-  if (value.includes("\0") || value.includes("\\")) {
-    return null;
-  }
-
-  const segments = value.split("/");
-  if (
-    segments.some(
-      (segment) =>
-        segment.length === 0 || segment === "." || segment === "..",
-    )
-  ) {
-    return null;
-  }
-
-  return segments.at(-1)?.toLowerCase().endsWith(".html") === true
-    ? segments.join("/")
-    : null;
+  return { kind: "valid", route: { doc, hash, view } };
 }
 
 export function createShellUrl(route: RouteState, base: URL): URL {
   const url = new URL("/", base);
   if (route.doc !== null) {
     url.searchParams.set("doc", route.doc);
+  }
+  if (route.view === "archive") {
+    url.searchParams.set("view", "archive");
   }
   url.hash = route.hash;
   return url;

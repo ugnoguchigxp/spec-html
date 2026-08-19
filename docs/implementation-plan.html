@@ -1,171 +1,188 @@
 <article lang="ja">
-<h1>HTML設計書Viewer 実装計画</h1>
-<section id="document-positioning">
-<h2>1. 文書の位置づけ</h2>
-<p>本書は、LLMが通常Markdownで生成する設計書や仕様書を構造的なHTMLへ置き換え、Markdown以上の表現力を持つ読みやすい文書としてローカルで活用するViewerを実装する計画書である。</p>
-<p>利用プロジェクトではローカルpathから本packageを<code>devDependency</code>としてインストールし、利用側でTypeScriptやCSS、Chart.js、Mermaidのビルドを行わず、1コマンドでViewerを起動できることを目標とする。</p>
-<p>実装上のpackage名とCLI名はともに<code>spec-html</code>で固定する。この名前はローカルpackageとCLIを識別するためのものであり、npm registryへの公開や名前の確保を目的としない。</p>
-<h3>1.1 実装者向けの読み方</h3>
-<ul>
-<li>実装仕様の正本は本書とする。</li>
-<li>最初に2.2節の固定値と3節のスコープを確認する。</li>
-<li>実装は17節のT0.1からT5.3まで番号順に行う。</li>
-<li>各taskでは「対象file」以外を同時に変更せず、記載された確認commandが成功してから次へ進む。</li>
-<li>詳細仕様が必要なときだけ、taskから参照されている4節から16節を読む。</li>
-<li>本書にない機能を補完しない。必要に見えても3.2節の非目標なら実装しない。</li>
-<li>placeholder、空のstub、未完了TODOを残した状態でtaskを完了にしない。</li>
-</ul>
-</section>
-<section id="goals">
-<h2>2. 目標</h2>
-<p>利用者が次の手順だけで、プロジェクト内の構造的なHTML設計書・仕様書を閲覧できる状態を作る。<code>/absolute/path/to/spec-html</code>はローカルcheckoutのpathとする。</p>
-<pre><code class="language-bash">npm install --save-dev /absolute/path/to/spec-html
+  <h1>HTML設計書Viewer 実装計画</h1>
+  <section id="document-positioning">
+    <h2>1. 文書の位置づけ</h2>
+    <p>
+      本書は、LLMが通常Markdownで生成する設計書や仕様書を構造的なHTMLへ置き換え、Markdown以上の表現力を持つ読みやすい文書としてローカルで活用するViewerを実装する計画書である。
+    </p>
+    <p>
+      利用プロジェクトではローカルpathから本packageを<code>devDependency</code>としてインストールし、利用側でTypeScriptやCSS、Chart.js、Mermaidのビルドを行わず、1コマンドでViewerを起動できることを目標とする。
+    </p>
+    <p>
+      実装上のpackage名とCLI名はともに<code>spec-html</code>で固定する。この名前はローカルpackageとCLIを識別するためのものであり、npm
+      registryへの公開や名前の確保を目的としない。
+    </p>
+    <h3>1.1 実装者向けの読み方</h3>
+    <ul>
+      <li>実装仕様の正本は本書とする。</li>
+      <li>最初に2.2節の固定値と3節のスコープを確認する。</li>
+      <li>実装は17節のT0.1からT5.3まで番号順に行う。</li>
+      <li>
+        各taskでは「対象file」以外を同時に変更せず、記載された確認commandが成功してから次へ進む。
+      </li>
+      <li>詳細仕様が必要なときだけ、taskから参照されている4節から16節を読む。</li>
+      <li>本書にない機能を補完しない。必要に見えても3.2節の非目標なら実装しない。</li>
+      <li>placeholder、空のstub、未完了TODOを残した状態でtaskを完了にしない。</li>
+    </ul>
+  </section>
+  <section id="goals">
+    <h2>2. 目標</h2>
+    <p>
+      利用者が次の手順だけで、プロジェクト内の構造的なHTML設計書・仕様書を閲覧できる状態を作る。<code>/absolute/path/to/spec-html</code>はローカルcheckoutのpathとする。
+    </p>
+    <pre><code class="language-bash">npm install --save-dev /absolute/path/to/spec-html
 npx --no-install spec-html ./specs
 </code></pre>
-<p>日常利用では、利用プロジェクトの<code>package.json</code>に次のscriptを登録できる。</p>
-<pre><code class="language-json">{
+    <p>日常利用では、利用プロジェクトの<code>package.json</code>に次のscriptを登録できる。</p>
+    <pre><code class="language-json">{
   &quot;scripts&quot;: {
     &quot;docs&quot;: &quot;spec-html ./specs&quot;
   }
 }
 </code></pre>
-<pre><code class="language-bash">npm run docs
+    <pre><code class="language-bash">npm run docs
 </code></pre>
-<h3>2.1 成功状態</h3>
-<ul>
-<li>CLIがローカルHTTPサーバーを起動し、Viewerをブラウザで開く。</li>
-<li>Viewerが対象ディレクトリから構成したnavigationをサイドバーとして表示する。</li>
-<li>HTML fragment形式の設計書をiframe内に表示する。</li>
-<li>設計書から参照する画像などの相対パスが、設計書自身の位置を基準に解決される。</li>
-<li>設計書間のリンク、再読み込み、戻る・進む、文書内アンカーが動作する。</li>
-<li>任意dependencyとしてChart.jsとMermaidを導入すれば、利用側の追加ビルドなしで使用できる。</li>
-<li>ローカルで生成した一時tarballを別プロジェクトにインストールしても動作する。</li>
-</ul>
-<h3>2.2 実装時の固定値</h3>
-<p>実装者は次を選び直さず、この値で実装する。</p>
-<table>
-<caption>実装時の固定値</caption>
-<thead>
-<tr>
-<th scope="col">項目</th>
-<th scope="col">固定値</th>
-</tr>
-</thead>
-<tbody><tr>
-<th scope="row">ローカルpackage名</th>
-<td><code>spec-html</code></td>
-</tr>
-<tr>
-<th scope="row">executable名</th>
-<td><code>spec-html</code></td>
-</tr>
-<tr>
-<th scope="row">対応Node.js</th>
-<td>24以上（開発環境の<code>v24.11.1</code>を基準）</td>
-</tr>
-<tr>
-<th scope="row">既定content directory</th>
-<td><code>./specs</code></td>
-</tr>
-<tr>
-<th scope="row">既定host</th>
-<td><code>127.0.0.1</code></td>
-</tr>
-<tr>
-<th scope="row">既定port</th>
-<td><code>4173</code></td>
-</tr>
-<tr>
-<th scope="row">browser自動起動</th>
-<td>既定で有効</td>
-</tr>
-<tr>
-<th scope="row">UI、CLI、エラーメッセージ</th>
-<td>日本語</td>
-</tr>
-<tr>
-<th scope="row">Viewer page title suffix</th>
-<td><code>Spec HTML</code></td>
-</tr>
-<tr>
-<th scope="row">mobile breakpoint</th>
-<td><code>768px</code>未満</td>
-</tr>
-<tr>
-<th scope="row">Sidebar幅</th>
-<td>desktopで<code>280px</code></td>
-</tr>
-<tr>
-<th scope="row">Document最大幅</th>
-<td><code>920px</code></td>
-</tr>
-<tr>
-<th scope="row">対応browser</th>
-<td>v0.1はPlaywright Chromium</td>
-</tr>
-<tr>
-<th scope="row">HTMLの信頼モデル</th>
-<td>ローカルの信頼済みコンテンツ</td>
-</tr>
-<tr>
-<th scope="row">Chart.js / Mermaid</th>
-<td>optional peer dependency。未導入でも起動可能</td>
-</tr>
-<tr>
-<th scope="row">sourcemap</th>
-<td>v0.1では生成しない</td>
-</tr>
-<tr>
-<th scope="row">minify</th>
-<td>v0.1では行わない</td>
-</tr>
-</tbody></table>
-<p>package名はローカル利用の固定値とし、公開先やregistryを実装判断へ持ち込まない。</p>
-</section>
-<section id="scope">
-<h2>3. スコープ</h2>
-<h3>3.1 v0.1に含めるもの</h3>
-<ul>
-<li>ローカルNode.js packageとしてのbuild</li>
-<li><code>spec-html</code> CLI</li>
-<li>ローカル専用HTTPサーバー</li>
-<li>Viewer Shell</li>
-<li>content directoryの走査とnavigationの構成</li>
-<li>HTML fragmentの読み込みとiframe表示</li>
-<li>URL queryを使ったルーティング</li>
-<li>相対パス解決</li>
-<li>ページタイトルとactive navigationの同期</li>
-<li>Shell用CSSとDocument用CSS</li>
-<li>OS設定へ追従するlight／dark表示と現在文書の印刷</li>
-<li>Chart.jsとMermaidの任意integrationと遅延配信</li>
-<li>単体テスト、サーバー統合テスト、Chromiumによるブラウザテスト</li>
-<li><code>npm pack</code>を用いたローカルtarballのスモークテスト</li>
-</ul>
-<h3>3.2 v0.1に含めないもの</h3>
-<ul>
-<li>インターネット上へのViewer公開を前提とした機能</li>
-<li>npm registryまたは他のpackage registryへの公開</li>
-<li>公開用GitHub ReleaseとTrusted Publishing</li>
-<li>第三者向けpackage配布</li>
-<li>信頼できないHTMLを安全に実行するためのsandbox設計</li>
-<li>CSP、nonce、Trusted Types対応</li>
-<li>CDN配布</li>
-<li>認証、権限管理、共同編集</li>
-<li>Markdown変換</li>
-<li>HTML編集機能</li>
-<li>ファイル監視と自動リロード</li>
-<li>検索、全文索引</li>
-<li>Sidebarのリサイズ</li>
-<li>Plugin API、設定ファイル、独自DSL</li>
-<li>npm以外のパッケージマネージャー固有対応</li>
-<li>Chromium以外のブラウザに対するv0.1での動作保証</li>
-</ul>
-</section>
-<section id="consumer-contract">
-<h2>4. 利用側の契約</h2>
-<h3>4.1 ディレクトリ構成</h3>
-<p>Viewer対象ディレクトリには、1つ以上の設計書を配置する。Navigation用fileは配置しない。</p>
-<pre><code class="language-text">project/
+    <h3>2.1 成功状態</h3>
+    <ul>
+      <li>CLIがローカルHTTPサーバーを起動し、Viewerをブラウザで開く。</li>
+      <li>Viewerが対象ディレクトリから構成したnavigationをサイドバーとして表示する。</li>
+      <li>HTML fragment形式の設計書をiframe内に表示する。</li>
+      <li>設計書から参照する画像などの相対パスが、設計書自身の位置を基準に解決される。</li>
+      <li>設計書間のリンク、再読み込み、戻る・進む、文書内アンカーが動作する。</li>
+      <li>
+        任意dependencyとしてChart.jsとMermaidを導入すれば、利用側の追加ビルドなしで使用できる。
+      </li>
+      <li>ローカルで生成した一時tarballを別プロジェクトにインストールしても動作する。</li>
+    </ul>
+    <h3>2.2 実装時の固定値</h3>
+    <p>実装者は次を選び直さず、この値で実装する。</p>
+    <table>
+      <caption>
+        実装時の固定値
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">項目</th>
+          <th scope="col">固定値</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">ローカルpackage名</th>
+          <td><code>spec-html</code></td>
+        </tr>
+        <tr>
+          <th scope="row">executable名</th>
+          <td><code>spec-html</code></td>
+        </tr>
+        <tr>
+          <th scope="row">対応Node.js</th>
+          <td>24以上（開発環境の<code>v24.11.1</code>を基準）</td>
+        </tr>
+        <tr>
+          <th scope="row">既定content directory</th>
+          <td><code>./specs</code></td>
+        </tr>
+        <tr>
+          <th scope="row">既定host</th>
+          <td><code>127.0.0.1</code></td>
+        </tr>
+        <tr>
+          <th scope="row">既定port</th>
+          <td><code>4173</code></td>
+        </tr>
+        <tr>
+          <th scope="row">browser自動起動</th>
+          <td>既定で有効</td>
+        </tr>
+        <tr>
+          <th scope="row">UI、CLI、エラーメッセージ</th>
+          <td>日本語</td>
+        </tr>
+        <tr>
+          <th scope="row">Viewer page title suffix</th>
+          <td><code>Spec HTML</code></td>
+        </tr>
+        <tr>
+          <th scope="row">mobile breakpoint</th>
+          <td><code>768px</code>未満</td>
+        </tr>
+        <tr>
+          <th scope="row">Sidebar幅</th>
+          <td>desktopで<code>280px</code></td>
+        </tr>
+        <tr>
+          <th scope="row">Document最大幅</th>
+          <td><code>920px</code></td>
+        </tr>
+        <tr>
+          <th scope="row">対応browser</th>
+          <td>v0.1はPlaywright Chromium</td>
+        </tr>
+        <tr>
+          <th scope="row">HTMLの信頼モデル</th>
+          <td>ローカルの信頼済みコンテンツ</td>
+        </tr>
+        <tr>
+          <th scope="row">Chart.js / Mermaid</th>
+          <td>optional peer dependency。未導入でも起動可能</td>
+        </tr>
+        <tr>
+          <th scope="row">sourcemap</th>
+          <td>v0.1では生成しない</td>
+        </tr>
+        <tr>
+          <th scope="row">minify</th>
+          <td>v0.1では行わない</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>package名はローカル利用の固定値とし、公開先やregistryを実装判断へ持ち込まない。</p>
+  </section>
+  <section id="scope">
+    <h2>3. スコープ</h2>
+    <h3>3.1 v0.1に含めるもの</h3>
+    <ul>
+      <li>ローカルNode.js packageとしてのbuild</li>
+      <li><code>spec-html</code> CLI</li>
+      <li>ローカル専用HTTPサーバー</li>
+      <li>Viewer Shell</li>
+      <li>content directoryの走査とnavigationの構成</li>
+      <li>HTML fragmentの読み込みとiframe表示</li>
+      <li>URL queryを使ったルーティング</li>
+      <li>相対パス解決</li>
+      <li>ページタイトルとactive navigationの同期</li>
+      <li>Shell用CSSとDocument用CSS</li>
+      <li>OS設定へ追従するlight／dark表示と現在文書の印刷</li>
+      <li>Chart.jsとMermaidの任意integrationと遅延配信</li>
+      <li>単体テスト、サーバー統合テスト、Chromiumによるブラウザテスト</li>
+      <li><code>npm pack</code>を用いたローカルtarballのスモークテスト</li>
+    </ul>
+    <h3>3.2 v0.1に含めないもの</h3>
+    <ul>
+      <li>インターネット上へのViewer公開を前提とした機能</li>
+      <li>npm registryまたは他のpackage registryへの公開</li>
+      <li>公開用GitHub ReleaseとTrusted Publishing</li>
+      <li>第三者向けpackage配布</li>
+      <li>信頼できないHTMLを安全に実行するためのsandbox設計</li>
+      <li>CSP、nonce、Trusted Types対応</li>
+      <li>CDN配布</li>
+      <li>認証、権限管理、共同編集</li>
+      <li>Markdown変換</li>
+      <li>HTML編集機能</li>
+      <li>ファイル監視と自動リロード</li>
+      <li>検索、全文索引</li>
+      <li>Sidebarのリサイズ</li>
+      <li>Plugin API、設定ファイル、独自DSL</li>
+      <li>npm以外のパッケージマネージャー固有対応</li>
+      <li>Chromium以外のブラウザに対するv0.1での動作保証</li>
+    </ul>
+  </section>
+  <section id="consumer-contract">
+    <h2>4. 利用側の契約</h2>
+    <h3>4.1 ディレクトリ構成</h3>
+    <p>Viewer対象ディレクトリには、1つ以上の設計書を配置する。Navigation用fileは配置しない。</p>
+    <pre><code class="language-text">project/
 ├─ package.json
 ├─ specs/
 │  ├─ overview.html
@@ -177,12 +194,18 @@ npx --no-install spec-html ./specs
 │     └─ login-flow.png
 └─ node_modules/
 </code></pre>
-<p>利用側の<code>index.html</code>は不要とする。Viewer Shellはパッケージが提供する。</p>
-<h3>4.2 Navigation</h3>
-<p>サーバーは対象ディレクトリ内のHTML fragmentを再帰的に読み取り、directoryごとにまとめたnavigationを実行時に構成する。各linkの表示名には文書内の最初の<code>h1</code>を使用し、存在しない場合はfile名を使用する。Navigation用fileは生成も保存もしない。</p>
-<h3>4.3 設計書</h3>
-<p>設計書は標準HTML要素で構成したHTML fragmentとする。DOCTYPE、<code>html</code>、<code>head</code>、<code>body</code>は記述しない。</p>
-<pre><code class="language-html">&lt;article lang=&quot;en&quot;&gt;
+    <p>利用側の<code>index.html</code>は不要とする。Viewer Shellはパッケージが提供する。</p>
+    <h3>4.2 Navigation</h3>
+    <p>
+      サーバーは対象ディレクトリ内のHTML
+      fragmentを再帰的に読み取り、directoryごとにまとめたnavigationを実行時に構成する。各linkの表示名には文書内の最初の<code>h1</code>を使用し、存在しない場合はfile名を使用する。Navigation用fileは生成も保存もしない。
+    </p>
+    <h3>4.3 設計書</h3>
+    <p>
+      設計書は標準HTML要素で構成したHTML
+      fragmentとする。DOCTYPE、<code>html</code>、<code>head</code>、<code>body</code>は記述しない。
+    </p>
+    <pre><code class="language-html">&lt;article lang=&quot;en&quot;&gt;
   &lt;header&gt;
     &lt;h1&gt;Authentication&lt;/h1&gt;
     &lt;p&gt;Authentication is based on OpenID Connect.&lt;/p&gt;
@@ -194,21 +217,26 @@ npx --no-install spec-html ./specs
   &lt;/section&gt;
 &lt;/article&gt;
 </code></pre>
-<p>v0.1では次を利用契約とする。</p>
-<ul>
-<li>1つの<code>article</code>をrootとし、文書の主言語を<code>lang</code>で示す。</li>
-<li>1文書に1つの<code>h1</code>を置く。</li>
-<li>文書タイトルは最初の<code>h1</code>から取得する。</li>
-<li>画像、リンクなどは設計書自身を基準とした相対URLで記述する。</li>
-<li>inline scriptの実行を許可するが、重要な内容はscriptを実行しなくてもHTML本文から取得できるようにする。</li>
-<li>AIが生成したローカル文書を信頼済みコンテンツとして扱う。</li>
-<li>Viewerなしで直接開いた場合は文章構造が読めればよく、Chart.jsやMermaidの描画は保証しない。</li>
-</ul>
-</section>
-<section id="package-structure">
-<h2>5. パッケージ構成</h2>
-<h3>5.1 ソース構成</h3>
-<pre><code class="language-text">spec-html/
+    <p>v0.1では次を利用契約とする。</p>
+    <ul>
+      <li>1つの<code>article</code>をrootとし、文書の主言語を<code>lang</code>で示す。</li>
+      <li>1文書に1つの<code>h1</code>を置く。</li>
+      <li>文書タイトルは最初の<code>h1</code>から取得する。</li>
+      <li>画像、リンクなどは設計書自身を基準とした相対URLで記述する。</li>
+      <li>
+        inline
+        scriptの実行を許可するが、重要な内容はscriptを実行しなくてもHTML本文から取得できるようにする。
+      </li>
+      <li>AIが生成したローカル文書を信頼済みコンテンツとして扱う。</li>
+      <li>
+        Viewerなしで直接開いた場合は文章構造が読めればよく、Chart.jsやMermaidの描画は保証しない。
+      </li>
+    </ul>
+  </section>
+  <section id="package-structure">
+    <h2>5. パッケージ構成</h2>
+    <h3>5.1 ソース構成</h3>
+    <pre><code class="language-text">spec-html/
 ├─ package.json
 ├─ package-lock.json
 ├─ tsconfig.json
@@ -274,8 +302,8 @@ npx --no-install spec-html ./specs
          ├─ nested/
          └─ assets/
 </code></pre>
-<h3>5.2 ローカルbuild成果物</h3>
-<pre><code class="language-text">dist/
+    <h3>5.2 ローカルbuild成果物</h3>
+    <pre><code class="language-text">dist/
 ├─ cli.js
 └─ browser/
    ├─ viewer.js
@@ -284,9 +312,14 @@ npx --no-install spec-html ./specs
    ├─ shell.css
    └─ document.css
 </code></pre>
-<p><code>npm pack</code>によるローカル検証では<code>dist</code>のみを実行物として含める。Chart.jsとMermaid本体は同梱せず、optional peer dependencyとして利用プロジェクトに導入されたpackageをサーバーが検出して配信する。tarballは一時的な動作確認にだけ使用し、registryや第三者へ配布しない。</p>
-<h3>5.3 <code>package.json</code>の基本方針</h3>
-<pre><code class="language-json">{
+    <p>
+      <code>npm pack</code
+      >によるローカル検証では<code>dist</code>のみを実行物として含める。Chart.jsとMermaid本体は同梱せず、optional
+      peer
+      dependencyとして利用プロジェクトに導入されたpackageをサーバーが検出して配信する。tarballは一時的な動作確認にだけ使用し、registryや第三者へ配布しない。
+    </p>
+    <h3>5.3 <code>package.json</code>の基本方針</h3>
+    <pre><code class="language-json">{
   &quot;name&quot;: &quot;spec-html&quot;,
   &quot;version&quot;: &quot;0.1.0&quot;,
   &quot;private&quot;: true,
@@ -330,26 +363,39 @@ npx --no-install spec-html ./specs
   }
 }
 </code></pre>
-<p>実装時の方針は次のとおり。</p>
-<ul>
-<li><code>dist/cli.js</code>の先頭に<code>#!/usr/bin/env node</code>を付ける。</li>
-<li>CLIとサーバーは単一の<code>dist/cli.js</code>へNode.js向けにbundleする。</li>
-<li>ブラウザコードはES moduleとしてbundleする。</li>
-<li>Chart.jsとMermaidはoptional peer dependencyとし、未導入でもViewerを起動できる。</li>
-<li>既定ブラウザを開く処理だけは<code>open</code>をruntime dependencyとして使用し、CLI bundleではexternalにする。</li>
-<li>Chart.jsは導入済みpackageのUMD、Mermaidは公式ESMと必要なdiagram chunkだけを配信する。</li>
-<li>esbuildの<code>legalComments: &quot;eof&quot;</code>を全bundleへ設定し、dependencyのlicense commentを成果物末尾へ保持する。</li>
-<li><code>private: true</code>と<code>prepublishOnly</code>の拒否scriptを維持し、誤った<code>npm publish</code>を停止する。</li>
-</ul>
-<p>依存の追加は次のコマンドで行い、実行時点のversionを<code>package-lock.json</code>へ固定する。計画書中のversion placeholderを手作業でpackage.jsonへ転記しない。</p>
-<pre><code class="language-bash">npm install open
+    <p>実装時の方針は次のとおり。</p>
+    <ul>
+      <li><code>dist/cli.js</code>の先頭に<code>#!/usr/bin/env node</code>を付ける。</li>
+      <li>CLIとサーバーは単一の<code>dist/cli.js</code>へNode.js向けにbundleする。</li>
+      <li>ブラウザコードはES moduleとしてbundleする。</li>
+      <li>Chart.jsとMermaidはoptional peer dependencyとし、未導入でもViewerを起動できる。</li>
+      <li>
+        既定ブラウザを開く処理だけは<code>open</code>をruntime dependencyとして使用し、CLI
+        bundleではexternalにする。
+      </li>
+      <li>Chart.jsは導入済みpackageのUMD、Mermaidは公式ESMと必要なdiagram chunkだけを配信する。</li>
+      <li>
+        esbuildの<code>legalComments: &quot;eof&quot;</code>を全bundleへ設定し、dependencyのlicense
+        commentを成果物末尾へ保持する。
+      </li>
+      <li>
+        <code>private: true</code>と<code>prepublishOnly</code>の拒否scriptを維持し、誤った<code
+          >npm publish</code
+        >を停止する。
+      </li>
+    </ul>
+    <p>
+      依存の追加は次のコマンドで行い、実行時点のversionを<code>package-lock.json</code>へ固定する。計画書中のversion
+      placeholderを手作業でpackage.jsonへ転記しない。
+    </p>
+    <pre><code class="language-bash">npm install open
 npm install --save-dev typescript esbuild vitest @playwright/test @types/node chart.js mermaid eslint @eslint/js typescript-eslint globals
 npx playwright install chromium
 </code></pre>
-</section>
-<section id="runtime-architecture">
-<h2>6. 実行時アーキテクチャ</h2>
-<pre><code class="language-text">npm script / npx
+  </section>
+  <section id="runtime-architecture">
+    <h2>6. 実行時アーキテクチャ</h2>
+    <pre><code class="language-text">npm script / npx
         │
         ▼
  spec-html CLI
@@ -371,10 +417,12 @@ npx playwright install chromium
                          ├─ Mermaid（導入時のみ、図種を遅延load）
                          └─ HTML設計書
 </code></pre>
-<p>ブラウザの現在URLを、現在表示中の文書を示すsource of truthとする。別の永続状態は持たない。</p>
-<h3>6.1 モジュール依存方向</h3>
-<p>依存方向を次で固定し、逆方向のimportを作らない。</p>
-<pre><code class="language-text">cli/main
+    <p>
+      ブラウザの現在URLを、現在表示中の文書を示すsource of truthとする。別の永続状態は持たない。
+    </p>
+    <h3>6.1 モジュール依存方向</h3>
+    <p>依存方向を次で固定し、逆方向のimportを作らない。</p>
+    <pre><code class="language-text">cli/main
 ├─ cli/options
 ├─ cli/open-browser
 └─ server/start
@@ -395,17 +443,26 @@ browser/start
 ├─ browser/constants
 └─ browser/types
 </code></pre>
-<ul>
-<li><code>cli</code>は<code>browser</code> sourceをimportしない。</li>
-<li><code>server</code>はBrowser bundleを静的ファイルとして配信するだけで、Browser内部状態を知らない。</li>
-<li>Browser moduleはNode.js moduleをimportしない。</li>
-<li><code>navigation.ts</code>と<code>links.ts</code>はURL変換のため<code>router.ts</code>をimportしてよい。それ以外のfeature module間importは作らない。</li>
-<li><code>start.ts</code>がfeature moduleを組み合わせる。循環参照を作らない。</li>
-<li>barrel fileは作らず、必要なmoduleを直接importする。</li>
-</ul>
-<h3>6.2 Node側の型と関数契約</h3>
-<p>次のsignatureを基準に実装する。テストからも同じ関数を直接呼べるよう、CLIのtop-level処理以外はexportする。</p>
-<pre><code class="language-ts">// src/cli/options.ts
+    <ul>
+      <li><code>cli</code>は<code>browser</code> sourceをimportしない。</li>
+      <li>
+        <code>server</code>はBrowser
+        bundleを静的ファイルとして配信するだけで、Browser内部状態を知らない。
+      </li>
+      <li>Browser moduleはNode.js moduleをimportしない。</li>
+      <li>
+        <code>navigation.ts</code
+        >と<code>links.ts</code>はURL変換のため<code>router.ts</code>をimportしてよい。それ以外のfeature
+        module間importは作らない。
+      </li>
+      <li><code>start.ts</code>がfeature moduleを組み合わせる。循環参照を作らない。</li>
+      <li>barrel fileは作らず、必要なmoduleを直接importする。</li>
+    </ul>
+    <h3>6.2 Node側の型と関数契約</h3>
+    <p>
+      次のsignatureを基準に実装する。テストからも同じ関数を直接呼べるよう、CLIのtop-level処理以外はexportする。
+    </p>
+    <pre><code class="language-ts">// src/cli/options.ts
 export interface CliRunOptions {
   contentRoot: string;
   host: string;
@@ -470,24 +527,47 @@ export function createRequestHandler(
 // src/cli/open-browser.ts
 export function openViewer(url: string): Promise&lt;void&gt;;
 </code></pre>
-<p>契約は次のとおり。</p>
-<ul>
-<li><code>parseCliCommand</code>は<code>node:util</code>の<code>parseArgs</code>を使用する。</li>
-<li><code>parseCliCommand</code>はfilesystemへアクセスしない。構文、型、値域だけを検証する。</li>
-<li><code>contentRoot</code>は<code>resolve(cwd, directory)</code>で得た絶対パスを返す。</li>
-<li>CLIの<code>main</code>が<code>stat</code>でcontent directoryの存在確認を担当する。</li>
-<li><code>startServer</code>はlisten完了後にresolveし、listen失敗時にrejectする。</li>
-<li>port <code>0</code>を渡した場合、<code>RunningServer.port</code>と<code>origin</code>にはOSが割り当てた実portを返す。</li>
-<li><code>origin</code>は<code>http</code> scheme、指定host、実portから作り、末尾slashを含めない。IPv6 hostはURL中で角括弧を付ける。</li>
-<li><code>close</code>は複数回呼ばれても失敗しない。</li>
-<li><code>resolveRequestFile</code>は不正encodingまたは不正segmentで<code>InvalidRequestPathError</code>をthrowし、root配下の通常ファイルなら絶対パス、存在しないかroot外なら<code>null</code>を返す。</li>
-<li><code>sendFile</code>はContent-Type、Content-Length、Cache-Controlを設定し、HEADではstreamを開始しない。</li>
-<li><code>openViewer</code>は<code>open(url, { wait: false })</code>を呼び、browser processの終了は待たない。</li>
-<li>CLIのtop-level以外で<code>process.exit</code>を呼ばない。</li>
-<li><code>unknown</code>のerrorは<code>instanceof Error</code>で絞り込み、<code>any</code>へcastしない。</li>
-</ul>
-<h3>6.3 Browser側の型と関数契約</h3>
-<pre><code class="language-ts">// src/browser/types.ts
+    <p>契約は次のとおり。</p>
+    <ul>
+      <li>
+        <code>parseCliCommand</code>は<code>node:util</code>の<code>parseArgs</code>を使用する。
+      </li>
+      <li>
+        <code>parseCliCommand</code>はfilesystemへアクセスしない。構文、型、値域だけを検証する。
+      </li>
+      <li><code>contentRoot</code>は<code>resolve(cwd, directory)</code>で得た絶対パスを返す。</li>
+      <li>CLIの<code>main</code>が<code>stat</code>でcontent directoryの存在確認を担当する。</li>
+      <li><code>startServer</code>はlisten完了後にresolveし、listen失敗時にrejectする。</li>
+      <li>
+        port
+        <code>0</code
+        >を渡した場合、<code>RunningServer.port</code>と<code>origin</code>にはOSが割り当てた実portを返す。
+      </li>
+      <li>
+        <code>origin</code>は<code>http</code>
+        scheme、指定host、実portから作り、末尾slashを含めない。IPv6 hostはURL中で角括弧を付ける。
+      </li>
+      <li><code>close</code>は複数回呼ばれても失敗しない。</li>
+      <li>
+        <code>resolveRequestFile</code
+        >は不正encodingまたは不正segmentで<code>InvalidRequestPathError</code>をthrowし、root配下の通常ファイルなら絶対パス、存在しないかroot外なら<code>null</code>を返す。
+      </li>
+      <li>
+        <code>sendFile</code
+        >はContent-Type、Content-Length、Cache-Controlを設定し、HEADではstreamを開始しない。
+      </li>
+      <li>
+        <code>openViewer</code>は<code>open(url, { wait: false })</code>を呼び、browser
+        processの終了は待たない。
+      </li>
+      <li>CLIのtop-level以外で<code>process.exit</code>を呼ばない。</li>
+      <li>
+        <code>unknown</code>のerrorは<code>instanceof Error</code
+        >で絞り込み、<code>any</code>へcastしない。
+      </li>
+    </ul>
+    <h3>6.3 Browser側の型と関数契約</h3>
+    <pre><code class="language-ts">// src/browser/types.ts
 export interface RouteState {
   doc: string | null;
   // 空文字または「#」で始まる文字列
@@ -520,8 +600,8 @@ export interface NavigationItem {
   hash: string;
 }
 </code></pre>
-<p>主要関数は次の責務に固定する。</p>
-<pre><code class="language-ts">// layout.ts
+    <p>主要関数は次の責務に固定する。</p>
+    <pre><code class="language-ts">// layout.ts
 export function createLayout(container: HTMLElement): ViewerElements;
 export function renderLoadState(elements: ViewerElements, state: LoadState): void;
 
@@ -558,202 +638,289 @@ export function fetchDocument(url: URL, signal: AbortSignal): Promise&lt;string&
 // links.ts
 export function isPlainPrimaryClick(event: MouseEvent): boolean;
 </code></pre>
-<p><code>browser/start.ts</code>が上記を組み合わせ、現在の<code>AbortController</code>、現在のroute、navigation itemsだけをmodule内の一時状態として保持する。表示文書の永続的な正解は常に<code>location.href</code>とする。</p>
-</section>
-<section id="cli">
-<h2>7. CLI仕様</h2>
-<h3>7.1 コマンド</h3>
-<pre><code class="language-text">spec-html [directory] [options]
+    <p>
+      <code>browser/start.ts</code
+      >が上記を組み合わせ、現在の<code>AbortController</code>、現在のroute、navigation
+      itemsだけをmodule内の一時状態として保持する。表示文書の永続的な正解は常に<code>location.href</code>とする。
+    </p>
+  </section>
+  <section id="cli">
+    <h2>7. CLI仕様</h2>
+    <h3>7.1 コマンド</h3>
+    <pre><code class="language-text">spec-html [directory] [options]
 </code></pre>
-<h3>7.2 引数とオプション</h3>
-<table>
-<caption>CLIの引数とオプション</caption>
-<thead>
-<tr>
-<th scope="col">項目</th>
-<th scope="col">既定値</th>
-<th scope="col">内容</th>
-</tr>
-</thead>
-<tbody><tr>
-<th scope="row"><code>directory</code></th>
-<td><code>./specs</code></td>
-<td>Viewer対象ディレクトリ</td>
-</tr>
-<tr>
-<th scope="row"><code>--host</code></th>
-<td><code>127.0.0.1</code></td>
-<td>listenするhost</td>
-</tr>
-<tr>
-<th scope="row"><code>--port</code></th>
-<td><code>4173</code></td>
-<td>listenするport。<code>0</code>はテスト用の自動割り当て</td>
-</tr>
-<tr>
-<th scope="row"><code>--open</code></th>
-<td>有効</td>
-<td>起動後にブラウザを開く</td>
-</tr>
-<tr>
-<th scope="row"><code>--no-open</code></th>
-<td>-</td>
-<td>ブラウザを開かない</td>
-</tr>
-<tr>
-<th scope="row"><code>--help</code></th>
-<td>-</td>
-<td>使用方法を表示</td>
-</tr>
-<tr>
-<th scope="row"><code>--version</code></th>
-<td>-</td>
-<td>package versionを表示</td>
-</tr>
-</tbody></table>
-<h3>7.3 起動処理</h3>
-<ol>
-<li><code>parseArgs</code>へ<code>process.argv.slice(2)</code>、<code>allowPositionals: true</code>、<code>strict: true</code>を渡す。option schemaは<code>host: string</code>、<code>port: string</code>、<code>open: boolean</code>、<code>no-open: boolean</code>、<code>help: boolean</code>、<code>version: boolean</code>とする。</li>
-<li>positional argumentが2件以上なら<code>CliUsageError</code>にする。</li>
-<li><code>--help</code>と<code>--version</code>が同時指定されたら<code>CliUsageError</code>にする。片方だけなら対応する<code>CliCommand</code>を返し、run用option validationは行わない。</li>
-<li><code>--open</code>と<code>--no-open</code>が同時指定されたら<code>CliUsageError</code>にする。</li>
-<li>port文字列が<code>^[0-9]+$</code>に一致することを確認して10進整数へ変換し、<code>0</code>から<code>65535</code>以外なら<code>CliUsageError</code>にする。</li>
-<li>hostがtrim後に空なら<code>CliUsageError</code>にする。</li>
-<li><code>directory</code>を現在ディレクトリ基準で絶対パスにする。</li>
-<li>CLI mainが<code>stat</code>でdirectoryの存在と、directoryであることを検証する。</li>
-<li><code>runtimeRoot</code>を<code>fileURLToPath(new URL(&quot;./browser/&quot;, import.meta.url))</code>で求める。</li>
-<li>HTTPサーバーを起動する。</li>
-<li><code>Spec HTML: &lt;origin&gt;/</code>の1行を標準出力へ表示する。この形式をpack testからも利用するため変更しない。</li>
-<li><code>--open</code>が有効なら<code>openViewer</code>を呼ぶ。browser起動だけが失敗した場合はwarningを表示し、サーバーは停止しない。</li>
-<li><code>SIGINT</code>または<code>SIGTERM</code>を最初に受けたときだけ<code>close</code>を呼び、完了後に終了code <code>0</code>で終了する。</li>
-</ol>
-<h3>7.4 CLIエラー</h3>
-<p><code>--help</code>と<code>--version</code>は標準出力へ表示して終了code <code>0</code>とする。それ以外の次のケースでは、<code>spec-html: &lt;message&gt;</code>を標準エラーへ1件表示し、終了code <code>1</code>とする。</p>
-<ul>
-<li>対象ディレクトリが存在しない。</li>
-<li>対象がディレクトリではない。</li>
-<li>portが使用中でlistenできない。</li>
-<li>引数またはオプションが不正である。</li>
-</ul>
-<p>主要messageを次で固定する。<code>&lt;path&gt;</code>、<code>&lt;port&gt;</code>には実値を入れる。</p>
-<table>
-<caption>CLIの主要エラーメッセージ</caption>
-<thead>
-<tr>
-<th scope="col">条件</th>
-<th scope="col">message</th>
-</tr>
-</thead>
-<tbody><tr>
-<th scope="row">directoryなし</th>
-<td><code>対象ディレクトリが見つかりません: &lt;path&gt;</code></td>
-</tr>
-<tr>
-<th scope="row">directoryでない</th>
-<td><code>対象パスはディレクトリではありません: &lt;path&gt;</code></td>
-</tr>
-<tr>
-<th scope="row">port使用不能</th>
-<td><code>ポートを使用できません: &lt;port&gt;</code></td>
-</tr>
-<tr>
-<th scope="row">option不正</th>
-<td><code>引数が不正です: &lt;reason&gt;</code></td>
-</tr>
-</tbody></table>
-<p>stack traceは通常表示しない。予期しないerrorだけ、<code>SPEC_HTML_DEBUG=1</code>の場合にstack traceも表示する。</p>
-</section>
-<section id="http-server">
-<h2>8. HTTPサーバー仕様</h2>
-<h3>8.1 URL空間</h3>
-<table>
-<caption>HTTP URL空間</caption>
-<thead>
-<tr>
-<th scope="col">URL</th>
-<th scope="col">応答</th>
-</tr>
-</thead>
-<tbody><tr>
-<th scope="row"><code>/</code></th>
-<td>パッケージが生成するViewer Shell</td>
-</tr>
-<tr>
-<th scope="row"><code>/_spec-html/viewer.js</code></th>
-<td>Browser Viewer bundle</td>
-</tr>
-<tr>
-<th scope="row"><code>/_spec-html/shell.css</code></th>
-<td>Shell CSS</td>
-</tr>
-<tr>
-<th scope="row"><code>/_spec-html/document.css</code></th>
-<td>Document CSS</td>
-</tr>
-<tr>
-<th scope="row"><code>/_spec-html/chart-theme.js</code></th>
-<td>Chart.jsのlight／dark既定色adapter</td>
-</tr>
-<tr>
-<th scope="row"><code>/_spec-html/mermaid.js</code></th>
-<td>Mermaid loader</td>
-</tr>
-<tr>
-<th scope="row"><code>/_spec-html/integrations/chart.js</code></th>
-<td>導入済みChart.jsのUMD</td>
-</tr>
-<tr>
-<th scope="row"><code>/_spec-html/integrations/mermaid/&lt;path&gt;</code></th>
-<td>導入済みMermaidのESMとchunk</td>
-</tr>
-<tr>
-<th scope="row"><code>/_spec-html/navigation</code></th>
-<td>content directoryから実行時に構成するNavigation HTML</td>
-</tr>
-<tr>
-<th scope="row"><code>/_content/&lt;path&gt;</code></th>
-<td>利用側の設計書またはasset</td>
-</tr>
-</tbody></table>
-<p><code>/_spec-html/</code>と<code>/_content/</code>を予約prefixとし、Viewerの資産と利用側ファイルを混在させない。</p>
-<h3>8.2 静的配信</h3>
-<ul>
-<li>Node.js標準の<code>node:http</code>、<code>node:fs</code>、<code>node:path</code>を基本とする。</li>
-<li>v0.1で必要なMIME typeを明示的に対応する。<ul>
-<li>HTML、CSS、JavaScript、JSON</li>
-<li>PNG、JPEG、GIF、SVG、WebP</li>
-<li>WOFF、WOFF2</li>
-</ul>
-</li>
-<li>未知の拡張子は<code>application/octet-stream</code>とする。</li>
-<li>text系にはUTF-8 charsetを付与する。</li>
-<li>contentとShellはローカル編集後の再読み込みを妨げないよう<code>Cache-Control: no-store</code>とする。runtimeとintegrationは文書遷移ごとの再取得を避けるため<code>private, max-age=300</code>とする。</li>
-<li><code>HEAD</code>を<code>GET</code>と同じheaderでbodyなしとして扱う。</li>
-<li>対象外methodは<code>405 Method Not Allowed</code>を返す。</li>
-<li>存在しないファイルは<code>404 Not Found</code>を返す。</li>
-<li>予期しない読み込みエラーは<code>500 Internal Server Error</code>を返し、詳細はCLI側へ表示する。</li>
-<li>response bodyはHTML routeではUTF-8 HTML、その他のerrorではUTF-8 plain textにする。</li>
-<li>directory listingとindex fileの暗黙補完は行わない。</li>
-<li>file bodyは<code>createReadStream</code>で返し、ファイル全体をmemoryへ読み込まない。</li>
-</ul>
-<h3>8.3 パス処理</h3>
-<p>ローカル専用であっても、誤ったパス解決で対象ディレクトリ外を配信しないようにする。</p>
-<ol>
-<li><code>new URL(request.url ?? &quot;/&quot;, &quot;http://localhost&quot;)</code>でrequest URLをparseする。pathnameだけを使い、parse不能なら<code>400</code>を返す。</li>
-<li>pathnameをsegment単位で<code>decodeURIComponent</code>する。decode不能またはNULを含む場合は<code>400</code>を返す。</li>
-<li><code>/_content/</code>より後ろを相対パスとして扱う。</li>
-<li>空segment、<code>.</code>、<code>..</code>、backslashを含むsegmentを拒否する。</li>
-<li>segmentを<code>resolve(contentRoot, ...segments)</code>でOS上の絶対パスにする。</li>
-<li><code>relative(contentRoot, resolvedPath)</code>が<code>..</code>から始まるか絶対パスなら<code>404</code>を返す。</li>
-<li><code>stat</code>結果が通常ファイルでなければ<code>404</code>を返す。directoryは配信しない。</li>
-<li><code>realpath</code>でrootと対象fileを正規化し、symbolic linkの実体がroot外なら<code>404</code>を返す。</li>
-</ol>
-<p>Runtime assetも同じhelperで解決し、rootだけを<code>runtimeRoot</code>へ差し替える。<code>runtimeRoot</code>は<code>dist/cli.js</code>と同じ階層にある<code>dist/browser/</code>を指す。server testではfixture runtime rootを明示的に渡し、source tree上の<code>dist</code>へ依存させない。</p>
-</section>
-<section id="viewer-shell">
-<h2>9. Viewer Shell仕様</h2>
-<p>サーバーは<code>/</code>に最小限の完全なHTML documentを返す。</p>
-<pre><code class="language-html">&lt;!doctype html&gt;
+    <h3>7.2 引数とオプション</h3>
+    <table>
+      <caption>
+        CLIの引数とオプション
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">項目</th>
+          <th scope="col">既定値</th>
+          <th scope="col">内容</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><code>directory</code></th>
+          <td><code>./specs</code></td>
+          <td>Viewer対象ディレクトリ</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>--host</code></th>
+          <td><code>127.0.0.1</code></td>
+          <td>listenするhost</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>--port</code></th>
+          <td><code>4173</code></td>
+          <td>listenするport。<code>0</code>はテスト用の自動割り当て</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>--open</code></th>
+          <td>有効</td>
+          <td>起動後にブラウザを開く</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>--no-open</code></th>
+          <td>-</td>
+          <td>ブラウザを開かない</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>--help</code></th>
+          <td>-</td>
+          <td>使用方法を表示</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>--version</code></th>
+          <td>-</td>
+          <td>package versionを表示</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>7.3 起動処理</h3>
+    <ol>
+      <li>
+        <code>parseArgs</code>へ<code>process.argv.slice(2)</code>、<code
+          >allowPositionals: true</code
+        >、<code>strict: true</code>を渡す。option schemaは<code>host: string</code>、<code
+          >port: string</code
+        >、<code>open: boolean</code>、<code>no-open: boolean</code>、<code>help: boolean</code
+        >、<code>version: boolean</code>とする。
+      </li>
+      <li>positional argumentが2件以上なら<code>CliUsageError</code>にする。</li>
+      <li>
+        <code>--help</code
+        >と<code>--version</code>が同時指定されたら<code>CliUsageError</code>にする。片方だけなら対応する<code>CliCommand</code>を返し、run用option
+        validationは行わない。
+      </li>
+      <li>
+        <code>--open</code
+        >と<code>--no-open</code>が同時指定されたら<code>CliUsageError</code>にする。
+      </li>
+      <li>
+        port文字列が<code>^[0-9]+$</code>に一致することを確認して10進整数へ変換し、<code>0</code>から<code>65535</code>以外なら<code>CliUsageError</code>にする。
+      </li>
+      <li>hostがtrim後に空なら<code>CliUsageError</code>にする。</li>
+      <li><code>directory</code>を現在ディレクトリ基準で絶対パスにする。</li>
+      <li>CLI mainが<code>stat</code>でdirectoryの存在と、directoryであることを検証する。</li>
+      <li>
+        <code>runtimeRoot</code>を<code
+          >fileURLToPath(new URL(&quot;./browser/&quot;, import.meta.url))</code
+        >で求める。
+      </li>
+      <li>HTTPサーバーを起動する。</li>
+      <li>
+        <code>Spec HTML: &lt;origin&gt;/</code>の1行を標準出力へ表示する。この形式をpack
+        testからも利用するため変更しない。
+      </li>
+      <li>
+        <code>--open</code
+        >が有効なら<code>openViewer</code>を呼ぶ。browser起動だけが失敗した場合はwarningを表示し、サーバーは停止しない。
+      </li>
+      <li>
+        <code>SIGINT</code
+        >または<code>SIGTERM</code>を最初に受けたときだけ<code>close</code>を呼び、完了後に終了code
+        <code>0</code>で終了する。
+      </li>
+    </ol>
+    <h3>7.4 CLIエラー</h3>
+    <p>
+      <code>--help</code>と<code>--version</code>は標準出力へ表示して終了code
+      <code>0</code>とする。それ以外の次のケースでは、<code>spec-html: &lt;message&gt;</code
+      >を標準エラーへ1件表示し、終了code <code>1</code>とする。
+    </p>
+    <ul>
+      <li>対象ディレクトリが存在しない。</li>
+      <li>対象がディレクトリではない。</li>
+      <li>portが使用中でlistenできない。</li>
+      <li>引数またはオプションが不正である。</li>
+    </ul>
+    <p>
+      主要messageを次で固定する。<code>&lt;path&gt;</code>、<code>&lt;port&gt;</code>には実値を入れる。
+    </p>
+    <table>
+      <caption>
+        CLIの主要エラーメッセージ
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">条件</th>
+          <th scope="col">message</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">directoryなし</th>
+          <td><code>対象ディレクトリが見つかりません: &lt;path&gt;</code></td>
+        </tr>
+        <tr>
+          <th scope="row">directoryでない</th>
+          <td><code>対象パスはディレクトリではありません: &lt;path&gt;</code></td>
+        </tr>
+        <tr>
+          <th scope="row">port使用不能</th>
+          <td><code>ポートを使用できません: &lt;port&gt;</code></td>
+        </tr>
+        <tr>
+          <th scope="row">option不正</th>
+          <td><code>引数が不正です: &lt;reason&gt;</code></td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      stack traceは通常表示しない。予期しないerrorだけ、<code>SPEC_HTML_DEBUG=1</code>の場合にstack
+      traceも表示する。
+    </p>
+  </section>
+  <section id="http-server">
+    <h2>8. HTTPサーバー仕様</h2>
+    <h3>8.1 URL空間</h3>
+    <table>
+      <caption>
+        HTTP URL空間
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">URL</th>
+          <th scope="col">応答</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><code>/</code></th>
+          <td>パッケージが生成するViewer Shell</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>/_spec-html/viewer.js</code></th>
+          <td>Browser Viewer bundle</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>/_spec-html/shell.css</code></th>
+          <td>Shell CSS</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>/_spec-html/document.css</code></th>
+          <td>Document CSS</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>/_spec-html/chart-theme.js</code></th>
+          <td>Chart.jsのlight／dark既定色adapter</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>/_spec-html/mermaid.js</code></th>
+          <td>Mermaid loader</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>/_spec-html/integrations/chart.js</code></th>
+          <td>導入済みChart.jsのUMD</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>/_spec-html/integrations/mermaid/&lt;path&gt;</code></th>
+          <td>導入済みMermaidのESMとchunk</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>/_spec-html/navigation</code></th>
+          <td>content directoryから実行時に構成するNavigation HTML</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>/_content/&lt;path&gt;</code></th>
+          <td>利用側の設計書またはasset</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      <code>/_spec-html/</code
+      >と<code>/_content/</code>を予約prefixとし、Viewerの資産と利用側ファイルを混在させない。
+    </p>
+    <h3>8.2 静的配信</h3>
+    <ul>
+      <li>
+        Node.js標準の<code>node:http</code>、<code>node:fs</code>、<code>node:path</code>を基本とする。
+      </li>
+      <li>
+        v0.1で必要なMIME typeを明示的に対応する。
+        <ul>
+          <li>HTML、CSS、JavaScript、JSON</li>
+          <li>PNG、JPEG、GIF、SVG、WebP</li>
+          <li>WOFF、WOFF2</li>
+        </ul>
+      </li>
+      <li>未知の拡張子は<code>application/octet-stream</code>とする。</li>
+      <li>text系にはUTF-8 charsetを付与する。</li>
+      <li>
+        contentとShellはローカル編集後の再読み込みを妨げないよう<code>Cache-Control: no-store</code
+        >とする。runtimeとintegrationは文書遷移ごとの再取得を避けるため<code
+          >private, max-age=300</code
+        >とする。
+      </li>
+      <li><code>HEAD</code>を<code>GET</code>と同じheaderでbodyなしとして扱う。</li>
+      <li>対象外methodは<code>405 Method Not Allowed</code>を返す。</li>
+      <li>存在しないファイルは<code>404 Not Found</code>を返す。</li>
+      <li>
+        予期しない読み込みエラーは<code>500 Internal Server Error</code
+        >を返し、詳細はCLI側へ表示する。
+      </li>
+      <li>response bodyはHTML routeではUTF-8 HTML、その他のerrorではUTF-8 plain textにする。</li>
+      <li>directory listingとindex fileの暗黙補完は行わない。</li>
+      <li>file bodyは<code>createReadStream</code>で返し、ファイル全体をmemoryへ読み込まない。</li>
+    </ul>
+    <h3>8.3 パス処理</h3>
+    <p>ローカル専用であっても、誤ったパス解決で対象ディレクトリ外を配信しないようにする。</p>
+    <ol>
+      <li>
+        <code>new URL(request.url ?? &quot;/&quot;, &quot;http://localhost&quot;)</code>でrequest
+        URLをparseする。pathnameだけを使い、parse不能なら<code>400</code>を返す。
+      </li>
+      <li>
+        pathnameをsegment単位で<code>decodeURIComponent</code>する。decode不能またはNULを含む場合は<code>400</code>を返す。
+      </li>
+      <li><code>/_content/</code>より後ろを相対パスとして扱う。</li>
+      <li>空segment、<code>.</code>、<code>..</code>、backslashを含むsegmentを拒否する。</li>
+      <li>segmentを<code>resolve(contentRoot, ...segments)</code>でOS上の絶対パスにする。</li>
+      <li>
+        <code>relative(contentRoot, resolvedPath)</code
+        >が<code>..</code>から始まるか絶対パスなら<code>404</code>を返す。
+      </li>
+      <li>
+        <code>stat</code>結果が通常ファイルでなければ<code>404</code>を返す。directoryは配信しない。
+      </li>
+      <li>
+        <code>realpath</code>でrootと対象fileを正規化し、symbolic
+        linkの実体がroot外なら<code>404</code>を返す。
+      </li>
+    </ol>
+    <p>
+      Runtime
+      assetも同じhelperで解決し、rootだけを<code>runtimeRoot</code>へ差し替える。<code>runtimeRoot</code>は<code>dist/cli.js</code>と同じ階層にある<code>dist/browser/</code>を指す。server
+      testではfixture runtime rootを明示的に渡し、source tree上の<code>dist</code>へ依存させない。
+    </p>
+  </section>
+  <section id="viewer-shell">
+    <h2>9. Viewer Shell仕様</h2>
+    <p>サーバーは<code>/</code>に最小限の完全なHTML documentを返す。</p>
+    <pre><code class="language-html">&lt;!doctype html&gt;
 &lt;html lang=&quot;ja&quot;&gt;
 &lt;head&gt;
   &lt;meta charset=&quot;utf-8&quot;&gt;
@@ -767,8 +934,8 @@ export function isPlainPrimaryClick(event: MouseEvent): boolean;
 &lt;/body&gt;
 &lt;/html&gt;
 </code></pre>
-<p>Browser bundleは次のDOMを構築する。</p>
-<pre><code class="language-text">div.viewer
+    <p>Browser bundleは次のDOMを構築する。</p>
+    <pre><code class="language-text">div.viewer
 ├─ button.menu-button（mobileのみ）
 ├─ aside.viewer-sidebar
 │  ├─ div.viewer-sidebar-controls
@@ -786,136 +953,220 @@ export function isPlainPrimaryClick(event: MouseEvent): boolean;
 │  └─ button.document-mode-button
 └─ dialog.source-dialog
 </code></pre>
-<p>iframeには現在の文書名を使った<code>title</code>属性を設定する。</p>
-<p>Viewer起動時は次の順番を変えない。</p>
-<ol>
-<li><code>#app</code>が存在することを確認する。なければ例外にする。</li>
-<li>保存済みのtheme選択を復元し、<code>createLayout</code>でShell DOMを作る。</li>
-<li><code>loading</code>状態を表示する。</li>
-<li><code>/_spec-html/navigation</code>を取得する。</li>
-<li>navigationをmountし、Viewer内文書linkの一覧を得る。</li>
-<li><code>location.href</code>を<code>parseRoute</code>する。</li>
-<li>URLに有効な<code>doc</code>がなければ最初のnavigation itemを選び、<code>replaceState</code>する。</li>
-<li>対象文書を読み込む。</li>
-<li>Sidebar、iframe、<code>popstate</code>、<code>hashchange</code>、mobile menuのevent listenerを登録する。</li>
-</ol>
-<p>起動途中で失敗した場合は<code>error</code>状態を表示し、未処理のPromise rejectionを残さない。</p>
-</section>
-<section id="navigation">
-<h2>10. ナビゲーション仕様</h2>
-<h3>10.1 初期化</h3>
-<ol>
-<li><code>/_spec-html/navigation</code>をfetchする。</li>
-<li>responseが<code>ok</code>でなければ例外にする。</li>
-<li><code>DOMParser</code>の<code>text/html</code>としてparseする。このparse中にscriptは実行しない。</li>
-<li>最初の<code>nav</code>を取得する。存在しない場合は「Navigationにnav要素がありません」として例外にする。</li>
-<li><code>nav</code>をShellのSidebarへ移す。</li>
-<li>各<code>a[href]</code>を<code>new URL(anchor.getAttribute(&quot;href&quot;), contentBaseUrl)</code>で解決する。</li>
-<li>解決後のURLをanchorの<code>href</code>へ設定し、修飾キーによる新規tabではraw HTML URLを開けるようにする。</li>
-<li>Viewer内文書へのlinkだけを<code>NavigationItem</code>として返す。</li>
-</ol>
-<h3>10.2 リンク分類</h3>
-<p>次をViewer内文書リンクとして扱う。</p>
-<ul>
-<li>同一originである。</li>
-<li>pathnameが<code>/_content/</code>配下である。</li>
-<li>pathnameが<code>.html</code>で終わる。</li>
-<li><code>target</code>と<code>download</code>が指定されていない。</li>
-</ul>
-<p><code>javascript:</code> URLは実行せず、click handlerで<code>preventDefault</code>する。<code>href</code>が空、URLとしてparse不能、または<code>doc</code>へ変換不能なlinkはnavigation itemへ含めず、browser consoleへwarningを1件出す。</p>
-<p>次はブラウザ標準動作へ委ねる。</p>
-<ul>
-<li><code>http:</code>または<code>https:</code>の外部リンク</li>
-<li><code>mailto:</code>、<code>tel:</code></li>
-<li><code>target</code>または<code>download</code>付きリンク</li>
-<li>Ctrl、Cmd、Shift、Altを伴うクリック</li>
-</ul>
-<h3>10.3 active表示</h3>
-<ul>
-<li>現在の<code>doc</code>と一致するSidebarリンクへ<code>aria-current=&quot;page&quot;</code>を付ける。</li>
-<li>前のactive linkから<code>aria-current</code>を除去する。</li>
-<li>ネストした相対パスも正規化後の値で比較する。</li>
-</ul>
-<p>文書表示完了時のタイトルは次の順で決める。</p>
-<ol>
-<li>iframe document内の最初の<code>h1</code>の、trim後に空でない<code>textContent</code></li>
-<li><code>doc</code>の最後のpath segmentから<code>.html</code>を除いた文字列</li>
-</ol>
-<p>決定したタイトルをiframeの<code>title</code>へ設定し、Shellの<code>document.title</code>は<code>&lt;title&gt; — Spec HTML</code>とする。上部のタイトルHeaderは表示しない。</p>
-</section>
-<section id="url-routing">
-<h2>11. URLルーティング仕様</h2>
-<h3>11.1 URL形式</h3>
-<pre><code class="language-text">http://127.0.0.1:4173/?doc=authentication.html
+    <p>iframeには現在の文書名を使った<code>title</code>属性を設定する。</p>
+    <p>Viewer起動時は次の順番を変えない。</p>
+    <ol>
+      <li><code>#app</code>が存在することを確認する。なければ例外にする。</li>
+      <li>保存済みのtheme選択を復元し、<code>createLayout</code>でShell DOMを作る。</li>
+      <li><code>loading</code>状態を表示する。</li>
+      <li><code>/_spec-html/navigation</code>を取得する。</li>
+      <li>navigationをmountし、Viewer内文書linkの一覧を得る。</li>
+      <li><code>location.href</code>を<code>parseRoute</code>する。</li>
+      <li>
+        URLに有効な<code>doc</code>がなければ最初のnavigation
+        itemを選び、<code>replaceState</code>する。
+      </li>
+      <li>対象文書を読み込む。</li>
+      <li>
+        Sidebar、iframe、<code>popstate</code>、<code>hashchange</code>、mobile menuのevent
+        listenerを登録する。
+      </li>
+    </ol>
+    <p>
+      起動途中で失敗した場合は<code>error</code>状態を表示し、未処理のPromise rejectionを残さない。
+    </p>
+  </section>
+  <section id="navigation">
+    <h2>10. ナビゲーション仕様</h2>
+    <h3>10.1 初期化</h3>
+    <ol>
+      <li><code>/_spec-html/navigation</code>をfetchする。</li>
+      <li>responseが<code>ok</code>でなければ例外にする。</li>
+      <li>
+        <code>DOMParser</code
+        >の<code>text/html</code>としてparseする。このparse中にscriptは実行しない。
+      </li>
+      <li>
+        最初の<code>nav</code>を取得する。存在しない場合は「Navigationにnav要素がありません」として例外にする。
+      </li>
+      <li><code>nav</code>をShellのSidebarへ移す。</li>
+      <li>
+        各<code>a[href]</code>を<code
+          >new URL(anchor.getAttribute(&quot;href&quot;), contentBaseUrl)</code
+        >で解決する。
+      </li>
+      <li>
+        解決後のURLをanchorの<code>href</code>へ設定し、修飾キーによる新規tabではraw HTML
+        URLを開けるようにする。
+      </li>
+      <li>Viewer内文書へのlinkだけを<code>NavigationItem</code>として返す。</li>
+    </ol>
+    <h3>10.2 リンク分類</h3>
+    <p>次をViewer内文書リンクとして扱う。</p>
+    <ul>
+      <li>同一originである。</li>
+      <li>pathnameが<code>/_content/</code>配下である。</li>
+      <li>pathnameが<code>.html</code>で終わる。</li>
+      <li><code>target</code>と<code>download</code>が指定されていない。</li>
+    </ul>
+    <p>
+      <code>javascript:</code> URLは実行せず、click
+      handlerで<code>preventDefault</code>する。<code>href</code>が空、URLとしてparse不能、または<code>doc</code>へ変換不能なlinkはnavigation
+      itemへ含めず、browser consoleへwarningを1件出す。
+    </p>
+    <p>次はブラウザ標準動作へ委ねる。</p>
+    <ul>
+      <li><code>http:</code>または<code>https:</code>の外部リンク</li>
+      <li><code>mailto:</code>、<code>tel:</code></li>
+      <li><code>target</code>または<code>download</code>付きリンク</li>
+      <li>Ctrl、Cmd、Shift、Altを伴うクリック</li>
+    </ul>
+    <h3>10.3 active表示</h3>
+    <ul>
+      <li>
+        現在の<code>doc</code>と一致するSidebarリンクへ<code>aria-current=&quot;page&quot;</code>を付ける。
+      </li>
+      <li>前のactive linkから<code>aria-current</code>を除去する。</li>
+      <li>ネストした相対パスも正規化後の値で比較する。</li>
+    </ul>
+    <p>文書表示完了時のタイトルは次の順で決める。</p>
+    <ol>
+      <li>iframe document内の最初の<code>h1</code>の、trim後に空でない<code>textContent</code></li>
+      <li><code>doc</code>の最後のpath segmentから<code>.html</code>を除いた文字列</li>
+    </ol>
+    <p>
+      決定したタイトルをiframeの<code>title</code>へ設定し、Shellの<code>document.title</code>は<code
+        >&lt;title&gt; — Spec HTML</code
+      >とする。上部のタイトルHeaderは表示しない。
+    </p>
+  </section>
+  <section id="url-routing">
+    <h2>11. URLルーティング仕様</h2>
+    <h3>11.1 URL形式</h3>
+    <pre><code class="language-text">http://127.0.0.1:4173/?doc=authentication.html
 http://127.0.0.1:4173/?doc=api%2Fendpoints.html
 </code></pre>
-<p><code>doc</code>には対象ディレクトリからのPOSIX形式相対パスを格納する。先頭の<code>/</code>は含めない。</p>
-<p>文書内アンカーはShell URLのhashとして保持する。</p>
-<pre><code class="language-text">/?doc=authentication.html#token-rotation
+    <p>
+      <code>doc</code
+      >には対象ディレクトリからのPOSIX形式相対パスを格納する。先頭の<code>/</code>は含めない。
+    </p>
+    <p>文書内アンカーはShell URLのhashとして保持する。</p>
+    <pre><code class="language-text">/?doc=authentication.html#token-rotation
 </code></pre>
-<h3>11.2 文書パスの正規化</h3>
-<p><code>normalizeDocumentPath</code>は次のすべてを満たす場合だけ正規化した文字列を返し、それ以外は<code>null</code>を返す。</p>
-<ol>
-<li>空文字ではない。</li>
-<li>先頭が<code>/</code>またはbackslashではない。</li>
-<li>NULとbackslashを含まない。</li>
-<li><code>/</code>で分割した各segmentが空、<code>.</code>、<code>..</code>ではない。</li>
-<li>最後のsegmentが大文字小文字を区別せず<code>.html</code>で終わる。</li>
-</ol>
-<p>Unicode、space、hyphen、underscoreは許可する。内部の<code>doc</code>はdecode済みのPOSIX相対パスとし、content URLを作るときだけ各segmentへ<code>encodeURIComponent</code>を適用する。slash全体をまとめてencodeしない。</p>
-<p><code>createShellUrl</code>はbase URLから既存queryとhashを除去し、有効な<code>doc</code>だけを<code>URLSearchParams.set(&quot;doc&quot;, doc)</code>で設定してからhashを設定する。未知のquery parameterは保持しない。</p>
-<h3>11.3 初期文書</h3>
-<p>表示対象は次の優先順で決める。</p>
-<ol>
-<li>URL queryの、正規化に成功した<code>doc</code></li>
-<li>runtime navigation内で最初に見つかったViewer内文書リンク</li>
-</ol>
-<p>queryに<code>doc</code>が存在するが正規化に失敗した場合は、navigationへfallbackせず「文書パスが不正です」と表示する。query自体が存在しない場合だけ最初のnavigation itemへfallbackする。どちらも存在しない場合は、文書領域へ「表示可能な設計書がありません」と表示する。</p>
-<h3>11.4 履歴</h3>
-<ul>
-<li>ユーザー操作による文書遷移は<code>history.pushState</code>を使う。</li>
-<li>初期URLの正規化には<code>history.replaceState</code>を使う。</li>
-<li><code>popstate</code>でURLから文書を再選択する。</li>
-<li><code>hashchange</code>では文書を再取得せず、現在iframe内の表示位置だけを同期する。</li>
-<li>同一文書内のアンカー移動では不要な文書fetchを行わない。</li>
-<li>再読み込み後もqueryとhashから同じ文書・位置へ復元する。</li>
-</ul>
-<p>遷移処理は<code>navigate(route, historyMode)</code>相当の1か所へ集約する。Sidebar click、iframe click、<code>popstate</code>、初期表示から直接fetch処理を呼ばない。<code>historyMode</code>は<code>push</code>、<code>replace</code>、<code>none</code>の3値とし、<code>popstate</code>では<code>none</code>を使う。<code>hashchange</code>はfetchを伴う<code>navigate</code>を呼ばず、scroll同期だけを行う。</p>
-<h3>11.5 <code>navigate</code>処理</h3>
-<ol>
-<li><code>route.doc</code>が<code>null</code>なら<code>idle</code>を表示して終了する。</li>
-<li><code>normalizeDocumentPath</code>が失敗したら<code>error</code>を表示して終了する。</li>
-<li><code>historyMode</code>が<code>push</code>なら<code>pushState</code>、<code>replace</code>なら<code>replaceState</code>でShell URLを反映する。<code>none</code>ではhistoryを変更しない。</li>
-<li><code>doc</code>が現在iframeへ表示済みのdocと同じなら、active navigationとhash scrollだけを更新して終了する。</li>
-<li>異なるdocなら12.1節のDocument読み込みを実行する。</li>
-<li><code>AbortError</code>は無視する。</li>
-<li><code>DocumentHttpError</code>はstatusに応じたmessageへ変換し、それ以外は一般error messageへ変換する。</li>
-<li>error時もShell URLは選択したrouteのまま保持し、再読み込みで同じerrorを再現できるようにする。</li>
-</ol>
-<p><code>popstate</code> handlerは<code>location.href</code>をparseして<code>navigate(..., &quot;none&quot;)</code>を呼ぶ。<code>hashchange</code> handlerは、parse結果のdocが現在表示中のdocと同じ場合だけhash scrollを行う。両eventが同じ履歴移動で連続してもDocument fetchは1回以下になることをbrowser testで確認する。</p>
-</section>
-<section id="document-loading">
-<h2>12. Document読み込みとiframe仕様</h2>
-<h3>12.1 読み込み</h3>
-<ol>
-<li>既存の<code>AbortController</code>があればabortする。</li>
-<li>新しい<code>AbortController</code>を作り、<code>loading</code>状態を表示する。</li>
-<li><code>doc</code>を<code>createContentUrl</code>で<code>/_content/</code>配下のURLへ変換する。</li>
-<li><code>signal</code>付きでHTMLをfetchする。</li>
-<li>responseが<code>ok</code>でなければHTTP statusを持つerrorへ変換する。</li>
-<li>response bodyをtextとして読む。</li>
-<li><code>buildSrcdoc</code>で完全なiframe documentを組み立てる。</li>
-<li>iframeの次回<code>load</code>を待つlistenerを、<code>srcdoc</code>設定前に1回だけ登録する。</li>
-<li>iframeの<code>srcdoc</code>へ設定する。</li>
-<li><code>load</code>後、今回のcontrollerが現在のcontrollerでなければ何も更新せず終了する。</li>
-<li>タイトル、文書内link listener、active navigationを同期する。</li>
-<li><code>ready</code>状態を表示する。</li>
-<li>Shell URLにhashがあれば、iframe内の対応する<code>id</code>または<code>name</code>へscrollする。</li>
-</ol>
-<p>abortされたrequestはerror表示へ遷移させない。fetch、body読み込み、iframe loadの各await後に、現在のcontrollerと一致することを確認する。</p>
-<h3>12.2 生成するiframe document</h3>
-<p>概念的には次の構造とする。実装では属性値の文字列連結を避け、DOM APIで構築してserializeする。</p>
-<pre><code class="language-html">&lt;!doctype html&gt;
+    <h3>11.2 文書パスの正規化</h3>
+    <p>
+      <code>normalizeDocumentPath</code
+      >は次のすべてを満たす場合だけ正規化した文字列を返し、それ以外は<code>null</code>を返す。
+    </p>
+    <ol>
+      <li>空文字ではない。</li>
+      <li>先頭が<code>/</code>またはbackslashではない。</li>
+      <li>NULとbackslashを含まない。</li>
+      <li><code>/</code>で分割した各segmentが空、<code>.</code>、<code>..</code>ではない。</li>
+      <li>最後のsegmentが大文字小文字を区別せず<code>.html</code>で終わる。</li>
+    </ol>
+    <p>
+      Unicode、space、hyphen、underscoreは許可する。内部の<code>doc</code>はdecode済みのPOSIX相対パスとし、content
+      URLを作るときだけ各segmentへ<code>encodeURIComponent</code>を適用する。slash全体をまとめてencodeしない。
+    </p>
+    <p>
+      <code>createShellUrl</code>はbase
+      URLから既存queryとhashを除去し、有効な<code>doc</code>だけを<code
+        >URLSearchParams.set(&quot;doc&quot;, doc)</code
+      >で設定してからhashを設定する。未知のquery parameterは保持しない。
+    </p>
+    <h3>11.3 初期文書</h3>
+    <p>表示対象は次の優先順で決める。</p>
+    <ol>
+      <li>URL queryの、正規化に成功した<code>doc</code></li>
+      <li>runtime navigation内で最初に見つかったViewer内文書リンク</li>
+    </ol>
+    <p>
+      queryに<code>doc</code>が存在するが正規化に失敗した場合は、navigationへfallbackせず「文書パスが不正です」と表示する。query自体が存在しない場合だけ最初のnavigation
+      itemへfallbackする。どちらも存在しない場合は、文書領域へ「表示可能な設計書がありません」と表示する。
+    </p>
+    <h3>11.4 履歴</h3>
+    <ul>
+      <li>ユーザー操作による文書遷移は<code>history.pushState</code>を使う。</li>
+      <li>初期URLの正規化には<code>history.replaceState</code>を使う。</li>
+      <li><code>popstate</code>でURLから文書を再選択する。</li>
+      <li><code>hashchange</code>では文書を再取得せず、現在iframe内の表示位置だけを同期する。</li>
+      <li>同一文書内のアンカー移動では不要な文書fetchを行わない。</li>
+      <li>再読み込み後もqueryとhashから同じ文書・位置へ復元する。</li>
+    </ul>
+    <p>
+      遷移処理は<code>navigate(route, historyMode)</code>相当の1か所へ集約する。Sidebar
+      click、iframe
+      click、<code>popstate</code>、初期表示から直接fetch処理を呼ばない。<code>historyMode</code>は<code>push</code>、<code>replace</code>、<code>none</code>の3値とし、<code>popstate</code>では<code>none</code>を使う。<code>hashchange</code>はfetchを伴う<code>navigate</code>を呼ばず、scroll同期だけを行う。
+    </p>
+    <h3>11.5 <code>navigate</code>処理</h3>
+    <ol>
+      <li><code>route.doc</code>が<code>null</code>なら<code>idle</code>を表示して終了する。</li>
+      <li><code>normalizeDocumentPath</code>が失敗したら<code>error</code>を表示して終了する。</li>
+      <li>
+        <code>historyMode</code
+        >が<code>push</code>なら<code>pushState</code>、<code>replace</code>なら<code>replaceState</code>でShell
+        URLを反映する。<code>none</code>ではhistoryを変更しない。
+      </li>
+      <li>
+        <code>doc</code>が現在iframeへ表示済みのdocと同じなら、active navigationとhash
+        scrollだけを更新して終了する。
+      </li>
+      <li>異なるdocなら12.1節のDocument読み込みを実行する。</li>
+      <li><code>AbortError</code>は無視する。</li>
+      <li>
+        <code>DocumentHttpError</code>はstatusに応じたmessageへ変換し、それ以外は一般error
+        messageへ変換する。
+      </li>
+      <li>
+        error時もShell URLは選択したrouteのまま保持し、再読み込みで同じerrorを再現できるようにする。
+      </li>
+    </ol>
+    <p>
+      <code>popstate</code> handlerは<code>location.href</code>をparseして<code
+        >navigate(..., &quot;none&quot;)</code
+      >を呼ぶ。<code>hashchange</code> handlerは、parse結果のdocが現在表示中のdocと同じ場合だけhash
+      scrollを行う。両eventが同じ履歴移動で連続してもDocument fetchは1回以下になることをbrowser
+      testで確認する。
+    </p>
+  </section>
+  <section id="document-loading">
+    <h2>12. Document読み込みとiframe仕様</h2>
+    <h3>12.1 読み込み</h3>
+    <ol>
+      <li>既存の<code>AbortController</code>があればabortする。</li>
+      <li>新しい<code>AbortController</code>を作り、<code>loading</code>状態を表示する。</li>
+      <li>
+        <code>doc</code
+        >を<code>createContentUrl</code>で<code>/_content/</code>配下のURLへ変換する。
+      </li>
+      <li><code>signal</code>付きでHTMLをfetchする。</li>
+      <li>responseが<code>ok</code>でなければHTTP statusを持つerrorへ変換する。</li>
+      <li>response bodyをtextとして読む。</li>
+      <li><code>buildSrcdoc</code>で完全なiframe documentを組み立てる。</li>
+      <li>
+        iframeの次回<code>load</code>を待つlistenerを、<code>srcdoc</code>設定前に1回だけ登録する。
+      </li>
+      <li>iframeの<code>srcdoc</code>へ設定する。</li>
+      <li>
+        <code>load</code>後、今回のcontrollerが現在のcontrollerでなければ何も更新せず終了する。
+      </li>
+      <li>タイトル、文書内link listener、active navigationを同期する。</li>
+      <li><code>ready</code>状態を表示する。</li>
+      <li>
+        Shell
+        URLにhashがあれば、iframe内の対応する<code>id</code>または<code>name</code>へscrollする。
+      </li>
+    </ol>
+    <p>
+      abortされたrequestはerror表示へ遷移させない。fetch、body読み込み、iframe
+      loadの各await後に、現在のcontrollerと一致することを確認する。
+    </p>
+    <h3>12.2 生成するiframe document</h3>
+    <p>
+      概念的には次の構造とする。実装では属性値の文字列連結を避け、DOM APIで構築してserializeする。
+    </p>
+    <pre><code class="language-html">&lt;!doctype html&gt;
 &lt;html lang=&quot;ja&quot;&gt;
 &lt;head&gt;
   &lt;meta charset=&quot;utf-8&quot;&gt;
@@ -932,66 +1183,114 @@ http://127.0.0.1:4173/?doc=api%2Fendpoints.html
 &lt;/body&gt;
 &lt;/html&gt;
 </code></pre>
-<p><code>base</code>には常に現在の設計書URLを設定する。これにより、画像やリンクは設計書自身のディレクトリを基準に解決される。</p>
-<p><code>buildSrcdoc</code>は次の手順で文字列を返す。</p>
-<ol>
-<li><code>document.implementation.createHTMLDocument(&quot;&quot;)</code>で一時documentを作る。</li>
-<li><code>documentElement.lang</code>を<code>ja</code>にする。</li>
-<li>自動生成されたtitleを削除する。</li>
-<li><code>documentUrl.origin</code>とBrowser定数からDocument CSSと、有効なintegrationだけの絶対URLを作る。hostやportをhard-codeしない。</li>
-<li>charset、viewport、base、Document CSS、Chart.js、Chart theme adapter、Mermaid loaderの順で、有効な要素だけをheadへappendする。</li>
-<li><code>body.innerHTML = fragment</code>でHTML fragmentを挿入する。</li>
-<li><code>&lt;!doctype html&gt;\n</code>と<code>documentElement.outerHTML</code>を連結する。</li>
-</ol>
-<p>Chart.jsとChart theme adapterのscriptには<code>async</code>と<code>defer</code>を付けず、body内のinline scriptより先にtheme設定済みの<code>globalThis.Chart</code>を提供する。Mermaid loaderはmoduleとして読み込み、DOM構築後に描画する。</p>
-<h3>12.3 文書内リンク</h3>
-<ul>
-<li>iframeはsandboxなしで使用する。</li>
-<li>iframeの読み込み後、同一originの<code>contentDocument</code>へclick listenerを登録する。</li>
-<li>Viewer内文書リンクはShell routingへ渡す。</li>
-<li>同一文書内のhashリンクはShell URLのhashと同期する。</li>
-<li>外部リンクや修飾キー付きクリックはブラウザ標準動作へ委ねる。</li>
-</ul>
-<p>click handlerはevent targetから<code>closest(&quot;a[href]&quot;)</code>を探し、<code>isPlainPrimaryClick</code>が<code>true</code>の場合だけ処理する。同一文書内hashまたは別のViewer内HTML文書なら<code>preventDefault</code>してShellの<code>navigate</code>へ渡す。それ以外は何もしない。</p>
-<p>hashをscrollするときは<code>decodeURIComponent(location.hash.slice(1))</code>を試し、decode不能なら元の文字列を使う。<code>getElementById</code>、次に<code>getElementsByName</code>の順で対象を探し、見つかった場合だけ<code>scrollIntoView()</code>する。</p>
-<h3>12.4 読み込み状態</h3>
-<p>状態は次の4種類に限定する。</p>
-<ul>
-<li><code>idle</code>: 初期化前または表示対象なし</li>
-<li><code>loading</code>: 文書を取得中</li>
-<li><code>ready</code>: 文書を表示中</li>
-<li><code>error</code>: 文書取得または表示に失敗</li>
-</ul>
-<p>新しい遷移が始まった場合は、古いfetchを<code>AbortController</code>で中止する。遅い古い応答で新しい画面を上書きしない。</p>
-<p><code>renderLoadState</code>のDOM動作を次で固定する。</p>
-<ul>
-<li><code>idle</code>: statusを空にし、iframeを非表示にする。</li>
-<li><code>loading</code>: statusへ「読み込み中…」を表示し、<code>role=&quot;status&quot;</code>を付け、iframeを非表示にする。</li>
-<li><code>ready</code>: statusを空にし、iframeを表示する。</li>
-<li><code>error</code>: statusへmessageを表示し、<code>role=&quot;alert&quot;</code>を付け、iframeを非表示にする。</li>
-</ul>
-<h3>12.5 エラー表示</h3>
-<ul>
-<li><code>404</code>: 「設計書が見つかりません」と対象パスを表示する。</li>
-<li>その他のHTTPエラー: status codeと再読み込み案内を表示する。</li>
-<li>HTML parseまたはiframe生成エラー: 「設計書を表示できません」と表示し、browser consoleへ詳細を出す。</li>
-<li>nav読み込み失敗: Sidebarと文書領域の両方に起動不能であることを表示する。</li>
-</ul>
-</section>
-<section id="integrations">
-<h2>13. Chart.jsとMermaid</h2>
-<h3>13.1 Chart.js</h3>
-<ul>
-<li><code>chart.js</code>をoptional peer dependencyとする。</li>
-<li>CLI起動時に<code>chart.js/auto</code>を解決し、同packageの<code>dist/chart.umd.min.js</code>を検出する。</li>
-<li>導入済みの場合だけ<code>/_spec-html/integrations/chart.js</code>でUMDを配信し、iframe内の<code>globalThis.Chart</code>を提供する。</li>
-<li>未導入の場合はChart scriptをiframeへ追加せず、通常のViewer機能を継続する。</li>
-<li>利用側は通常のChart.jsコードを書ける。</li>
-<li><code>chart-theme.ts</code>は表示時の<code>prefers-color-scheme</code>に応じて、文字、grid、tooltipの既定色を設定する。</li>
-<li>DOM要素の暗黙globalには依存せず、<code>document.getElementById</code>を使用する例をREADMEへ掲載する。</li>
-<li>TypeScriptではadapter内だけに必要なglobal型宣言を置き、Browser Viewer本体からChartへ依存しない。</li>
-</ul>
-<pre><code class="language-html">&lt;canvas id=&quot;latency-chart&quot;&gt;&lt;/canvas&gt;
+    <p>
+      <code>base</code
+      >には常に現在の設計書URLを設定する。これにより、画像やリンクは設計書自身のディレクトリを基準に解決される。
+    </p>
+    <p><code>buildSrcdoc</code>は次の手順で文字列を返す。</p>
+    <ol>
+      <li>
+        <code>document.implementation.createHTMLDocument(&quot;&quot;)</code>で一時documentを作る。
+      </li>
+      <li><code>documentElement.lang</code>を<code>ja</code>にする。</li>
+      <li>自動生成されたtitleを削除する。</li>
+      <li>
+        <code>documentUrl.origin</code>とBrowser定数からDocument
+        CSSと、有効なintegrationだけの絶対URLを作る。hostやportをhard-codeしない。
+      </li>
+      <li>
+        charset、viewport、base、Document CSS、Chart.js、Chart theme adapter、Mermaid
+        loaderの順で、有効な要素だけをheadへappendする。
+      </li>
+      <li><code>body.innerHTML = fragment</code>でHTML fragmentを挿入する。</li>
+      <li>
+        <code>&lt;!doctype html&gt;\n</code>と<code>documentElement.outerHTML</code>を連結する。
+      </li>
+    </ol>
+    <p>
+      Chart.jsとChart theme
+      adapterのscriptには<code>async</code>と<code>defer</code>を付けず、body内のinline
+      scriptより先にtheme設定済みの<code>globalThis.Chart</code>を提供する。Mermaid
+      loaderはmoduleとして読み込み、DOM構築後に描画する。
+    </p>
+    <h3>12.3 文書内リンク</h3>
+    <ul>
+      <li>iframeはsandboxなしで使用する。</li>
+      <li>
+        iframeの読み込み後、同一originの<code>contentDocument</code>へclick listenerを登録する。
+      </li>
+      <li>Viewer内文書リンクはShell routingへ渡す。</li>
+      <li>同一文書内のhashリンクはShell URLのhashと同期する。</li>
+      <li>外部リンクや修飾キー付きクリックはブラウザ標準動作へ委ねる。</li>
+    </ul>
+    <p>
+      click handlerはevent
+      targetから<code>closest(&quot;a[href]&quot;)</code>を探し、<code>isPlainPrimaryClick</code>が<code>true</code>の場合だけ処理する。同一文書内hashまたは別のViewer内HTML文書なら<code>preventDefault</code>してShellの<code>navigate</code>へ渡す。それ以外は何もしない。
+    </p>
+    <p>
+      hashをscrollするときは<code>decodeURIComponent(location.hash.slice(1))</code>を試し、decode不能なら元の文字列を使う。<code>getElementById</code>、次に<code>getElementsByName</code>の順で対象を探し、見つかった場合だけ<code>scrollIntoView()</code>する。
+    </p>
+    <h3>12.4 読み込み状態</h3>
+    <p>状態は次の4種類に限定する。</p>
+    <ul>
+      <li><code>idle</code>: 初期化前または表示対象なし</li>
+      <li><code>loading</code>: 文書を取得中</li>
+      <li><code>ready</code>: 文書を表示中</li>
+      <li><code>error</code>: 文書取得または表示に失敗</li>
+    </ul>
+    <p>
+      新しい遷移が始まった場合は、古いfetchを<code>AbortController</code>で中止する。遅い古い応答で新しい画面を上書きしない。
+    </p>
+    <p><code>renderLoadState</code>のDOM動作を次で固定する。</p>
+    <ul>
+      <li><code>idle</code>: statusを空にし、iframeを非表示にする。</li>
+      <li>
+        <code>loading</code>:
+        statusへ「読み込み中…」を表示し、<code>role=&quot;status&quot;</code>を付け、iframeを非表示にする。
+      </li>
+      <li><code>ready</code>: statusを空にし、iframeを表示する。</li>
+      <li>
+        <code>error</code>:
+        statusへmessageを表示し、<code>role=&quot;alert&quot;</code>を付け、iframeを非表示にする。
+      </li>
+    </ul>
+    <h3>12.5 エラー表示</h3>
+    <ul>
+      <li><code>404</code>: 「設計書が見つかりません」と対象パスを表示する。</li>
+      <li>その他のHTTPエラー: status codeと再読み込み案内を表示する。</li>
+      <li>
+        HTML parseまたはiframe生成エラー: 「設計書を表示できません」と表示し、browser
+        consoleへ詳細を出す。
+      </li>
+      <li>nav読み込み失敗: Sidebarと文書領域の両方に起動不能であることを表示する。</li>
+    </ul>
+  </section>
+  <section id="integrations">
+    <h2>13. Chart.jsとMermaid</h2>
+    <h3>13.1 Chart.js</h3>
+    <ul>
+      <li><code>chart.js</code>をoptional peer dependencyとする。</li>
+      <li>
+        CLI起動時に<code>chart.js/auto</code>を解決し、同packageの<code>dist/chart.umd.min.js</code>を検出する。
+      </li>
+      <li>
+        導入済みの場合だけ<code>/_spec-html/integrations/chart.js</code>でUMDを配信し、iframe内の<code>globalThis.Chart</code>を提供する。
+      </li>
+      <li>未導入の場合はChart scriptをiframeへ追加せず、通常のViewer機能を継続する。</li>
+      <li>利用側は通常のChart.jsコードを書ける。</li>
+      <li>
+        <code>chart-theme.ts</code
+        >は表示時の<code>prefers-color-scheme</code>に応じて、文字、grid、tooltipの既定色を設定する。
+      </li>
+      <li>
+        DOM要素の暗黙globalには依存せず、<code>document.getElementById</code>を使用する例をREADMEへ掲載する。
+      </li>
+      <li>
+        TypeScriptではadapter内だけに必要なglobal型宣言を置き、Browser
+        Viewer本体からChartへ依存しない。
+      </li>
+    </ul>
+    <pre><code class="language-html">&lt;canvas id=&quot;latency-chart&quot;&gt;&lt;/canvas&gt;
 &lt;script&gt;
   const canvas = document.getElementById(&quot;latency-chart&quot;);
   new Chart(canvas, {
@@ -1003,120 +1302,176 @@ http://127.0.0.1:4173/?doc=api%2Fendpoints.html
   });
 &lt;/script&gt;
 </code></pre>
-<h3>13.2 Mermaid</h3>
-<ul>
-<li><code>.mermaid</code>を持つ要素を対象とする。</li>
-<li><code>mermaid</code>をoptional peer dependencyとする。</li>
-<li>CLI起動時に公式<code>dist/mermaid.esm.min.mjs</code>を検出し、ESMと相対chunkを<code>/_spec-html/integrations/mermaid/</code>で配信する。</li>
-<li><code>mermaid-adapter.ts</code>はruntime URLから公式ESMをdynamic importし、<code>startOnLoad: false</code>、<code>securityLevel: &quot;loose&quot;</code>、表示時の<code>prefers-color-scheme</code>に応じたthemeで初期化する。</li>
-<li>adapter bundleは小さなES moduleとして出力する。Mermaid本体と全diagram typeを単一bundleへまとめない。</li>
-<li>未導入の場合はMermaid loaderをiframeへ追加せず、source textをそのまま表示する。</li>
-<li><code>DOMContentLoaded</code>後に<code>mermaid.run({ querySelector: &quot;.mermaid&quot; })</code>を1回呼ぶ。</li>
-<li>Mermaidの設定は上記で固定し、利用側から変更するAPIを作らない。</li>
-<li>HTML fragment側にMermaid初期化scriptを書かせない。</li>
-<li>描画失敗はcatchしてbrowser consoleへ出し、他の文書表示とnavigationは継続する。</li>
-</ul>
-<pre><code class="language-html">&lt;pre class=&quot;mermaid&quot;&gt;
+    <h3>13.2 Mermaid</h3>
+    <ul>
+      <li><code>.mermaid</code>を持つ要素を対象とする。</li>
+      <li><code>mermaid</code>をoptional peer dependencyとする。</li>
+      <li>
+        CLI起動時に公式<code>dist/mermaid.esm.min.mjs</code>を検出し、ESMと相対chunkを<code>/_spec-html/integrations/mermaid/</code>で配信する。
+      </li>
+      <li>
+        <code>mermaid-adapter.ts</code>はruntime URLから公式ESMをdynamic importし、<code
+          >startOnLoad: false</code
+        >、<code>securityLevel: &quot;loose&quot;</code
+        >、表示時の<code>prefers-color-scheme</code>に応じたthemeで初期化する。
+      </li>
+      <li>
+        adapter bundleは小さなES moduleとして出力する。Mermaid本体と全diagram
+        typeを単一bundleへまとめない。
+      </li>
+      <li>未導入の場合はMermaid loaderをiframeへ追加せず、source textをそのまま表示する。</li>
+      <li>
+        <code>DOMContentLoaded</code>後に<code
+          >mermaid.run({ querySelector: &quot;.mermaid&quot; })</code
+        >を1回呼ぶ。
+      </li>
+      <li>Mermaidの設定は上記で固定し、利用側から変更するAPIを作らない。</li>
+      <li>HTML fragment側にMermaid初期化scriptを書かせない。</li>
+      <li>描画失敗はcatchしてbrowser consoleへ出し、他の文書表示とnavigationは継続する。</li>
+    </ul>
+    <pre><code class="language-html">&lt;pre class=&quot;mermaid&quot;&gt;
 sequenceDiagram
   Browser-&gt;&gt;API: Login
   API--&gt;&gt;Browser: Session
 &lt;/pre&gt;
 </code></pre>
-</section>
-<section id="css">
-<h2>14. CSS方針</h2>
-<h3>14.1 Shell CSS</h3>
-<p>Shell CSSは次だけを担当する。</p>
-<ul>
-<li>Sidebar、Document領域のlayout</li>
-<li>mobile幅でのSidebar表示切り替え</li>
-<li>navigationのactive、hover、focus表示</li>
-<li>loading、error表示</li>
-<li>iframeの幅と高さ</li>
-</ul>
-<p>desktopでは上部Headerを設けず、Sidebarを幅<code>280px</code>、Document領域を残り幅として、どちらも画面上端から全高で表示する。iframeはborderなしでDocument領域の幅と高さを埋め、Shell body自体はscrollさせない。<code>768px</code>未満ではSidebarをoverlayとして既定で閉じ、画面右上のmenu buttonで開閉する。文書遷移後はmobile Sidebarを閉じる。</p>
-<h3>14.2 Document CSS</h3>
-<p>Document CSSはsemantic HTMLの既定表示だけを担当する。</p>
-<ul>
-<li>body、article、section</li>
-<li>h1からh6</li>
-<li>p、a、ul、ol、dl</li>
-<li>table、th、td</li>
-<li>pre、code</li>
-<li>blockquote、aside</li>
-<li>details、summary</li>
-<li>figure、figcaption、img</li>
-<li>canvas、SVG</li>
-<li>hr、mark、kbd、abbr、sub、sup、caption</li>
-<li><code>aside[data-type]</code>によるnote、warning、danger、success callout</li>
-</ul>
-<p>CSS Custom Propertiesは内部実装として使用してよいが、v0.1では公開theme APIとして互換性を保証しない。Sidebar上部にはName／Dateの並び替えbuttonとLight／Darkのtheme buttonを配置する。並び替えbuttonは選択中の項目を再度押すと昇順と降順を反転する。themeは初回表示時にOS設定から選び、明示的な選択を<code>localStorage</code>へ保存する。Sidebar幅を超える文書タイトルは末尾を省略表示し、linkの<code>title</code>属性で全文を確認可能にする。ShellとDocumentは選択したthemeへ即時に同期し、light／dark双方で十分なcontrastを保つ。dark表示はTokyo Night Stormの<code>bg</code>、<code>bg_dark</code>、<code>fg</code>、<code>blue</code>などを基準にした青みのあるpaletteとする。Chart.jsはDocumentのCSS Custom Propertiesから色を取得し、Mermaidはdark時に<code>base</code> themeと同paletteの<code>themeVariables</code>を使用する。theme選択変更時は現在の文書を再読み込みし、Chart.jsとMermaidも新しいthemeで描画する。</p>
-<p>Document body自身を<code>box-sizing: border-box</code>、<code>max-width: 920px</code>、<code>margin: 0 auto</code>として中央寄せし、desktopで<code>32px</code>、mobileで<code>16px</code>のpaddingを持たせる。横長tableと<code>pre</code>は要素単位で横scrollさせ、ページ全体の不要な横scrollを発生させない。画像、SVG、canvas、video、audioには<code>max-width: 100%</code>を設定するが、インライン画像と小型canvasを強制的にblock化または全幅化しない。描画済みMermaidはコードブロック背景を解除し、themeに合った文書背景上へ表示する。</p>
-<p>印刷時はShellのSidebar、mobile menu button、source表示button、source dialog、statusを非表示にし、iframeを文書のscroll heightまで拡張する。Documentはlight配色、余白<code>16mm</code>で印刷し、見出し直後の改ページと主要block内の不要な改ページを避ける。閉じている<code>details</code>の本文も印刷対象とする。</p>
-<h3>14.3 アクセシビリティ最低要件</h3>
-<ul>
-<li>keyboardでSidebar linkへ移動できる。</li>
-<li>focus indicatorを消さない。</li>
-<li>active linkへ<code>aria-current=&quot;page&quot;</code>を付ける。</li>
-<li>iframeへ内容を表す<code>title</code>を付ける。</li>
-<li>mobile menu buttonへ<code>aria-expanded</code>と<code>aria-controls</code>を付ける。</li>
-<li>mobile Sidebarは閉じている間<code>inert</code>と<code>aria-hidden=&quot;true&quot;</code>にし、画面外linkへfocusしない。</li>
-<li>Escapeでmobile Sidebarを閉じ、menu buttonへfocusを戻す。</li>
-<li><code>prefers-reduced-motion: reduce</code>ではSidebar transitionを無効にする。</li>
-<li>文字色と背景色は通常テキストでWCAG AA相当のcontrastを目標とする。</li>
-</ul>
-</section>
-<section id="build">
-<h2>15. ビルド計画</h2>
-<h3>15.1 Node bundle</h3>
-<ul>
-<li>entry point: <code>src/cli/main.ts</code></li>
-<li>platform: <code>node</code></li>
-<li>format: <code>esm</code></li>
-<li>target: Node.js 24</li>
-<li>CLIから必要なサーバーコードをbundleする。</li>
-<li><code>open</code>だけをexternalとして残す。</li>
-<li><code>banner.js</code>に<code>#!/usr/bin/env node</code>を設定する。</li>
-<li>build scriptが<code>package.json</code>のversionを読み、<code>define</code>で<code>__SPEC_HTML_VERSION__</code>へ埋め込む。<code>src/globals.d.ts</code>でこの定数をdeclareし、CLIの<code>--version</code>はこの値を表示する。</li>
-<li>minifyとsourcemapは無効にする。</li>
-</ul>
-<h3>15.2 Browser bundle</h3>
-<ul>
-<li>entry point: <code>src/browser/start.ts</code></li>
-<li>platform: <code>browser</code></li>
-<li>format: <code>esm</code></li>
-<li>target: <code>es2022</code></li>
-<li><code>src/browser/start.ts</code>を<code>dist/browser/viewer.js</code>へ出力する。</li>
-<li><code>src/vendor/chart-theme.ts</code>をformat <code>iife</code>で<code>dist/browser/chart-theme.js</code>へ出力する。</li>
-<li><code>src/vendor/mermaid-adapter.ts</code>をformat <code>esm</code>で<code>dist/browser/mermaid.js</code>へ出力する。Mermaid本体はbundleしない。</li>
-<li><code>src/styles/shell.css</code>と<code>document.css</code>は変換せず<code>dist/browser/</code>へcopyする。</li>
-<li>すべてminifyとsourcemapを無効にする。</li>
-</ul>
-<h3>15.3 build scriptの処理順</h3>
-<p><code>scripts/build.mjs</code>は次の順で処理し、途中で失敗したら非0で終了する。</p>
-<ol>
-<li><code>dist</code>を再帰的に削除する。</li>
-<li><code>dist/browser</code>を作る。</li>
-<li>CLI bundleを生成する。</li>
-<li>Viewer bundleを生成する。</li>
-<li>Mermaid loader bundleを生成する。</li>
-<li>Chart theme adapter bundleを生成する。</li>
-<li>2つのCSSをcopyする。</li>
-<li>次の6ファイルが通常ファイルとして存在することを検証する。<ul>
-<li><code>dist/cli.js</code></li>
-<li><code>dist/browser/viewer.js</code></li>
-<li><code>dist/browser/shell.css</code></li>
-<li><code>dist/browser/document.css</code></li>
-<li><code>dist/browser/mermaid.js</code></li>
-<li><code>dist/browser/chart-theme.js</code></li>
-</ul>
-</li>
-<li><code>chmod 0o755</code>で<code>dist/cli.js</code>へ実行権限を付ける。</li>
-</ol>
-<p><code>scripts/clean.mjs</code>は<code>dist</code>だけを削除し、存在しない場合も0で終了する。</p>
-<h3>15.4 TypeScriptとlint</h3>
-<p><code>tsconfig.json</code>は少なくとも次を有効にする。</p>
-<pre><code class="language-json">{
+  </section>
+  <section id="css">
+    <h2>14. CSS方針</h2>
+    <h3>14.1 Shell CSS</h3>
+    <p>Shell CSSは次だけを担当する。</p>
+    <ul>
+      <li>Sidebar、Document領域のlayout</li>
+      <li>mobile幅でのSidebar表示切り替え</li>
+      <li>navigationのactive、hover、focus表示</li>
+      <li>loading、error表示</li>
+      <li>iframeの幅と高さ</li>
+    </ul>
+    <p>
+      desktopでは上部Headerを設けず、Sidebarを幅<code>280px</code>、Document領域を残り幅として、どちらも画面上端から全高で表示する。iframeはborderなしでDocument領域の幅と高さを埋め、Shell
+      body自体はscrollさせない。<code>768px</code>未満ではSidebarをoverlayとして既定で閉じ、画面右上のmenu
+      buttonで開閉する。文書遷移後はmobile Sidebarを閉じる。
+    </p>
+    <h3>14.2 Document CSS</h3>
+    <p>Document CSSはsemantic HTMLの既定表示だけを担当する。</p>
+    <ul>
+      <li>body、article、section</li>
+      <li>h1からh6</li>
+      <li>p、a、ul、ol、dl</li>
+      <li>table、th、td</li>
+      <li>pre、code</li>
+      <li>blockquote、aside</li>
+      <li>details、summary</li>
+      <li>figure、figcaption、img</li>
+      <li>canvas、SVG</li>
+      <li>hr、mark、kbd、abbr、sub、sup、caption</li>
+      <li><code>aside[data-type]</code>によるnote、warning、danger、success callout</li>
+    </ul>
+    <p>
+      CSS Custom Propertiesは内部実装として使用してよいが、v0.1では公開theme
+      APIとして互換性を保証しない。Sidebar上部にはName／Dateの並び替えbuttonとLight／Darkのtheme
+      buttonを配置する。並び替えbuttonは選択中の項目を再度押すと昇順と降順を反転する。themeは初回表示時にOS設定から選び、明示的な選択を<code>localStorage</code>へ保存する。Sidebar幅を超える文書タイトルは末尾を省略表示し、linkの<code>title</code>属性で全文を確認可能にする。ShellとDocumentは選択したthemeへ即時に同期し、light／dark双方で十分なcontrastを保つ。dark表示はTokyo
+      Night
+      Stormの<code>bg</code>、<code>bg_dark</code>、<code>fg</code>、<code>blue</code>などを基準にした青みのあるpaletteとする。Chart.jsはDocumentのCSS
+      Custom Propertiesから色を取得し、Mermaidはdark時に<code>base</code>
+      themeと同paletteの<code>themeVariables</code>を使用する。theme選択変更時は現在の文書を再読み込みし、Chart.jsとMermaidも新しいthemeで描画する。
+    </p>
+    <p>
+      Document body自身を<code>box-sizing: border-box</code>、<code>max-width: 920px</code>、<code
+        >margin: 0 auto</code
+      >として中央寄せし、desktopで<code>32px</code>、mobileで<code>16px</code>のpaddingを持たせる。横長tableと<code>pre</code>は要素単位で横scrollさせ、ページ全体の不要な横scrollを発生させない。画像、SVG、canvas、video、audioには<code
+        >max-width: 100%</code
+      >を設定するが、インライン画像と小型canvasを強制的にblock化または全幅化しない。描画済みMermaidはコードブロック背景を解除し、themeに合った文書背景上へ表示する。
+    </p>
+    <p>
+      印刷時はShellのSidebar、mobile menu button、source表示button、source
+      dialog、statusを非表示にし、iframeを文書のscroll
+      heightまで拡張する。Documentはlight配色、余白<code>16mm</code>で印刷し、見出し直後の改ページと主要block内の不要な改ページを避ける。閉じている<code>details</code>の本文も印刷対象とする。
+    </p>
+    <h3>14.3 アクセシビリティ最低要件</h3>
+    <ul>
+      <li>keyboardでSidebar linkへ移動できる。</li>
+      <li>focus indicatorを消さない。</li>
+      <li>active linkへ<code>aria-current=&quot;page&quot;</code>を付ける。</li>
+      <li>iframeへ内容を表す<code>title</code>を付ける。</li>
+      <li>mobile menu buttonへ<code>aria-expanded</code>と<code>aria-controls</code>を付ける。</li>
+      <li>
+        mobile
+        Sidebarは閉じている間<code>inert</code>と<code>aria-hidden=&quot;true&quot;</code>にし、画面外linkへfocusしない。
+      </li>
+      <li>Escapeでmobile Sidebarを閉じ、menu buttonへfocusを戻す。</li>
+      <li><code>prefers-reduced-motion: reduce</code>ではSidebar transitionを無効にする。</li>
+      <li>文字色と背景色は通常テキストでWCAG AA相当のcontrastを目標とする。</li>
+    </ul>
+  </section>
+  <section id="build">
+    <h2>15. ビルド計画</h2>
+    <h3>15.1 Node bundle</h3>
+    <ul>
+      <li>entry point: <code>src/cli/main.ts</code></li>
+      <li>platform: <code>node</code></li>
+      <li>format: <code>esm</code></li>
+      <li>target: Node.js 24</li>
+      <li>CLIから必要なサーバーコードをbundleする。</li>
+      <li><code>open</code>だけをexternalとして残す。</li>
+      <li><code>banner.js</code>に<code>#!/usr/bin/env node</code>を設定する。</li>
+      <li>
+        build
+        scriptが<code>package.json</code>のversionを読み、<code>define</code>で<code>__SPEC_HTML_VERSION__</code>へ埋め込む。<code>src/globals.d.ts</code>でこの定数をdeclareし、CLIの<code>--version</code>はこの値を表示する。
+      </li>
+      <li>minifyとsourcemapは無効にする。</li>
+    </ul>
+    <h3>15.2 Browser bundle</h3>
+    <ul>
+      <li>entry point: <code>src/browser/start.ts</code></li>
+      <li>platform: <code>browser</code></li>
+      <li>format: <code>esm</code></li>
+      <li>target: <code>es2022</code></li>
+      <li><code>src/browser/start.ts</code>を<code>dist/browser/viewer.js</code>へ出力する。</li>
+      <li>
+        <code>src/vendor/chart-theme.ts</code>をformat
+        <code>iife</code>で<code>dist/browser/chart-theme.js</code>へ出力する。
+      </li>
+      <li>
+        <code>src/vendor/mermaid-adapter.ts</code>をformat
+        <code>esm</code
+        >で<code>dist/browser/mermaid.js</code>へ出力する。Mermaid本体はbundleしない。
+      </li>
+      <li>
+        <code>src/styles/shell.css</code
+        >と<code>document.css</code>は変換せず<code>dist/browser/</code>へcopyする。
+      </li>
+      <li>すべてminifyとsourcemapを無効にする。</li>
+    </ul>
+    <h3>15.3 build scriptの処理順</h3>
+    <p><code>scripts/build.mjs</code>は次の順で処理し、途中で失敗したら非0で終了する。</p>
+    <ol>
+      <li><code>dist</code>を再帰的に削除する。</li>
+      <li><code>dist/browser</code>を作る。</li>
+      <li>CLI bundleを生成する。</li>
+      <li>Viewer bundleを生成する。</li>
+      <li>Mermaid loader bundleを生成する。</li>
+      <li>Chart theme adapter bundleを生成する。</li>
+      <li>2つのCSSをcopyする。</li>
+      <li>
+        次の6ファイルが通常ファイルとして存在することを検証する。
+        <ul>
+          <li><code>dist/cli.js</code></li>
+          <li><code>dist/browser/viewer.js</code></li>
+          <li><code>dist/browser/shell.css</code></li>
+          <li><code>dist/browser/document.css</code></li>
+          <li><code>dist/browser/mermaid.js</code></li>
+          <li><code>dist/browser/chart-theme.js</code></li>
+        </ul>
+      </li>
+      <li><code>chmod 0o755</code>で<code>dist/cli.js</code>へ実行権限を付ける。</li>
+    </ol>
+    <p>
+      <code>scripts/clean.mjs</code>は<code>dist</code>だけを削除し、存在しない場合も0で終了する。
+    </p>
+    <h3>15.4 TypeScriptとlint</h3>
+    <p><code>tsconfig.json</code>は少なくとも次を有効にする。</p>
+    <pre><code class="language-json">{
   &quot;compilerOptions&quot;: {
     &quot;target&quot;: &quot;ES2022&quot;,
     &quot;module&quot;: &quot;ESNext&quot;,
@@ -1131,506 +1486,589 @@ sequenceDiagram
   &quot;include&quot;: [&quot;src&quot;, &quot;tests&quot;, &quot;scripts&quot;, &quot;*.config.ts&quot;]
 }
 </code></pre>
-<p>BrowserとNodeの両方を同一projectでtypecheckする。Node専用globalをBrowser moduleで使用しない。ESLintはflat configと<code>typescript-eslint</code>のrecommended type-checked rulesを使い、generated <code>dist</code>、Playwright output、pack testの一時directoryをignoreする。</p>
-<h3>15.5 再現性</h3>
-<ul>
-<li>lockfileをcommitする。</li>
-<li>build前に<code>dist</code>をcleanする。</li>
-<li>build後に必要ファイル一覧を検証する。</li>
-<li><code>npm pack --dry-run</code>で意図しないsource、test、fixtureが含まれないことを確認する。</li>
-</ul>
-</section>
-<section id="testing">
-<h2>16. テスト計画</h2>
-<h3>16.1 単体テスト</h3>
-<p><code>vitest.config.ts</code>の既定environmentを<code>node</code>にし、test fileと対象を次で固定する。</p>
-<table>
-<caption>単体テストの対象と必須ケース</caption>
-<thead>
-<tr>
-<th scope="col">test file</th>
-<th scope="col">必須ケース</th>
-</tr>
-</thead>
-<tbody><tr>
-<th scope="row"><code>cli-options.test.ts</code></th>
-<td>引数なし、directory指定、全option、port <code>0</code>、port境界値、不正整数、未知option、複数directory、<code>--open</code>競合</td>
-</tr>
-<tr>
-<th scope="row"><code>mime.test.ts</code></th>
-<td>対応する全拡張子、大文字拡張子、未知拡張子</td>
-</tr>
-<tr>
-<th scope="row"><code>paths.test.ts</code></th>
-<td>nested path、space、Unicode、<code>.</code>、<code>..</code>、backslash、NUL、malformed percent encoding、root外path</td>
-</tr>
-<tr>
-<th scope="row"><code>router.test.ts</code></th>
-<td>queryなし、有効doc、不正doc、encoded slash、space、Unicode、hash、content URLとの往復、未知queryの除去</td>
-</tr>
-</tbody></table>
-<p>DOMを必要とする<code>navigation.ts</code>と<code>frame.ts</code>の細部はunit testでDOM emulatorを追加せず、Playwrightで検証する。v0.1ではjsdomをdependencyへ追加しない。</p>
-<h3>16.2 サーバー統合テスト</h3>
-<p><code>tests/server/server.test.ts</code>から<code>startServer</code>を直接呼ぶ。<code>port: 0</code>、一時content fixture、テスト用runtime fixtureを渡し、返された<code>origin</code>へNode.jsのglobal <code>fetch</code>でrequestする。</p>
-<ul>
-<li><code>/</code>がShell HTMLを返す。</li>
-<li><code>/_spec-html/viewer.js</code>、2つのCSS、2つのvendor scriptが200を返す。</li>
-<li><code>/_spec-html/navigation</code>がcontent directoryに対応するNavigation HTMLを返す。</li>
-<li>nested HTMLと画像を正しいContent-Typeで返す。</li>
-<li><code>HEAD</code>がbodyなしで返る。</li>
-<li>存在しないファイルが404になる。</li>
-<li>対象ディレクトリ外のパスを取得できない。</li>
-<li>未対応methodが405になる。</li>
-<li>終了処理でlisten socketが閉じる。</li>
-<li>malformed URLが400になる。</li>
-<li>通常ファイルでないdirectory requestが404になる。</li>
-</ul>
-<p>各testは<code>afterEach</code>で<code>RunningServer.close()</code>と一時directory削除を必ず行う。失敗したtestでもlisten socketと一時fileを残さない。</p>
-<h3>16.3 ブラウザテスト</h3>
-<p><code>playwright.config.ts</code>はtest directoryを<code>tests/browser</code>、browserをChromiumだけにする。<code>webServer.command</code>は<code>node dist/cli.js ./tests/fixtures/browser --port 4173 --no-open</code>、<code>webServer.url</code>は<code>http://127.0.0.1:4173/</code>、<code>reuseExistingServer</code>は<code>false</code>とする。browser fixtureには基本文書、nested文書、画像、Chart、Mermaidを1つのnavigation配下に置く。<code>npm run test:browser</code>の前提として<code>npm run build</code>済みであることをREADMEと<code>check</code> scriptで保証する。</p>
-<p><code>tests/browser/viewer.spec.ts</code>で次を検証する。</p>
-<ul>
-<li>初期表示で最初のnavigation itemが開く。</li>
-<li>query指定した文書が直接開く。</li>
-<li>Sidebarから文書を遷移できる。</li>
-<li>iframe内リンクから別文書へ遷移できる。</li>
-<li>nested文書の相対画像が表示される。</li>
-<li>文書内アンカーへ移動できる。</li>
-<li>戻る、進む、再読み込みで表示文書が一致する。</li>
-<li>hash付き履歴移動でDocument fetchが重複しない。</li>
-<li>active navigationとdocument titleが更新される。</li>
-<li>404時にViewerが残ったままエラーを表示する。</li>
-<li>MermaidがSVGへ変換される。</li>
-<li>Chart.jsがcanvasへ描画する。</li>
-<li>light／dark双方でMermaidの文字と背景が判別できる。</li>
-<li>Sidebar上部からName／Dateの昇順・降順を切り替えられる。</li>
-<li>Sidebar上部からLight／Darkを選択でき、再読み込み後も選択が復元される。</li>
-<li>保存済みthemeがない初回表示ではOS themeを反映する。</li>
-<li>印刷時にShellを除外し、文書をlight配色で全高へ展開する。</li>
-<li>インラインSVGと小型canvasが強制的にblock化または全幅化されない。</li>
-<li>mobile viewportでmenu buttonを操作できる。</li>
-</ul>
-<p>iframe内要素はPlaywrightの<code>frameLocator(&quot;iframe.viewer-document&quot;)</code>から取得する。Chart.jsはcanvasが存在するだけでなく、iframe内でChart instanceが作成されcanvasのpixel dataが変化したことを確認する。Mermaidは<code>.mermaid svg</code>の出現を待つ。</p>
-<h3>16.4 ローカルpackageスモークテスト</h3>
-<p><code>scripts/test-pack.mjs</code>はworkspace上のsourceを直接参照せず、次の手順を自動実行する。</p>
-<ol>
-<li><code>mkdtemp</code>でworkspace外の一時directoryを作る。</li>
-<li><code>npm pack --json --silent</code>をchild processで実行し、JSONから生成tarballの絶対パスを取得する。</li>
-<li>一時directoryで<code>npm init --yes</code>を実行する。</li>
-<li>最小の<code>specs/overview.html</code>、<code>specs/assets/pixel.svg</code>を作る。</li>
-<li><code>npm install --save-dev &lt;tarball&gt;</code>を実行する。</li>
-<li><code>npm exec -- spec-html ./specs --port 0 --no-open</code>をspawnする。</li>
-<li>stdoutの<code>Spec HTML: &lt;origin&gt;/</code>を最大10秒待ち、originを取得する。</li>
-<li>root、navigation、overview、assetへfetchし、statusと主要contentを確認する。</li>
-<li>root HTMLが<code>/_spec-html/viewer.js</code>を参照し、そのassetが200になることを確認する。</li>
-<li>child processへ<code>SIGINT</code>を送り、最大5秒以内に終了code <code>0</code>となることを確認する。</li>
-<li><code>finally</code>でchild process、tarball、一時directoryを削除する。</li>
-</ol>
-<p>pack test自身ではconsumer projectにbuild scriptを追加せず、<code>npm exec</code>以外のconsumer側コマンドを実行しない。これを「利用側buildなし」の検証とする。</p>
-</section>
-<section id="milestones">
-<h2>17. 実装マイルストーン</h2>
-<p>実装者はT0.1からT5.3まで番号順に進める。各taskの確認が失敗した場合は次へ進まず、そのtask内で修正する。異なるtaskのついで実装を行わない。</p>
-<h3>M0: プロジェクト基盤</h3>
-<h4>T0.1 npmと開発toolの初期化</h4>
-<p>対象file:</p>
-<ul>
-<li><code>package.json</code></li>
-<li><code>package-lock.json</code></li>
-<li><code>.gitignore</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li><code>npm init --yes</code>を実行する。</li>
-<li>package名、version、type、bin、files、engines、scriptsを5.3節どおりに設定する。</li>
-<li>5.3節の<code>npm install</code>コマンドでdependencyを追加する。</li>
-<li><code>.gitignore</code>へ<code>node_modules/</code>、<code>dist/</code>、<code>test-results/</code>、<code>playwright-report/</code>、<code>*.tgz</code>を追加する。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npm install
+    <p>
+      BrowserとNodeの両方を同一projectでtypecheckする。Node専用globalをBrowser
+      moduleで使用しない。ESLintはflat configと<code>typescript-eslint</code>のrecommended
+      type-checked rulesを使い、generated <code>dist</code>、Playwright output、pack
+      testの一時directoryをignoreする。
+    </p>
+    <h3>15.5 再現性</h3>
+    <ul>
+      <li>lockfileをcommitする。</li>
+      <li>build前に<code>dist</code>をcleanする。</li>
+      <li>build後に必要ファイル一覧を検証する。</li>
+      <li>
+        <code>npm pack --dry-run</code>で意図しないsource、test、fixtureが含まれないことを確認する。
+      </li>
+    </ul>
+  </section>
+  <section id="testing">
+    <h2>16. テスト計画</h2>
+    <h3>16.1 単体テスト</h3>
+    <p>
+      <code>vitest.config.ts</code>の既定environmentを<code>node</code>にし、test
+      fileと対象を次で固定する。
+    </p>
+    <table>
+      <caption>
+        単体テストの対象と必須ケース
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">test file</th>
+          <th scope="col">必須ケース</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><code>cli-options.test.ts</code></th>
+          <td>
+            引数なし、directory指定、全option、port
+            <code>0</code>、port境界値、不正整数、未知option、複数directory、<code>--open</code>競合
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>mime.test.ts</code></th>
+          <td>対応する全拡張子、大文字拡張子、未知拡張子</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>paths.test.ts</code></th>
+          <td>
+            nested path、space、Unicode、<code>.</code>、<code>..</code>、backslash、NUL、malformed
+            percent encoding、root外path
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>router.test.ts</code></th>
+          <td>
+            queryなし、有効doc、不正doc、encoded slash、space、Unicode、hash、content
+            URLとの往復、未知queryの除去
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      DOMを必要とする<code>navigation.ts</code>と<code>frame.ts</code>の細部はunit testでDOM
+      emulatorを追加せず、Playwrightで検証する。v0.1ではjsdomをdependencyへ追加しない。
+    </p>
+    <h3>16.2 サーバー統合テスト</h3>
+    <p>
+      <code>tests/server/server.test.ts</code>から<code>startServer</code>を直接呼ぶ。<code
+        >port: 0</code
+      >、一時content fixture、テスト用runtime
+      fixtureを渡し、返された<code>origin</code>へNode.jsのglobal <code>fetch</code>でrequestする。
+    </p>
+    <ul>
+      <li><code>/</code>がShell HTMLを返す。</li>
+      <li><code>/_spec-html/viewer.js</code>、2つのCSS、2つのvendor scriptが200を返す。</li>
+      <li>
+        <code>/_spec-html/navigation</code>がcontent directoryに対応するNavigation HTMLを返す。
+      </li>
+      <li>nested HTMLと画像を正しいContent-Typeで返す。</li>
+      <li><code>HEAD</code>がbodyなしで返る。</li>
+      <li>存在しないファイルが404になる。</li>
+      <li>対象ディレクトリ外のパスを取得できない。</li>
+      <li>未対応methodが405になる。</li>
+      <li>終了処理でlisten socketが閉じる。</li>
+      <li>malformed URLが400になる。</li>
+      <li>通常ファイルでないdirectory requestが404になる。</li>
+    </ul>
+    <p>
+      各testは<code>afterEach</code>で<code>RunningServer.close()</code>と一時directory削除を必ず行う。失敗したtestでもlisten
+      socketと一時fileを残さない。
+    </p>
+    <h3>16.3 ブラウザテスト</h3>
+    <p>
+      <code>playwright.config.ts</code>はtest
+      directoryを<code>tests/browser</code>、browserをChromiumだけにする。<code>webServer.command</code>は<code
+        >node dist/cli.js ./tests/fixtures/browser --port 4173 --no-open</code
+      >、<code>webServer.url</code>は<code>http://127.0.0.1:4173/</code>、<code>reuseExistingServer</code>は<code>false</code>とする。browser
+      fixtureには基本文書、nested文書、画像、Chart、Mermaidを1つのnavigation配下に置く。<code
+        >npm run test:browser</code
+      >の前提として<code>npm run build</code>済みであることをREADMEと<code>check</code>
+      scriptで保証する。
+    </p>
+    <p><code>tests/browser/viewer.spec.ts</code>で次を検証する。</p>
+    <ul>
+      <li>初期表示で最初のnavigation itemが開く。</li>
+      <li>query指定した文書が直接開く。</li>
+      <li>Sidebarから文書を遷移できる。</li>
+      <li>iframe内リンクから別文書へ遷移できる。</li>
+      <li>nested文書の相対画像が表示される。</li>
+      <li>文書内アンカーへ移動できる。</li>
+      <li>戻る、進む、再読み込みで表示文書が一致する。</li>
+      <li>hash付き履歴移動でDocument fetchが重複しない。</li>
+      <li>active navigationとdocument titleが更新される。</li>
+      <li>404時にViewerが残ったままエラーを表示する。</li>
+      <li>MermaidがSVGへ変換される。</li>
+      <li>Chart.jsがcanvasへ描画する。</li>
+      <li>light／dark双方でMermaidの文字と背景が判別できる。</li>
+      <li>Sidebar上部からName／Dateの昇順・降順を切り替えられる。</li>
+      <li>Sidebar上部からLight／Darkを選択でき、再読み込み後も選択が復元される。</li>
+      <li>保存済みthemeがない初回表示ではOS themeを反映する。</li>
+      <li>印刷時にShellを除外し、文書をlight配色で全高へ展開する。</li>
+      <li>インラインSVGと小型canvasが強制的にblock化または全幅化されない。</li>
+      <li>mobile viewportでmenu buttonを操作できる。</li>
+    </ul>
+    <p>
+      iframe内要素はPlaywrightの<code>frameLocator(&quot;iframe.viewer-document&quot;)</code>から取得する。Chart.jsはcanvasが存在するだけでなく、iframe内でChart
+      instanceが作成されcanvasのpixel dataが変化したことを確認する。Mermaidは<code
+        >.mermaid svg</code
+      >の出現を待つ。
+    </p>
+    <h3>16.4 ローカルpackageスモークテスト</h3>
+    <p>
+      <code>scripts/test-pack.mjs</code
+      >はworkspace上のsourceを直接参照せず、次の手順を自動実行する。
+    </p>
+    <ol>
+      <li><code>mkdtemp</code>でworkspace外の一時directoryを作る。</li>
+      <li>
+        <code>npm pack --json --silent</code>をchild
+        processで実行し、JSONから生成tarballの絶対パスを取得する。
+      </li>
+      <li>一時directoryで<code>npm init --yes</code>を実行する。</li>
+      <li>最小の<code>specs/overview.html</code>、<code>specs/assets/pixel.svg</code>を作る。</li>
+      <li><code>npm install --save-dev &lt;tarball&gt;</code>を実行する。</li>
+      <li><code>npm exec -- spec-html ./specs --port 0 --no-open</code>をspawnする。</li>
+      <li>stdoutの<code>Spec HTML: &lt;origin&gt;/</code>を最大10秒待ち、originを取得する。</li>
+      <li>root、navigation、overview、assetへfetchし、statusと主要contentを確認する。</li>
+      <li>
+        root HTMLが<code>/_spec-html/viewer.js</code>を参照し、そのassetが200になることを確認する。
+      </li>
+      <li>
+        child processへ<code>SIGINT</code>を送り、最大5秒以内に終了code
+        <code>0</code>となることを確認する。
+      </li>
+      <li><code>finally</code>でchild process、tarball、一時directoryを削除する。</li>
+    </ol>
+    <p>
+      pack test自身ではconsumer projectにbuild scriptを追加せず、<code>npm exec</code
+      >以外のconsumer側コマンドを実行しない。これを「利用側buildなし」の検証とする。
+    </p>
+  </section>
+  <section id="milestones">
+    <h2>17. 実装マイルストーン</h2>
+    <p>
+      実装者はT0.1からT5.3まで番号順に進める。各taskの確認が失敗した場合は次へ進まず、そのtask内で修正する。異なるtaskのついで実装を行わない。
+    </p>
+    <h3>M0: プロジェクト基盤</h3>
+    <h4>T0.1 npmと開発toolの初期化</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>package.json</code></li>
+      <li><code>package-lock.json</code></li>
+      <li><code>.gitignore</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li><code>npm init --yes</code>を実行する。</li>
+      <li>package名、version、type、bin、files、engines、scriptsを5.3節どおりに設定する。</li>
+      <li>5.3節の<code>npm install</code>コマンドでdependencyを追加する。</li>
+      <li>
+        <code>.gitignore</code
+        >へ<code>node_modules/</code>、<code>dist/</code>、<code>test-results/</code>、<code>playwright-report/</code>、<code>*.tgz</code>を追加する。
+      </li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npm install
 npm ls --depth=0
 </code></pre>
-<h4>T0.2 TypeScript、lint、test設定</h4>
-<p>対象file:</p>
-<ul>
-<li><code>tsconfig.json</code></li>
-<li><code>eslint.config.js</code></li>
-<li><code>vitest.config.ts</code></li>
-<li><code>playwright.config.ts</code></li>
-<li><code>src/globals.d.ts</code></li>
-<li><code>src/cli/main.ts</code></li>
-<li><code>src/browser/start.ts</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li>15.4節のTypeScript optionを設定する。</li>
-<li>ESLint flat configを作り、source、script、testを対象にする。</li>
-<li>VitestをNode environment、test timeout 5秒で設定する。testが0件なら失敗させる。</li>
-<li>PlaywrightをChromiumのみ、test timeout 15秒で設定する。</li>
-<li>TypeScriptの入力が0件にならないよう、CLIとBrowser entryに<code>export {}</code>だけの最小fileを置く。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npm run typecheck
+    <h4>T0.2 TypeScript、lint、test設定</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>tsconfig.json</code></li>
+      <li><code>eslint.config.js</code></li>
+      <li><code>vitest.config.ts</code></li>
+      <li><code>playwright.config.ts</code></li>
+      <li><code>src/globals.d.ts</code></li>
+      <li><code>src/cli/main.ts</code></li>
+      <li><code>src/browser/start.ts</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li>15.4節のTypeScript optionを設定する。</li>
+      <li>ESLint flat configを作り、source、script、testを対象にする。</li>
+      <li>VitestをNode environment、test timeout 5秒で設定する。testが0件なら失敗させる。</li>
+      <li>PlaywrightをChromiumのみ、test timeout 15秒で設定する。</li>
+      <li>
+        TypeScriptの入力が0件にならないよう、CLIとBrowser entryに<code>export {}</code
+        >だけの最小fileを置く。
+      </li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npm run typecheck
 npm run lint
 npm test
 </code></pre>
-<p>testが0件の場合は設定誤りとして失敗させる。</p>
-<h4>T0.3 build pipelineの作成</h4>
-<p>対象file:</p>
-<ul>
-<li><code>scripts/build.mjs</code></li>
-<li><code>scripts/clean.mjs</code></li>
-<li><code>src/vendor/mermaid-adapter.ts</code></li>
-<li><code>src/styles/shell.css</code></li>
-<li><code>src/styles/document.css</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li>CLIとBrowserの最小entryをbuild対象にする。</li>
-<li>15.3節の順序でbuild scriptを実装する。</li>
-<li><code>dist/cli.js</code>へshebangと実行権限を付ける。</li>
-<li>Mermaid loaderを13節どおり実装し、Chart.jsとMermaid本体を成果物へbundleしない。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npm run clean
+    <p>testが0件の場合は設定誤りとして失敗させる。</p>
+    <h4>T0.3 build pipelineの作成</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>scripts/build.mjs</code></li>
+      <li><code>scripts/clean.mjs</code></li>
+      <li><code>src/vendor/mermaid-adapter.ts</code></li>
+      <li><code>src/styles/shell.css</code></li>
+      <li><code>src/styles/document.css</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li>CLIとBrowserの最小entryをbuild対象にする。</li>
+      <li>15.3節の順序でbuild scriptを実装する。</li>
+      <li><code>dist/cli.js</code>へshebangと実行権限を付ける。</li>
+      <li>Mermaid loaderを13節どおり実装し、Chart.jsとMermaid本体を成果物へbundleしない。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npm run clean
 npm run build
 node --check dist/cli.js
 npm pack --dry-run
 </code></pre>
-<p>M0完了条件:</p>
-<ul>
-<li>上記すべてが0で終了する。</li>
-<li>15.3節の6成果物だけで次工程を開始できる。</li>
-</ul>
-<h3>M1: CLIとローカルサーバー</h3>
-<h4>T1.1 CLI option parser</h4>
-<p>対象file:</p>
-<ul>
-<li><code>src/cli/options.ts</code></li>
-<li><code>tests/unit/cli-options.test.ts</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li><code>CliRunOptions</code>、<code>CliCommand</code>、<code>CliUsageError</code>を定義する。</li>
-<li><code>parseArgs</code>を使い、7.2節と7.3節の構文・値域を実装する。</li>
-<li>filesystem validationは実装しない。</li>
-<li>16.1節の必須caseをtable-driven testにする。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npx vitest run tests/unit/cli-options.test.ts
+    <p>M0完了条件:</p>
+    <ul>
+      <li>上記すべてが0で終了する。</li>
+      <li>15.3節の6成果物だけで次工程を開始できる。</li>
+    </ul>
+    <h3>M1: CLIとローカルサーバー</h3>
+    <h4>T1.1 CLI option parser</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>src/cli/options.ts</code></li>
+      <li><code>tests/unit/cli-options.test.ts</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li>
+        <code>CliRunOptions</code>、<code>CliCommand</code>、<code>CliUsageError</code>を定義する。
+      </li>
+      <li><code>parseArgs</code>を使い、7.2節と7.3節の構文・値域を実装する。</li>
+      <li>filesystem validationは実装しない。</li>
+      <li>16.1節の必須caseをtable-driven testにする。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npx vitest run tests/unit/cli-options.test.ts
 npm run typecheck
 </code></pre>
-<h4>T1.2 MIMEと安全なfile解決</h4>
-<p>対象file:</p>
-<ul>
-<li><code>src/server/mime.ts</code></li>
-<li><code>src/server/static-file.ts</code></li>
-<li><code>tests/unit/mime.test.ts</code></li>
-<li><code>tests/unit/paths.test.ts</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li>拡張子からContent-Typeを返すpure functionを実装する。</li>
-<li>8.3節のsegment検証とroot配下確認をpure functionとして分離する。</li>
-<li>通常ファイルだけをstreamする処理を実装する。</li>
-<li>malformed path、Unicode、space、nested pathをtestする。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npx vitest run tests/unit/mime.test.ts tests/unit/paths.test.ts
+    <h4>T1.2 MIMEと安全なfile解決</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>src/server/mime.ts</code></li>
+      <li><code>src/server/static-file.ts</code></li>
+      <li><code>tests/unit/mime.test.ts</code></li>
+      <li><code>tests/unit/paths.test.ts</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li>拡張子からContent-Typeを返すpure functionを実装する。</li>
+      <li>8.3節のsegment検証とroot配下確認をpure functionとして分離する。</li>
+      <li>通常ファイルだけをstreamする処理を実装する。</li>
+      <li>malformed path、Unicode、space、nested pathをtestする。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npx vitest run tests/unit/mime.test.ts tests/unit/paths.test.ts
 npm run typecheck
 </code></pre>
-<h4>T1.3 HTTP routeとserver lifecycle</h4>
-<p>対象file:</p>
-<ul>
-<li><code>src/server/types.ts</code></li>
-<li><code>src/server/shell.ts</code></li>
-<li><code>src/server/routes.ts</code></li>
-<li><code>src/server/start.ts</code></li>
-<li><code>tests/server/server.test.ts</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li>6.2節の<code>StartServerOptions</code>と<code>RunningServer</code>を定義する。</li>
-<li>9節のShell HTMLを返すfunctionを実装する。</li>
-<li>8.1節のroute tableを明示的な分岐で実装する。</li>
-<li>GET、HEAD、405、400、404、500を実装する。</li>
-<li>port <code>0</code>から実portを返す処理とidempotentな<code>close</code>を実装する。</li>
-<li>16.2節のserver testを完成させる。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npx vitest run tests/server/server.test.ts
+    <h4>T1.3 HTTP routeとserver lifecycle</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>src/server/types.ts</code></li>
+      <li><code>src/server/shell.ts</code></li>
+      <li><code>src/server/routes.ts</code></li>
+      <li><code>src/server/start.ts</code></li>
+      <li><code>tests/server/server.test.ts</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li>6.2節の<code>StartServerOptions</code>と<code>RunningServer</code>を定義する。</li>
+      <li>9節のShell HTMLを返すfunctionを実装する。</li>
+      <li>8.1節のroute tableを明示的な分岐で実装する。</li>
+      <li>GET、HEAD、405、400、404、500を実装する。</li>
+      <li>port <code>0</code>から実portを返す処理とidempotentな<code>close</code>を実装する。</li>
+      <li>16.2節のserver testを完成させる。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npx vitest run tests/server/server.test.ts
 npm run typecheck
 </code></pre>
-<h4>T1.4 CLI top-levelとbrowser起動</h4>
-<p>対象file:</p>
-<ul>
-<li><code>src/cli/open-browser.ts</code></li>
-<li><code>src/cli/main.ts</code></li>
-<li><code>examples/basic/overview.html</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li><code>open</code> packageを呼ぶ<code>openViewer</code>を実装する。</li>
-<li>directoryをfilesystemで検証する。</li>
-<li>runtime rootを<code>import.meta.url</code>から解決する。</li>
-<li>serverを起動し、固定形式のURLをstdoutへ出す。</li>
-<li>signal handling、debug stack、exit codeを7.3節と7.4節どおり実装する。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npm run build
+    <h4>T1.4 CLI top-levelとbrowser起動</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>src/cli/open-browser.ts</code></li>
+      <li><code>src/cli/main.ts</code></li>
+      <li><code>examples/basic/overview.html</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li><code>open</code> packageを呼ぶ<code>openViewer</code>を実装する。</li>
+      <li>directoryをfilesystemで検証する。</li>
+      <li>runtime rootを<code>import.meta.url</code>から解決する。</li>
+      <li>serverを起動し、固定形式のURLをstdoutへ出す。</li>
+      <li>signal handling、debug stack、exit codeを7.3節と7.4節どおり実装する。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npm run build
 node dist/cli.js --help
 node dist/cli.js --version
 node dist/cli.js ./examples/basic --port 0 --no-open
 </code></pre>
-<p>上の手動確認では表示されたURLへ別terminalからrequestし、最後にCtrl+Cで終了する。M1完了時点で<code>examples/basic/overview.html</code>を作成しておく。</p>
-<h3>M2: Viewer Shellと基本表示</h3>
-<h4>T2.1 Browser型、定数、layout</h4>
-<p>対象file:</p>
-<ul>
-<li><code>src/browser/constants.ts</code></li>
-<li><code>src/browser/types.ts</code></li>
-<li><code>src/browser/layout.ts</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li>Runtime prefix、Content prefix、title suffixを定数化する。</li>
-<li>6.3節の型を定義する。</li>
-<li>9節のDOMを<code>createElement</code>で組み立てる。</li>
-<li><code>renderLoadState</code>の4状態を実装する。</li>
-<li>HTML文字列をlayoutへ直接代入しない。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npm run typecheck
+    <p>
+      上の手動確認では表示されたURLへ別terminalからrequestし、最後にCtrl+Cで終了する。M1完了時点で<code>examples/basic/overview.html</code>を作成しておく。
+    </p>
+    <h3>M2: Viewer Shellと基本表示</h3>
+    <h4>T2.1 Browser型、定数、layout</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>src/browser/constants.ts</code></li>
+      <li><code>src/browser/types.ts</code></li>
+      <li><code>src/browser/layout.ts</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li>Runtime prefix、Content prefix、title suffixを定数化する。</li>
+      <li>6.3節の型を定義する。</li>
+      <li>9節のDOMを<code>createElement</code>で組み立てる。</li>
+      <li><code>renderLoadState</code>の4状態を実装する。</li>
+      <li>HTML文字列をlayoutへ直接代入しない。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npm run typecheck
 npm run lint
 npm run build
 </code></pre>
-<h4>T2.2 Router pure functions</h4>
-<p>対象file:</p>
-<ul>
-<li><code>src/browser/router.ts</code></li>
-<li><code>tests/unit/router.test.ts</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li><code>normalizeDocumentPath</code>を11.2節どおり実装する。</li>
-<li>Shell URLとContent URLの生成・逆変換を実装する。</li>
-<li><code>parseRoute</code>を実装する。</li>
-<li>16.1節のrouter caseをすべてtestする。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npx vitest run tests/unit/router.test.ts
+    <h4>T2.2 Router pure functions</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>src/browser/router.ts</code></li>
+      <li><code>tests/unit/router.test.ts</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li><code>normalizeDocumentPath</code>を11.2節どおり実装する。</li>
+      <li>Shell URLとContent URLの生成・逆変換を実装する。</li>
+      <li><code>parseRoute</code>を実装する。</li>
+      <li>16.1節のrouter caseをすべてtestする。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npx vitest run tests/unit/router.test.ts
 npm run typecheck
 </code></pre>
-<h4>T2.3 Navigationのparseとmount</h4>
-<p>対象file:</p>
-<ul>
-<li><code>src/browser/navigation.ts</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li>10.1節の8手順を実装する。</li>
-<li>Viewer内linkの分類、hrefの絶対URL化、invalid linkのwarningを実装する。</li>
-<li><code>updateActiveNavigation</code>を実装する。</li>
-<li>event listenerはまだこのfileへ実装せず、<code>start.ts</code>から登録する。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npm run typecheck
+    <h4>T2.3 Navigationのparseとmount</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>src/browser/navigation.ts</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li>10.1節の8手順を実装する。</li>
+      <li>Viewer内linkの分類、hrefの絶対URL化、invalid linkのwarningを実装する。</li>
+      <li><code>updateActiveNavigation</code>を実装する。</li>
+      <li>event listenerはまだこのfileへ実装せず、<code>start.ts</code>から登録する。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npm run typecheck
 npm run lint
 npm run build
 </code></pre>
-<h4>T2.4 iframe生成と基本orchestration</h4>
-<p>対象file:</p>
-<ul>
-<li><code>src/browser/frame.ts</code></li>
-<li><code>src/browser/document-loader.ts</code></li>
-<li><code>src/browser/title.ts</code></li>
-<li><code>src/browser/start.ts</code></li>
-<li><code>tests/browser/viewer.spec.ts</code></li>
-<li><code>tests/fixtures/browser/**</code></li>
-<li><code>examples/nested/**</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li><code>buildSrcdoc</code>とtitle決定を12.2節どおり実装する。</li>
-<li><code>document-loader.ts</code>にfetchとHTTP error変換だけを実装する。</li>
-<li><code>start.ts</code>に9節の初期化手順と12.1節の読み込み手順を実装する。</li>
-<li>navigationの最初の文書を<code>replaceState</code>して表示する。</li>
-<li>loading、ready、404、一般errorを表示する。</li>
-<li>Browser fixtureと、初期表示・nested画像・404のPlaywright testを作る。</li>
-<li><code>examples/nested</code>へnested文書と相対画像の最小例を作る。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npm run build
+    <h4>T2.4 iframe生成と基本orchestration</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>src/browser/frame.ts</code></li>
+      <li><code>src/browser/document-loader.ts</code></li>
+      <li><code>src/browser/title.ts</code></li>
+      <li><code>src/browser/start.ts</code></li>
+      <li><code>tests/browser/viewer.spec.ts</code></li>
+      <li><code>tests/fixtures/browser/**</code></li>
+      <li><code>examples/nested/**</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li><code>buildSrcdoc</code>とtitle決定を12.2節どおり実装する。</li>
+      <li><code>document-loader.ts</code>にfetchとHTTP error変換だけを実装する。</li>
+      <li><code>start.ts</code>に9節の初期化手順と12.1節の読み込み手順を実装する。</li>
+      <li>navigationの最初の文書を<code>replaceState</code>して表示する。</li>
+      <li>loading、ready、404、一般errorを表示する。</li>
+      <li>Browser fixtureと、初期表示・nested画像・404のPlaywright testを作る。</li>
+      <li><code>examples/nested</code>へnested文書と相対画像の最小例を作る。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npm run build
 npm run test:browser
 </code></pre>
-<p>M2完了条件:</p>
-<ul>
-<li>Browser fixtureのSidebarと最初の文書が表示される。</li>
-<li>Browser fixtureとnested exampleの相対画像がiframe内に表示される。</li>
-<li>不存在文書でViewer全体が消えず、error状態になる。</li>
-</ul>
-<h3>M3: ルーティング、リンク、競合制御</h3>
-<h4>T3.1 click分類とShell navigation</h4>
-<p>対象file:</p>
-<ul>
-<li><code>src/browser/links.ts</code></li>
-<li><code>src/browser/start.ts</code></li>
-<li><code>tests/browser/viewer.spec.ts</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li>plain primary clickの判定を実装する。</li>
-<li>Sidebar clickとiframe clickを同じ<code>navigate</code>処理へ接続する。</li>
-<li>Viewer内HTML、同一文書hash、外部URL、modifier clickを分類する。</li>
-<li><code>push</code>、<code>replace</code>、<code>none</code>のhistory modeを実装する。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npm run typecheck
+    <p>M2完了条件:</p>
+    <ul>
+      <li>Browser fixtureのSidebarと最初の文書が表示される。</li>
+      <li>Browser fixtureとnested exampleの相対画像がiframe内に表示される。</li>
+      <li>不存在文書でViewer全体が消えず、error状態になる。</li>
+    </ul>
+    <h3>M3: ルーティング、リンク、競合制御</h3>
+    <h4>T3.1 click分類とShell navigation</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>src/browser/links.ts</code></li>
+      <li><code>src/browser/start.ts</code></li>
+      <li><code>tests/browser/viewer.spec.ts</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li>plain primary clickの判定を実装する。</li>
+      <li>Sidebar clickとiframe clickを同じ<code>navigate</code>処理へ接続する。</li>
+      <li>Viewer内HTML、同一文書hash、外部URL、modifier clickを分類する。</li>
+      <li><code>push</code>、<code>replace</code>、<code>none</code>のhistory modeを実装する。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npm run typecheck
 npm run build
 npm run test:browser
 </code></pre>
-<h4>T3.2 履歴、anchor、title、abort</h4>
-<p>対象file:</p>
-<ul>
-<li><code>src/browser/start.ts</code></li>
-<li><code>src/browser/title.ts</code></li>
-<li><code>src/browser/navigation.ts</code></li>
-<li><code>tests/browser/viewer.spec.ts</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li><code>popstate</code>と<code>hashchange</code>を接続する。</li>
-<li>anchorのdecode、探索、scrollを実装する。</li>
-<li>iframeとShell titleを同期する。</li>
-<li>active navigationを同期する。</li>
-<li><code>AbortController</code>と各await後のcurrent request確認を実装する。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npm run typecheck
+    <h4>T3.2 履歴、anchor、title、abort</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>src/browser/start.ts</code></li>
+      <li><code>src/browser/title.ts</code></li>
+      <li><code>src/browser/navigation.ts</code></li>
+      <li><code>tests/browser/viewer.spec.ts</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li><code>popstate</code>と<code>hashchange</code>を接続する。</li>
+      <li>anchorのdecode、探索、scrollを実装する。</li>
+      <li>iframeとShell titleを同期する。</li>
+      <li>active navigationを同期する。</li>
+      <li><code>AbortController</code>と各await後のcurrent request確認を実装する。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npm run typecheck
 npm run build
 npm run test:browser
 </code></pre>
-<p>M3完了条件:</p>
-<ul>
-<li>Sidebar、iframe、戻る、進む、再読み込みから同じ文書へ到達できる。</li>
-<li>nested pathと文書内anchorが動作する。</li>
-<li>素早い連続遷移で最後に選んだ文書だけが表示される。</li>
-<li>外部linkとmodifier clickを壊さない。</li>
-</ul>
-<h3>M4: 表示品質、Chart.js、Mermaid</h3>
-<h4>T4.1 Shell CSSとmobile menu</h4>
-<p>対象file:</p>
-<ul>
-<li><code>src/styles/shell.css</code></li>
-<li><code>src/browser/layout.ts</code></li>
-<li><code>src/browser/start.ts</code></li>
-<li><code>tests/browser/viewer.spec.ts</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li>14.1節のdesktop layoutを実装する。</li>
-<li><code>768px</code>未満のoverlay Sidebarを実装する。</li>
-<li>menu buttonのARIAと、文書遷移後に閉じる処理を実装する。</li>
-<li>focus、active、loading、errorの見た目を実装する。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npm run typecheck
+    <p>M3完了条件:</p>
+    <ul>
+      <li>Sidebar、iframe、戻る、進む、再読み込みから同じ文書へ到達できる。</li>
+      <li>nested pathと文書内anchorが動作する。</li>
+      <li>素早い連続遷移で最後に選んだ文書だけが表示される。</li>
+      <li>外部linkとmodifier clickを壊さない。</li>
+    </ul>
+    <h3>M4: 表示品質、Chart.js、Mermaid</h3>
+    <h4>T4.1 Shell CSSとmobile menu</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>src/styles/shell.css</code></li>
+      <li><code>src/browser/layout.ts</code></li>
+      <li><code>src/browser/start.ts</code></li>
+      <li><code>tests/browser/viewer.spec.ts</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li>14.1節のdesktop layoutを実装する。</li>
+      <li><code>768px</code>未満のoverlay Sidebarを実装する。</li>
+      <li>menu buttonのARIAと、文書遷移後に閉じる処理を実装する。</li>
+      <li>focus、active、loading、errorの見た目を実装する。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npm run typecheck
 npm run build
 npm run test:browser
 </code></pre>
-<h4>T4.2 Document CSS</h4>
-<p>対象file:</p>
-<ul>
-<li><code>src/styles/document.css</code></li>
-<li><code>examples/basic/*.html</code></li>
-<li><code>examples/nested/**</code></li>
-<li><code>tests/fixtures/browser/**</code></li>
-<li><code>tests/browser/viewer.spec.ts</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li>14.2節のsemantic elementをすべてstyleする。</li>
-<li>table、pre、長いURL、画像で横overflowしないことを確認する。</li>
-<li>basic exampleに主要semantic elementを1つずつ含める。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npm run build
+    <h4>T4.2 Document CSS</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>src/styles/document.css</code></li>
+      <li><code>examples/basic/*.html</code></li>
+      <li><code>examples/nested/**</code></li>
+      <li><code>tests/fixtures/browser/**</code></li>
+      <li><code>tests/browser/viewer.spec.ts</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li>14.2節のsemantic elementをすべてstyleする。</li>
+      <li>table、pre、長いURL、画像で横overflowしないことを確認する。</li>
+      <li>basic exampleに主要semantic elementを1つずつ含める。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npm run build
 npm run test:browser
 </code></pre>
-<h4>T4.3 ChartとMermaid example</h4>
-<p>対象file:</p>
-<ul>
-<li><code>examples/charts/chart.html</code></li>
-<li><code>examples/mermaid/diagram.html</code></li>
-<li><code>tests/fixtures/browser/chart.html</code></li>
-<li><code>tests/fixtures/browser/diagram.html</code></li>
-<li><code>tests/browser/viewer.spec.ts</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li>13.1節のChart例を作る。</li>
-<li>13.2節のMermaid例を作る。</li>
-<li>Browser fixtureにも同じ最小例を追加する。</li>
-<li>canvas描画とMermaid SVGを検証する。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npm run typecheck
+    <h4>T4.3 ChartとMermaid example</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>examples/charts/chart.html</code></li>
+      <li><code>examples/mermaid/diagram.html</code></li>
+      <li><code>tests/fixtures/browser/chart.html</code></li>
+      <li><code>tests/fixtures/browser/diagram.html</code></li>
+      <li><code>tests/browser/viewer.spec.ts</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li>13.1節のChart例を作る。</li>
+      <li>13.2節のMermaid例を作る。</li>
+      <li>Browser fixtureにも同じ最小例を追加する。</li>
+      <li>canvas描画とMermaid SVGを検証する。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npm run typecheck
 npm run lint
 npm run build
 npm run test:browser
 </code></pre>
-<p>M4完了条件:</p>
-<ul>
-<li>desktopとmobile viewportのbrowser testが通る。</li>
-<li>semantic HTMLは追加installなしで表示され、Chart.jsとMermaidはoptional peerを導入した場合に表示される。</li>
-</ul>
-<h3>M5: ローカルpackage検証とv0.1完成</h3>
-<h4>T5.1 READMEと利用例</h4>
-<p>対象file:</p>
-<ul>
-<li><code>README.md</code></li>
-</ul>
-<p>READMEへ次をこの順で記載する。</p>
-<ol>
-<li>目的</li>
-<li>install</li>
-<li><code>npx --no-install spec-html ./specs</code></li>
-<li>npm script例</li>
-<li>directory構成</li>
-<li>directoryから構成されるnavigationの説明</li>
-<li>HTML fragment例</li>
-<li>Chart.js例</li>
-<li>Mermaid例</li>
-<li>CLI option</li>
-<li>v0.1の制約</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npm run build
+    <p>M4完了条件:</p>
+    <ul>
+      <li>desktopとmobile viewportのbrowser testが通る。</li>
+      <li>
+        semantic HTMLは追加installなしで表示され、Chart.jsとMermaidはoptional
+        peerを導入した場合に表示される。
+      </li>
+    </ul>
+    <h3>M5: ローカルpackage検証とv0.1完成</h3>
+    <h4>T5.1 READMEと利用例</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>README.md</code></li>
+    </ul>
+    <p>READMEへ次をこの順で記載する。</p>
+    <ol>
+      <li>目的</li>
+      <li>install</li>
+      <li><code>npx --no-install spec-html ./specs</code></li>
+      <li>npm script例</li>
+      <li>directory構成</li>
+      <li>directoryから構成されるnavigationの説明</li>
+      <li>HTML fragment例</li>
+      <li>Chart.js例</li>
+      <li>Mermaid例</li>
+      <li>CLI option</li>
+      <li>v0.1の制約</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npm run build
 npm pack --dry-run
 </code></pre>
-<p>tarballのfile一覧に<code>README.md</code>が含まれ、README記載のcommandと7節のCLI仕様が一致することを確認する。</p>
-<h4>T5.2 pack test</h4>
-<p>対象file:</p>
-<ul>
-<li><code>scripts/test-pack.mjs</code></li>
-</ul>
-<p>作業:</p>
-<ol>
-<li>16.4節の11手順を実装する。</li>
-<li>timeout時にもchild processと一時fileを必ず片付ける。</li>
-<li>source treeへのsymlinkや相対参照がないことを確認する。</li>
-</ol>
-<p>確認:</p>
-<pre><code class="language-bash">npm run test:pack
+    <p>
+      tarballのfile一覧に<code>README.md</code>が含まれ、README記載のcommandと7節のCLI仕様が一致することを確認する。
+    </p>
+    <h4>T5.2 pack test</h4>
+    <p>対象file:</p>
+    <ul>
+      <li><code>scripts/test-pack.mjs</code></li>
+    </ul>
+    <p>作業:</p>
+    <ol>
+      <li>16.4節の11手順を実装する。</li>
+      <li>timeout時にもchild processと一時fileを必ず片付ける。</li>
+      <li>source treeへのsymlinkや相対参照がないことを確認する。</li>
+    </ol>
+    <p>確認:</p>
+    <pre><code class="language-bash">npm run test:pack
 </code></pre>
-<h4>T5.3 最終検証</h4>
-<p>対象file:</p>
-<ul>
-<li>なし（検証のみ。失敗を直す場合は、原因となったtaskへ戻ってそのtaskの対象fileを修正する）</li>
-</ul>
-<p>確認:</p>
-<p>次を記載順に実行する。</p>
-<pre><code class="language-bash">npm ci
+    <h4>T5.3 最終検証</h4>
+    <p>対象file:</p>
+    <ul>
+      <li>
+        なし（検証のみ。失敗を直す場合は、原因となったtaskへ戻ってそのtaskの対象fileを修正する）
+      </li>
+    </ul>
+    <p>確認:</p>
+    <p>次を記載順に実行する。</p>
+    <pre><code class="language-bash">npm ci
 npx playwright install chromium
 npm run clean
 npm run typecheck
@@ -1641,41 +2079,83 @@ npm run test:browser
 npm run test:pack
 npm pack --dry-run
 </code></pre>
-<p>途中で1つでも失敗した場合は完了にしない。すべて成功後、18節のchecklistを上から確認してv0.1完成とする。</p>
-</section>
-<section id="acceptance-criteria">
-<h2>18. 最終受け入れ条件</h2>
-<ul>
-<li><input checked="" disabled="" type="checkbox"> ローカルpathまたはローカルtarballからdevDependencyとしてインストールできる。</li>
-<li><input checked="" disabled="" type="checkbox"> インストールにより<code>spec-html</code> binaryが利用可能になる。</li>
-<li><input checked="" disabled="" type="checkbox"> <code>npx --no-install spec-html ./specs</code>でローカルにinstall済みのViewerが起動し、ブラウザが開く。</li>
-<li><input checked="" disabled="" type="checkbox"> 利用プロジェクト側でbuild、copy、設定ファイル作成が不要である。</li>
-<li><input checked="" disabled="" type="checkbox"> 利用側にViewer用<code>index.html</code>が不要である。</li>
-<li><input checked="" disabled="" type="checkbox"> content directoryから構成したnavigationがSidebarとして表示される。</li>
-<li><input checked="" disabled="" type="checkbox"> HTML fragment形式の設計書を表示できる。</li>
-<li><input checked="" disabled="" type="checkbox"> nested文書と相対assetを表示できる。</li>
-<li><input checked="" disabled="" type="checkbox"> Sidebarと文書内リンクで遷移できる。</li>
-<li><input checked="" disabled="" type="checkbox"> 再読み込み、戻る、進む、文書内アンカーが動作する。</li>
-<li><input checked="" disabled="" type="checkbox"> 文書タイトルとactive navigationが同期する。</li>
-<li><input checked="" disabled="" type="checkbox"> Chart.jsとMermaidがoptional peerを導入した場合に動作し、未導入でもViewerが起動する。</li>
-<li><input checked="" disabled="" type="checkbox"> 読み込み失敗時にViewer内で理解可能なエラーを表示する。</li>
-<li><input checked="" disabled="" type="checkbox"> Ctrl+Cでサーバーが終了する。</li>
-<li><input checked="" disabled="" type="checkbox"> <code>npm pack</code>した成果物を別fixtureへインストールして同じ動作を確認できる。</li>
-<li><input checked="" disabled="" type="checkbox"> v0.1の全自動テストが通る。</li>
-</ul>
-</section>
-<section id="implementation-decisions">
-<h2>19. 実装判断の扱い</h2>
-<p>M0からM5までを開始するための未確定事項はない。2.2節の固定値を使用する。</p>
-<p>実装中に本書で扱っていない選択肢が現れた場合は、次の優先順位で判断する。</p>
-<ol>
-<li>利用側の作業を増やさない。</li>
-<li>標準HTMLを維持し、独自記法を追加しない。</li>
-<li>新しいdependencyを追加せず、Node.jsまたはBrowser標準APIを使う。</li>
-<li>module間の依存方向を維持する。</li>
-<li>v0.1の非目標に該当する場合は実装しない。</li>
-<li>それでも決められない場合だけ、実装を止めて計画書を更新する。</li>
-</ol>
-<p>npm registryへの公開、公開用GitHub Release、第三者向けhostingは行わない。外部公開が必要になった場合は既存方針の延長として扱わず、project ownerの明示的な承認を得た別変更として目的、権利、security model、配布方法を設計し直す。将来拡張はv0.1完了後にローカルでの実利用のフィードバックを基に判断する。</p>
-</section>
+    <p>
+      途中で1つでも失敗した場合は完了にしない。すべて成功後、18節のchecklistを上から確認してv0.1完成とする。
+    </p>
+  </section>
+  <section id="acceptance-criteria">
+    <h2>18. 最終受け入れ条件</h2>
+    <ul>
+      <li>
+        <input checked="" disabled="" type="checkbox" />
+        ローカルpathまたはローカルtarballからdevDependencyとしてインストールできる。
+      </li>
+      <li>
+        <input checked="" disabled="" type="checkbox" /> インストールにより<code>spec-html</code>
+        binaryが利用可能になる。
+      </li>
+      <li>
+        <input checked="" disabled="" type="checkbox" />
+        <code>npx --no-install spec-html ./specs</code
+        >でローカルにinstall済みのViewerが起動し、ブラウザが開く。
+      </li>
+      <li>
+        <input checked="" disabled="" type="checkbox" />
+        利用プロジェクト側でbuild、copy、設定ファイル作成が不要である。
+      </li>
+      <li>
+        <input checked="" disabled="" type="checkbox" />
+        利用側にViewer用<code>index.html</code>が不要である。
+      </li>
+      <li>
+        <input checked="" disabled="" type="checkbox" /> content
+        directoryから構成したnavigationがSidebarとして表示される。
+      </li>
+      <li>
+        <input checked="" disabled="" type="checkbox" /> HTML fragment形式の設計書を表示できる。
+      </li>
+      <li><input checked="" disabled="" type="checkbox" /> nested文書と相対assetを表示できる。</li>
+      <li><input checked="" disabled="" type="checkbox" /> Sidebarと文書内リンクで遷移できる。</li>
+      <li>
+        <input checked="" disabled="" type="checkbox" />
+        再読み込み、戻る、進む、文書内アンカーが動作する。
+      </li>
+      <li>
+        <input checked="" disabled="" type="checkbox" /> 文書タイトルとactive navigationが同期する。
+      </li>
+      <li>
+        <input checked="" disabled="" type="checkbox" /> Chart.jsとMermaidがoptional
+        peerを導入した場合に動作し、未導入でもViewerが起動する。
+      </li>
+      <li>
+        <input checked="" disabled="" type="checkbox" />
+        読み込み失敗時にViewer内で理解可能なエラーを表示する。
+      </li>
+      <li><input checked="" disabled="" type="checkbox" /> Ctrl+Cでサーバーが終了する。</li>
+      <li>
+        <input checked="" disabled="" type="checkbox" />
+        <code>npm pack</code>した成果物を別fixtureへインストールして同じ動作を確認できる。
+      </li>
+      <li><input checked="" disabled="" type="checkbox" /> v0.1の全自動テストが通る。</li>
+    </ul>
+  </section>
+  <section id="implementation-decisions">
+    <h2>19. 実装判断の扱い</h2>
+    <p>M0からM5までを開始するための未確定事項はない。2.2節の固定値を使用する。</p>
+    <p>実装中に本書で扱っていない選択肢が現れた場合は、次の優先順位で判断する。</p>
+    <ol>
+      <li>利用側の作業を増やさない。</li>
+      <li>標準HTMLを維持し、独自記法を追加しない。</li>
+      <li>新しいdependencyを追加せず、Node.jsまたはBrowser標準APIを使う。</li>
+      <li>module間の依存方向を維持する。</li>
+      <li>v0.1の非目標に該当する場合は実装しない。</li>
+      <li>それでも決められない場合だけ、実装を止めて計画書を更新する。</li>
+    </ol>
+    <p>
+      npm registryへの公開、公開用GitHub
+      Release、第三者向けhostingは行わない。外部公開が必要になった場合は既存方針の延長として扱わず、project
+      ownerの明示的な承認を得た別変更として目的、権利、security
+      model、配布方法を設計し直す。将来拡張はv0.1完了後にローカルでの実利用のフィードバックを基に判断する。
+    </p>
+  </section>
 </article>

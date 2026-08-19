@@ -1,6 +1,8 @@
 import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, extname } from "node:path";
+import { readArchivedDocuments } from "../content/archive.js";
 import { findContentDocuments } from "../content/documents.js";
+import type { NavigationView } from "../content/document-path.js";
 
 interface NavigationDocument {
   path: string;
@@ -16,8 +18,15 @@ const RELATIVE_TIME_LIMIT_IN_MS = 7 * DAY_IN_MS;
 export async function createNavigationHtml(
   contentRoot: string,
   now = new Date(),
+  view: NavigationView = "documents",
 ): Promise<string> {
-  const documents = await findNavigationDocuments(contentRoot);
+  const [allDocuments, archivedDocuments] = await Promise.all([
+    findNavigationDocuments(contentRoot),
+    readArchivedDocuments(contentRoot),
+  ]);
+  const documents = allDocuments.filter(
+    (document) => archivedDocuments.has(document.path) === (view === "archive"),
+  );
   const groups = new Map<string, NavigationDocument[]>();
 
   for (const document of documents) {
@@ -28,7 +37,8 @@ export async function createNavigationHtml(
     groups.set(group, groupDocuments);
   }
 
-  const lines = ['<nav aria-label="Documents">'];
+  const navigationLabel = view === "archive" ? "Archive" : "Documents";
+  const lines = [`<nav aria-label="${navigationLabel}">`];
   const sortedGroups = [...groups].sort(([left], [right]) => {
     if (left.length === 0) {
       return -1;

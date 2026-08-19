@@ -17,12 +17,20 @@ export interface CliLintOptions {
   maxIssues: number;
 }
 
+export interface CliFormatOptions {
+  targetPath: string;
+  mode: "check" | "write";
+  reporter: "compact" | "json";
+}
+
 export type CliCommand =
   | { kind: "run"; options: CliRunOptions }
   | { kind: "lint"; options: CliLintOptions }
+  | { kind: "format"; options: CliFormatOptions }
   | { kind: "explain"; rule: RuleId }
   | { kind: "help" }
   | { kind: "lint-help" }
+  | { kind: "format-help" }
   | { kind: "version" };
 
 export class CliUsageError extends Error {
@@ -36,8 +44,53 @@ export function parseCliCommand(
   if (args[0] === "lint") {
     return parseLintCommand(args.slice(1), cwd);
   }
+  if (args[0] === "format") {
+    return parseFormatCommand(args.slice(1), cwd);
+  }
 
   return parseRunCommand(args, cwd);
+}
+
+function parseFormatCommand(args: readonly string[], cwd: string): CliCommand {
+  let parsed: ReturnType<typeof parseFormatArgs>;
+  try {
+    parsed = parseFormatArgs([...args]);
+  } catch (error: unknown) {
+    throw new CliUsageError(messageForParseArgsError(error));
+  }
+
+  if (parsed.positionals.length > 1) {
+    throw new CliUsageError("pathは1つだけ指定してください");
+  }
+  if (parsed.values.help === true) {
+    if (
+      parsed.positionals.length > 0 ||
+      parsed.values.check === true ||
+      parsed.values.write === true ||
+      parsed.values.reporter !== undefined
+    ) {
+      throw new CliUsageError("--helpはpathやformat optionと同時に指定できません");
+    }
+    return { kind: "format-help" };
+  }
+  const check = parsed.values.check === true;
+  const write = parsed.values.write === true;
+  if (check === write) {
+    throw new CliUsageError("--checkまたは--writeのどちらか1つを指定してください");
+  }
+  const reporter = parsed.values.reporter ?? "compact";
+  if (reporter !== "compact" && reporter !== "json") {
+    throw new CliUsageError("reporterはcompactまたはjsonで指定してください");
+  }
+  const target = parsed.positionals[0] ?? "./specs";
+  return {
+    kind: "format",
+    options: {
+      targetPath: resolve(cwd, target),
+      mode: check ? "check" : "write",
+      reporter,
+    },
+  };
 }
 
 function parseRunCommand(args: readonly string[], cwd: string): CliCommand {
@@ -211,6 +264,20 @@ function parseLintArgs(args: string[]) {
       "warnings-as-errors": { type: "boolean" },
       "max-issues": { type: "string" },
       explain: { type: "string" },
+      help: { type: "boolean" },
+    },
+  });
+}
+
+function parseFormatArgs(args: string[]) {
+  return parseArgs({
+    args,
+    allowPositionals: true,
+    strict: true,
+    options: {
+      check: { type: "boolean" },
+      write: { type: "boolean" },
+      reporter: { type: "string" },
       help: { type: "boolean" },
     },
   });

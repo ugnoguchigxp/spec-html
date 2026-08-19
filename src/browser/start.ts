@@ -1,8 +1,10 @@
 import {
   CONTENT_PREFIX,
+  DOCUMENT_STATE_PATH,
   LIVE_RELOAD_PATH,
   NAVIGATION_PATH,
 } from "./constants.js";
+import type { NavigationView } from "../content/document-path.js";
 import { fetchDocument, DocumentHttpError } from "./document-loader.js";
 import { buildSrcdoc } from "./frame.js";
 import type { FrameIntegrations } from "./frame.js";
@@ -43,6 +45,11 @@ import type {
 
 type HistoryMode = "push" | "replace" | "none";
 
+interface DocumentStateResponse {
+  doc: string;
+  archived: boolean;
+}
+
 void initializeViewer().catch((error: unknown) => {
   console.error("Spec HTMLの初期化に失敗しました", error);
 });
@@ -63,17 +70,23 @@ async function initializeViewer(): Promise<void> {
   let themePreference = readThemePreference();
   let sortPreference: SortPreference = "name";
   let sortDirection: SortDirection = "ascending";
+  const initialRoute = parseRoute(new URL(window.location.href));
+  let navigationView = initialRoute.kind === "invalid"
+    ? initialRoute.view
+    : initialRoute.route.view;
   applyThemePreference(document.documentElement, themePreference);
   const elements = createLayout(app);
   updateThemeButtons(elements, themePreference);
   updateSortButtons(elements, sortPreference, sortDirection);
+  updateNavigationViewButton(elements, navigationView);
+  elements.root.dataset.navigationView = navigationView;
   const contentBaseUrl = new URL(CONTENT_PREFIX, window.location.origin);
-  const navigationUrl = new URL(NAVIGATION_PATH, window.location.origin);
   let navigationItems: NavigationItem[] = [];
   let activeAbortController: AbortController | undefined;
   let currentDocument: string | null = null;
   let currentDocumentSource: string | null = null;
-  let currentRoute: RouteState = { doc: null, hash: "" };
+  let currentDocumentArchived: boolean | null = null;
+  let currentRoute: RouteState = { doc: null, hash: "", view: navigationView };
   let detailsOpenedForPrint: HTMLDetailsElement[] = [];
   const mobileViewport = window.matchMedia("(max-width: 767px)");
 
@@ -103,15 +116,64 @@ async function initializeViewer(): Promise<void> {
     }
   };
 
+  const closeDocumentActionsMenu = (restoreFocus = false): void => {
+    if (!elements.documentActionsMenu.hidden) {
+      elements.documentActionsMenu.hidden = true;
+      elements.documentActionsButton.setAttribute("aria-expanded", "false");
+      if (restoreFocus) {
+        elements.documentActionsButton.focus();
+      }
+    }
+  };
+
+  const clearDocumentActionStatus = (): void => {
+    elements.documentActionStatus.replaceChildren();
+    elements.documentActionStatus.hidden = true;
+  };
+
   const clearDocument = (): void => {
     activeAbortController?.abort();
     activeAbortController = undefined;
     currentDocument = null;
     currentDocumentSource = null;
+    currentDocumentArchived = null;
     closeSourceDialog();
+    closeDocumentActionsMenu();
+    clearDocumentActionStatus();
     elements.frame.title = "設計書";
     resetDocumentTitle();
-    updateActiveNavigation(navigationItems, { doc: null, hash: "" });
+    updateActiveNavigation(navigationItems, {
+      doc: null,
+      hash: "",
+      view: navigationView,
+    });
+  };
+
+  const loadNavigation = async (
+    view: NavigationView,
+  ): Promise<NavigationItem[]> => {
+    const navigationUrl = new URL(NAVIGATION_PATH, window.location.origin);
+    if (view === "archive") {
+      navigationUrl.searchParams.set("view", "archive");
+    }
+    const navigationResponse = await fetch(navigationUrl);
+    if (!navigationResponse.ok) {
+      throw new Error(
+        `Navigationの取得に失敗しました: HTTP ${navigationResponse.status}`,
+      );
+    }
+    const items = mountNavigation(
+      elements.navigation,
+      await navigationResponse.text(),
+      contentBaseUrl,
+    );
+    navigationItems = items;
+    navigationView = view;
+    elements.root.dataset.navigationView = view;
+    updateNavigationViewButton(elements, view);
+    sortNavigation(elements.navigation, sortPreference, sortDirection);
+    updateActiveNavigation(navigationItems, currentRoute);
+    return items;
   };
 
   const scrollToHash = (hash: string): void => {
@@ -143,6 +205,7 @@ async function initializeViewer(): Promise<void> {
   ): Promise<void> => {
     if (requestedRoute.doc === null) {
       currentRoute = requestedRoute;
+      updateHistory(requestedRoute, historyMode);
       clearDocument();
       renderLoadState(elements, { kind: "idle" });
       return;
@@ -160,18 +223,23 @@ async function initializeViewer(): Promise<void> {
       return;
     }
 
-    const route: RouteState = { doc, hash: requestedRoute.hash };
-    if (historyMode !== "none") {
-      const shellUrl = createShellUrl(route, new URL(window.location.href));
-      if (historyMode === "push") {
-        history.pushState(null, "", shellUrl.href);
-      } else {
-        history.replaceState(null, "", shellUrl.href);
+    if (doc === currentDocument && currentDocumentArchived !== null) {
+      const resolvedView = viewForArchived(currentDocumentArchived);
+      if (navigationView !== resolvedView) {
+        await loadNavigation(resolvedView);
       }
-    }
-    currentRoute = route;
-
-    if (doc === currentDocument) {
+      const route: RouteState = {
+        doc,
+        hash: requestedRoute.hash,
+        view: resolvedView,
+      };
+      updateHistory(
+        route,
+        historyMode === "none" && requestedRoute.view !== resolvedView
+          ? "replace"
+          : historyMode,
+      );
+      currentRoute = route;
       activeAbortController?.abort();
       activeAbortController = undefined;
       updateActiveNavigation(navigationItems, route);
@@ -185,16 +253,40 @@ async function initializeViewer(): Promise<void> {
     activeAbortController = abortController;
     currentDocument = null;
     currentDocumentSource = null;
+    currentDocumentArchived = null;
     closeSourceDialog();
+    closeDocumentActionsMenu();
+    clearDocumentActionStatus();
     renderLoadState(elements, { kind: "loading", doc });
     setSidebarOpen(false);
 
     try {
       const documentUrl = createContentUrl(doc, new URL(window.location.href));
       const fragment = await fetchDocument(documentUrl, abortController.signal);
+      const archived = await fetchDocumentArchived(doc, abortController.signal);
       if (!isCurrentRequest(activeAbortController, abortController)) {
         return;
       }
+
+      const resolvedView = viewForArchived(archived);
+      if (navigationView !== resolvedView) {
+        await loadNavigation(resolvedView);
+      }
+      if (!isCurrentRequest(activeAbortController, abortController)) {
+        return;
+      }
+      const route: RouteState = {
+        doc,
+        hash: requestedRoute.hash,
+        view: resolvedView,
+      };
+      updateHistory(
+        route,
+        historyMode === "none" && requestedRoute.view !== resolvedView
+          ? "replace"
+          : historyMode,
+      );
+      currentRoute = route;
 
       const title = getFragmentTitle(fragment, doc);
       const srcdoc = buildSrcdoc(
@@ -212,6 +304,7 @@ async function initializeViewer(): Promise<void> {
       activeAbortController = undefined;
       currentDocument = doc;
       currentDocumentSource = fragment;
+      currentDocumentArchived = archived;
       elements.frame.title = title;
       applyDocumentTitle(title);
       updateActiveNavigation(navigationItems, route);
@@ -219,7 +312,8 @@ async function initializeViewer(): Promise<void> {
       if (frameDocument === null) {
         throw new Error("iframe documentを取得できません");
       }
-      installFrameLinkHandler(frameDocument, navigate);
+      installFrameLinkHandler(frameDocument, navigate, () => navigationView);
+      updateDocumentArchiveButton(elements, archived);
       renderLoadState(elements, { kind: "ready", doc, title });
       scrollToHash(route.hash);
     } catch (error: unknown) {
@@ -253,6 +347,99 @@ async function initializeViewer(): Promise<void> {
     });
   }
 
+  elements.documentActionsButton.addEventListener("click", () => {
+    clearDocumentActionStatus();
+    const willOpen = elements.documentActionsMenu.hidden;
+    elements.documentActionsMenu.hidden = !willOpen;
+    elements.documentActionsButton.setAttribute(
+      "aria-expanded",
+      String(willOpen),
+    );
+    if (willOpen) {
+      elements.documentArchiveButton.focus();
+    }
+  });
+
+  elements.documentArchiveButton.addEventListener("click", () => {
+    if (currentDocument === null || currentDocumentArchived === null) {
+      return;
+    }
+    const documentPath = currentDocument;
+    const archived = !currentDocumentArchived;
+    elements.documentArchiveButton.disabled = true;
+    elements.documentArchiveButton.setAttribute("aria-busy", "true");
+    clearDocumentActionStatus();
+
+    void (async () => {
+      try {
+        const updatedArchived = await updateDocumentArchived(
+          documentPath,
+          archived,
+        );
+        if (currentDocument !== documentPath) {
+          return;
+        }
+        currentDocumentArchived = updatedArchived;
+        const view = viewForArchived(updatedArchived);
+        updateDocumentArchiveButton(elements, updatedArchived);
+        await loadNavigation(view);
+        currentRoute = { ...currentRoute, view };
+        updateHistory(currentRoute, "replace");
+        updateActiveNavigation(navigationItems, currentRoute);
+        closeDocumentActionsMenu(true);
+      } catch (error: unknown) {
+        closeDocumentActionsMenu();
+        elements.documentActionStatus.textContent = messageForArchiveError(
+          error,
+          archived,
+        );
+        elements.documentActionStatus.hidden = false;
+      } finally {
+        elements.documentArchiveButton.disabled = false;
+        elements.documentArchiveButton.removeAttribute("aria-busy");
+      }
+    })();
+  });
+
+  elements.navigationViewButton.addEventListener("click", () => {
+    const requestedView: NavigationView = navigationView === "documents"
+      ? "archive"
+      : "documents";
+    elements.navigationViewButton.disabled = true;
+    void (async () => {
+      try {
+        const items = await loadNavigation(requestedView);
+        const firstItem = items[0];
+        if (firstItem === undefined) {
+          await navigate(
+            { doc: null, hash: "", view: requestedView },
+            "push",
+          );
+          renderEmptyNavigation(elements, requestedView);
+          return;
+        }
+        await navigate(
+          {
+            doc: firstItem.doc,
+            hash: firstItem.hash,
+            view: requestedView,
+          },
+          "push",
+        );
+      } catch (error: unknown) {
+        elements.navigation.textContent = "Navigationを読み込めません";
+        renderLoadState(elements, {
+          kind: "error",
+          doc: null,
+          message: "Navigationを読み込めません",
+        });
+        console.error("Spec HTML: Navigationを読み込めません", error);
+      } finally {
+        elements.navigationViewButton.disabled = false;
+      }
+    })();
+  });
+
   elements.documentModeButton.addEventListener("click", () => {
     if (currentDocumentSource === null || elements.root.dataset.state !== "ready") {
       return;
@@ -261,6 +448,16 @@ async function initializeViewer(): Promise<void> {
     elements.sourceDialog.showModal();
   });
   elements.sourceDialogCloseButton.addEventListener("click", closeSourceDialog);
+
+  document.addEventListener("pointerdown", (event) => {
+    const target = event.target;
+    if (
+      target instanceof Node &&
+      !elements.documentActions.contains(target)
+    ) {
+      closeDocumentActionsMenu();
+    }
+  });
 
   for (const preference of ["name", "date"] as const) {
     elements.sortButtons[preference].addEventListener("click", () => {
@@ -308,6 +505,10 @@ async function initializeViewer(): Promise<void> {
     setSidebarOpen(elements.root.dataset.sidebarOpen !== "true");
   });
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !elements.documentActionsMenu.hidden) {
+      closeDocumentActionsMenu(true);
+      return;
+    }
     if (
       event.key === "Escape" &&
       elements.root.dataset.sidebarOpen === "true"
@@ -316,23 +517,50 @@ async function initializeViewer(): Promise<void> {
       elements.menuButton.focus();
     }
   });
-  installSidebarLinkHandler(elements, navigate);
+  installSidebarLinkHandler(elements, navigate, () => navigationView);
 
   window.addEventListener("popstate", () => {
-    const parsed = parseRoute(new URL(window.location.href));
-    if (parsed.kind === "valid") {
-      void navigate(parsed.route, "none");
-    } else if (parsed.kind === "invalid") {
-      currentRoute = { doc: parsed.rawDoc, hash: parsed.hash };
-      clearDocument();
-      renderLoadState(elements, {
-        kind: "error",
-        doc: parsed.rawDoc,
-        message: "文書パスが不正です",
-      });
-    } else {
-      void navigate(parsed.route, "none");
-    }
+    void (async () => {
+      const parsed = parseRoute(new URL(window.location.href));
+      const requestedView = parsed.kind === "invalid"
+        ? parsed.view
+        : parsed.route.view;
+      if (requestedView !== navigationView) {
+        await loadNavigation(requestedView);
+      }
+      if (parsed.kind === "valid") {
+        await navigate(parsed.route, "none");
+      } else if (parsed.kind === "invalid") {
+        currentRoute = {
+          doc: parsed.rawDoc,
+          hash: parsed.hash,
+          view: parsed.view,
+        };
+        clearDocument();
+        renderLoadState(elements, {
+          kind: "error",
+          doc: parsed.rawDoc,
+          message: "文書パスが不正です",
+        });
+      } else {
+        const firstItem = navigationItems[0];
+        if (firstItem === undefined) {
+          await navigate(parsed.route, "none");
+          renderEmptyNavigation(elements, requestedView);
+        } else {
+          await navigate(
+            {
+              doc: firstItem.doc,
+              hash: firstItem.hash,
+              view: requestedView,
+            },
+            "none",
+          );
+        }
+      }
+    })().catch((error: unknown) => {
+      console.error("Spec HTML: 履歴から画面を復元できません", error);
+    });
   });
 
   window.addEventListener("hashchange", () => {
@@ -346,18 +574,7 @@ async function initializeViewer(): Promise<void> {
 
   try {
     renderLoadState(elements, { kind: "loading", doc: "Navigation" });
-    const navigationResponse = await fetch(navigationUrl);
-    if (!navigationResponse.ok) {
-      throw new Error(
-        `Navigationの取得に失敗しました: HTTP ${navigationResponse.status}`,
-      );
-    }
-    navigationItems = mountNavigation(
-      elements.navigation,
-      await navigationResponse.text(),
-      contentBaseUrl,
-    );
-    sortNavigation(elements.navigation, sortPreference, sortDirection);
+    await loadNavigation(navigationView);
   } catch (error: unknown) {
     elements.navigation.textContent = "Navigationを読み込めません";
     renderLoadState(elements, {
@@ -369,7 +586,7 @@ async function initializeViewer(): Promise<void> {
     return;
   }
 
-  await showInitialRoute(parseRoute(new URL(window.location.href)), navigationItems, navigate, elements);
+  await showInitialRoute(initialRoute, navigationItems, navigate, elements);
 }
 
 function installLiveReload(): void {
@@ -381,6 +598,110 @@ function installLiveReload(): void {
     events.close();
     window.location.reload();
   });
+}
+
+function updateHistory(route: RouteState, mode: HistoryMode): void {
+  if (mode === "none") {
+    return;
+  }
+  const shellUrl = createShellUrl(route, new URL(window.location.href));
+  if (mode === "push") {
+    history.pushState(null, "", shellUrl.href);
+  } else {
+    history.replaceState(null, "", shellUrl.href);
+  }
+}
+
+function viewForArchived(archived: boolean): NavigationView {
+  return archived ? "archive" : "documents";
+}
+
+async function fetchDocumentArchived(
+  documentPath: string,
+  signal: AbortSignal,
+): Promise<boolean> {
+  const state = await requestDocumentState(documentPath, { signal });
+  return state.archived;
+}
+
+async function updateDocumentArchived(
+  documentPath: string,
+  archived: boolean,
+): Promise<boolean> {
+  const state = await requestDocumentState(documentPath, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ archived }),
+  });
+  return state.archived;
+}
+
+async function requestDocumentState(
+  documentPath: string,
+  init?: RequestInit,
+): Promise<DocumentStateResponse> {
+  const url = new URL(DOCUMENT_STATE_PATH, window.location.origin);
+  url.searchParams.set("doc", documentPath);
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    throw new Error(`Document state request failed: HTTP ${response.status}`);
+  }
+  const value: unknown = await response.json();
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("doc" in value) ||
+    value.doc !== documentPath ||
+    !("archived" in value) ||
+    typeof value.archived !== "boolean"
+  ) {
+    throw new Error("Document state response is invalid");
+  }
+  return { doc: value.doc, archived: value.archived };
+}
+
+function updateDocumentArchiveButton(
+  elements: ViewerElements,
+  archived: boolean,
+): void {
+  elements.documentArchiveButton.textContent = archived ? "Restore" : "Archive";
+}
+
+function updateNavigationViewButton(
+  elements: ViewerElements,
+  view: NavigationView,
+): void {
+  const label = view === "documents" ? "Archived" : "Documents";
+  elements.navigationViewButton.textContent = label;
+  elements.navigationViewButton.setAttribute(
+    "aria-label",
+    view === "documents"
+      ? "Show archived documents"
+      : "Show documents",
+  );
+}
+
+function renderEmptyNavigation(
+  elements: ViewerElements,
+  view: NavigationView,
+): void {
+  renderLoadState(elements, {
+    kind: "error",
+    doc: null,
+    message: view === "archive"
+      ? "アーカイブされた設計書がありません"
+      : "表示可能な設計書がありません",
+  });
+}
+
+function messageForArchiveError(error: unknown, archived: boolean): string {
+  console.error(
+    `Spec HTML: 文書を${archived ? "Archive" : "Restore"}できません`,
+    error,
+  );
+  return archived
+    ? "Document could not be archived."
+    : "Document could not be restored.";
 }
 
 async function showInitialRoute(
@@ -404,20 +725,24 @@ async function showInitialRoute(
 
   const firstItem = navigationItems[0];
   if (firstItem === undefined) {
-    renderLoadState(elements, {
-      kind: "error",
-      doc: null,
-      message: "表示可能な設計書がありません",
-    });
+    renderEmptyNavigation(elements, parsedRoute.route.view);
     return;
   }
 
-  await navigate({ doc: firstItem.doc, hash: firstItem.hash }, "replace");
+  await navigate(
+    {
+      doc: firstItem.doc,
+      hash: firstItem.hash,
+      view: parsedRoute.route.view,
+    },
+    "replace",
+  );
 }
 
 function installSidebarLinkHandler(
   elements: ViewerElements,
   navigate: (route: RouteState, historyMode: HistoryMode) => Promise<void>,
+  currentView: () => NavigationView,
 ): void {
   elements.sidebar.addEventListener("click", (event) => {
     if (!(event instanceof MouseEvent) || !isPlainPrimaryClick(event)) {
@@ -457,13 +782,14 @@ function installSidebarLinkHandler(
       return;
     }
     event.preventDefault();
-    void navigate({ doc, hash: url.hash }, "push");
+    void navigate({ doc, hash: url.hash, view: currentView() }, "push");
   });
 }
 
 function installFrameLinkHandler(
   frameDocument: Document,
   navigate: (route: RouteState, historyMode: HistoryMode) => Promise<void>,
+  currentView: () => NavigationView,
 ): void {
   frameDocument.addEventListener("click", (event) => {
     const frameWindow = frameDocument.defaultView;
@@ -504,7 +830,7 @@ function installFrameLinkHandler(
       return;
     }
     event.preventDefault();
-    void navigate({ doc, hash: url.hash }, "push");
+    void navigate({ doc, hash: url.hash, view: currentView() }, "push");
   });
 }
 

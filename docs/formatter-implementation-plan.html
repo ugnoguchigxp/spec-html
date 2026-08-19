@@ -1,0 +1,1248 @@
+<article lang="ja">
+  <header>
+    <h1>HTML document Formatter 実装計画</h1>
+    <p>
+      本書は、Spec HTMLで扱うHTML fragmentとfull HTML documentを受理し、安全なdocument
+      envelope正規化と決定的なレイアウト整形を行うFormatterの実装計画を定める。実装者は本書の固定事項を選び直さず、taskごとの変更範囲と検証条件に従って実装する。
+    </p>
+  </header>
+
+  <section id="goals">
+    <h2>1. 目標</h2>
+    <ul>
+      <li>人間とLLMが生成したHTMLを、同じ入力から常に同じ出力を得られる形式へ整える。</li>
+      <li>HTML fragmentを第一級入力としながら、一般的なfull HTML documentも入力として受理する。</li>
+      <li>
+        full
+        documentの<code>doctype</code>、<code>html</code>、<code>head</code>、<code>body</code>を入力用envelopeとして扱い、保存結果をfragmentへ正規化する。
+      </li>
+      <li>
+        inline whitespace、raw text、comment、inline
+        scriptを壊さず、Viewerでの表示と動作を維持する。
+      </li>
+      <li>
+        既存Linterを出力検証のsource of truthとして使い、Formatterが新しいlint違反を作らない。
+      </li>
+      <li>
+        Core API、CLI、compact/JSON
+        report、testを分離し、LLMが小さなtask単位で実装できるようにする。
+      </li>
+    </ul>
+
+    <h3>1.1 成功状態</h3>
+    <ul>
+      <li>
+        <code>spec-html format ./specs --check</code>が、変更が必要なfileを決定的な順序で報告する。
+      </li>
+      <li>
+        <code>spec-html format ./specs --write</code>が、変換可能な全fileを同じ規則で整形する。
+      </li>
+      <li>file pathを指定した場合は、そのHTML fileだけを検査または整形できる。</li>
+      <li>
+        fragmentとfull documentのどちらを入力しても、出力はfull document
+        wrapperを持たないfragmentになる。
+      </li>
+      <li>同じsourceを2回整形しても2回目の出力が変わらない。</li>
+      <li>
+        既存の<code>docs</code>と<code>examples</code>を整形後もLinter、Viewer、browser
+        testで利用できる。
+      </li>
+    </ul>
+  </section>
+
+  <section id="decisions">
+    <h2>2. 固定する設計判断</h2>
+    <table>
+      <caption>
+        実装者が選び直さない設計事項
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">項目</th>
+          <th scope="col">固定値</th>
+          <th scope="col">理由</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Canonical output</th>
+          <td>HTML fragment</td>
+          <td>
+            Viewerは取得したsourceをframeの<code>body</code>へ挿入するため、document
+            shellを文書ごとに持たない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">推奨root</th>
+          <td>空でない<code>lang</code>を持つ単一の<code>article</code></td>
+          <td>既存のDOC001とDOC002を変更せず、文書境界と言語を一意にする。</td>
+        </tr>
+        <tr>
+          <th scope="row">Layout engine</th>
+          <td>
+            <a href="https://prettier.io/docs/api/"><code>prettier@3.9.6</code>のpublic API</a>
+          </td>
+          <td>HTMLのcomment、mixed content、inline whitespace、行幅判定を独自実装しない。</td>
+        </tr>
+        <tr>
+          <th scope="row">Validator</th>
+          <td>既存の<code>html-validate@11.3.0</code></td>
+          <td>FormatterとLinterでHTML element metadataとproject契約を分岐させない。</td>
+        </tr>
+        <tr>
+          <th scope="row">設定探索</th>
+          <td>行わない</td>
+          <td>
+            利用projectのPrettier設定や<code>.htmlvalidate*</code>で出力が変わらないようにする。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Semantic fix</th>
+          <td>初期releaseでは行わない</td>
+          <td>意味を選ぶtag置換や本文生成はFormatterの責務ではない。</td>
+        </tr>
+        <tr>
+          <th scope="row">Embedded language</th>
+          <td>整形しない</td>
+          <td>HTML整形とinline JavaScript/CSSの変更を同じ差分へ混ぜない。</td>
+        </tr>
+        <tr>
+          <th scope="row">実行方式</th>
+          <td>targetをsort後に順次処理</td>
+          <td>出力順、failure位置、test結果を決定的にする。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>2.1 Formatter、Normalizer、Fixer、Linterの境界</h3>
+    <table>
+      <caption>
+        各componentの責務
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Component</th>
+          <th scope="col">行うこと</th>
+          <th scope="col">行わないこと</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Envelope Normalizer</th>
+          <td>full documentを検出し、許可されたhead metadataとdocument wrapperを除去する。</td>
+          <td>本文要素の意味を推測してroot構造を作り替えない。</td>
+        </tr>
+        <tr>
+          <th scope="row">Formatter</th>
+          <td>空白、インデント、属性の折返し、quote、改行code、final newlineを正規化する。</td>
+          <td>element名、属性値、本文内容、node順を意味的に変更しない。</td>
+        </tr>
+        <tr>
+          <th scope="row">Fixer</th>
+          <td>将来、ruleごとに安全性を証明できるsource editを適用する。</td>
+          <td>初期releaseには実装しない。</td>
+        </tr>
+        <tr>
+          <th scope="row">Linter</th>
+          <td>構文、文書構造、参照、accessibility、semantic改善を診断する。</td>
+          <td>sourceを書き換えない。</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Prettierが担当するprintingとproject固有のenvelope変換を別moduleにする。FormatterからLinterのprivate関数を呼ばず、公開されている<code>lintDocument</code>と共有型だけを利用する。
+    </p>
+  </section>
+
+  <section id="input-contract">
+    <h2>3. 入出力契約</h2>
+    <h3>3.1 Fragment入力</h3>
+    <p>
+      explicitなtop-level
+      <code>html</code
+      >を持たないsourceをfragmentとして扱う。Formatterはfragmentのroot構造を変更せず、レイアウト整形後に既存Linterを実行する。単一<code>article</code>でないfragmentも構文が解析できれば整形できるが、DOC001などのdiagnosticは結果へ残す。
+    </p>
+
+    <h3>3.2 Full document入力</h3>
+    <p>
+      explicitなtop-level
+      <code>html</code>と、その子孫にexplicitな<code>body</code>を持つsourceをfull
+      documentとして扱う。DOCTYPEは任意、<code>head</code>はexplicitでも省略でもよい。<code>body</code>だけ、DOCTYPEだけ、複数のtop-level
+      <code>html</code>、または<code>html</code>外の意味のあるtextやelementはunsupported
+      envelopeとして拒否する。
+    </p>
+    <p>
+      document判定を正規表現だけで行わない。<code>html-validate</code>のpublic
+      <code>Parser</code>とtag eventのsource
+      locationを使い、comment、attribute内文字列、script本文に現れる<code>&lt;html&gt;</code>を誤認しないようにする。body内容はDOMの再serializeではなく、元sourceのbody開始tag末尾から終了tag先頭までをsource
+      offsetでsliceする。
+    </p>
+
+    <h3>3.3 Canonical output</h3>
+    <ul>
+      <li>UTF-8 textとして扱い、BOMを出力しない。</li>
+      <li>改行codeはLFに統一する。</li>
+      <li>file末尾は改行1個にする。</li>
+      <li>full document wrapperを出力しない。</li>
+      <li>HTMLのtag名とattribute名はPrettierのHTML printerが出力するcanonical表現に従う。</li>
+      <li>optional end tagはPrettierの出力に従い、Spec HTML独自処理で削除しない。</li>
+    </ul>
+  </section>
+
+  <section id="envelope">
+    <h2>4. Full document envelope正規化</h2>
+    <p>
+      Normalizerは次の表だけを実装する。表にないhead contentやwrapper attributeを推測で処理しない。
+    </p>
+    <table>
+      <caption>
+        Full documentからfragmentへの変換規則
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">対象</th>
+          <th scope="col">条件</th>
+          <th scope="col">処理</th>
+          <th scope="col">結果</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">DOCTYPE</th>
+          <td>0個または1個</td>
+          <td>削除する。</td>
+          <td><code>document-envelope-removed</code>を記録する。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>html</code></th>
+          <td>
+            <code>lang</code>と<code>dir</code>以外のattributeがなく、存在する許可attributeをroot
+            articleへ安全に移せる
+          </td>
+          <td>wrapperを削除する。</td>
+          <td>許可attributeは後述の条件でroot articleへ移す。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>head</code></th>
+          <td>attributeがない</td>
+          <td>wrapperと許可metadataを削除する。</td>
+          <td>削除したtitleとmetaの種別と個数を記録する。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>title</code></th>
+          <td>head直下</td>
+          <td>削除する。</td>
+          <td>textをcompact出力へ含めず、JSON changeのdetailだけに最大60文字で保持する。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>meta</code></th>
+          <td>head直下</td>
+          <td>削除する。</td>
+          <td>attribute値は出力へ反復せず個数だけを記録する。</td>
+        </tr>
+        <tr>
+          <th scope="row">head comment</th>
+          <td>HTML Validate directiveではない</td>
+          <td>head source rangeと一緒に削除する。</td>
+          <td>個別解析や個数の記録は行わない。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>base</code></th>
+          <td>常に</td>
+          <td>変換を拒否する。</td>
+          <td>Viewerが設定するdocument URL基準の<code>base</code>と競合するためFMT002を返す。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>style</code>、<code>link</code></th>
+          <td>常に</td>
+          <td>変換を拒否する。</td>
+          <td>表示に必要なstyleを黙って失わないためFMT002を返す。</td>
+        </tr>
+        <tr>
+          <th scope="row">head <code>script</code></th>
+          <td>typeを問わない</td>
+          <td>変換を拒否する。</td>
+          <td>実行順やdataを失わないためFMT002を返す。</td>
+        </tr>
+        <tr>
+          <th scope="row">その他のhead element</th>
+          <td>常に</td>
+          <td>変換を拒否する。</td>
+          <td>未定義の変換を行わずFMT002を返す。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>body</code></th>
+          <td>
+            <code>lang</code>と<code>dir</code>以外のattributeがなく、存在する許可attributeをroot
+            articleへ安全に移せる
+          </td>
+          <td>inner sourceだけを取り出す。</td>
+          <td>wrapperを削除する。</td>
+        </tr>
+        <tr>
+          <th scope="row">root <code>article</code></th>
+          <td>bodyの意味のあるroot nodeがarticle 1個だけ</td>
+          <td>
+            article自身に値がなければ<code>body</code>、次に<code>html</code>の順で<code>lang</code>と<code>dir</code>をコピーする。
+          </td>
+          <td><code>envelope-attribute-copied</code>を記録する。</td>
+        </tr>
+        <tr>
+          <th scope="row">article以外のbody内容</th>
+          <td>構文が有効で、htmlとbodyにattributeがない</td>
+          <td>body inner sourceをそのままfragment候補にする。</td>
+          <td>
+            wrapperを追加せず、最終LinterのDOC001やDOC002を残す。移せない<code>lang</code>または<code>dir</code>がある場合はFMT003で拒否する。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>4.1 拒否するwrapper attribute</h3>
+    <p>
+      <code>html</code
+      >または<code>body</code>に<code>class</code>、<code>id</code>、<code>style</code>、<code>data-*</code>、event
+      handler、ARIA attributeなどがある場合はFMT003で変換を拒否する。articleへの一括移動はCSS
+      selector、script、accessibility
+      treeを変える可能性があるため行わない。<code>head</code>にattributeがある場合も同様に拒否する。
+    </p>
+
+    <h3>4.2 Commentとtrivia</h3>
+    <p>
+      body内のcommentはsource
+      sliceに含めて保持する。DOCTYPE、html開始前、html終了後、head内のcommentはdocument
+      envelopeの一部として削除するが、comment専用parserや個別changeは作らない。HTML Validate
+      suppression
+      directiveを含むsourceは既存HTML004に従い、Normalizerがdirectiveだけを消して成功扱いにしない。
+    </p>
+  </section>
+
+  <section id="formatting">
+    <h2>5. レイアウト整形規則</h2>
+    <h3>5.1 Prettier固定設定</h3>
+    <pre><code class="language-typescript">const FORMAT_OPTIONS = {
+  parser: &quot;html&quot;,
+  tabWidth: 2,
+  useTabs: false,
+  printWidth: 100,
+  htmlWhitespaceSensitivity: &quot;css&quot;,
+  embeddedLanguageFormatting: &quot;off&quot;,
+  endOfLine: &quot;lf&quot;,
+  singleAttributePerLine: false,
+} as const satisfies prettier.Options;
+</code></pre>
+    <p>
+      <code>prettier.resolveConfig</code
+      >、<code>prettier.getFileInfo</code>、plugin探索、<code>.prettierignore</code>は使用しない。HTML
+      parserと上のoptionを直接<code>prettier.format</code>へ渡す。Prettierのformat
+      APIは非同期なので、Core APIも最初から非同期にする。
+    </p>
+
+    <h3>5.2 Whitespace safety</h3>
+    <ul>
+      <li>
+        <code>htmlWhitespaceSensitivity: &quot;css&quot;</code>を使い、標準のinline
+        element前後の空白を保持しながらblock elementを読みやすく整形する。T0
+        spikeで<code>strict</code>がblock構造まで1行へ連結することを確認したため採用しない。
+      </li>
+      <li>
+        <code>A&lt;strong&gt;B&lt;/strong&gt;C</code>と<code
+          >A &lt;strong&gt;B&lt;/strong&gt; C</code
+        >を同じ出力へ統合しない。
+      </li>
+      <li>
+        空白だけのtext nodeをproject固有処理で削除しない。block間の整形はPrettierだけに委ねる。
+      </li>
+      <li>
+        日本語本文を英単語と同じ方法で分割できると仮定せず、golden testで実際の出力を固定する。
+      </li>
+    </ul>
+
+    <h3>5.3 Raw textとembedded content</h3>
+    <ul>
+      <li>
+        <code>pre</code
+        >、<code>textarea</code>、<code>script</code>、<code>style</code>の本文をproject固有処理でtrim、dedent、escapeしない。
+      </li>
+      <li><code>pre.mermaid</code>のdiagram sourceを別formatterへ渡さない。</li>
+      <li>
+        inline JavaScriptとCSSの整形は初期releaseの非目標とし、<code
+          >embeddedLanguageFormatting: &quot;off&quot;</code
+        >を固定する。
+      </li>
+      <li>
+        Prettier実行前にraw本文をsource内に存在しない決定的markerへ置き換え、実行後にmarker周囲へ追加された空白を含むinner
+        range全体を元本文へ戻す。
+      </li>
+      <li>
+        markerが一意でない、消失した、複数出現した、またはmarker周囲に空白以外が生成された場合は内部errorとして変換を停止する。
+      </li>
+    </ul>
+
+    <h3>5.4 Attributeとcomment</h3>
+    <ul>
+      <li>
+        attributeの順序を独自にsortしない。重複attributeはFormatterで選択せず、既存HTML001を残す。
+      </li>
+      <li>boolean attribute、quote、void elementの表現はPrettierのHTML printerへ委ねる。</li>
+      <li>body内commentの本文と相対順を保持する。</li>
+      <li>formatter ignore commentやproject固有directiveは初期releaseで導入しない。</li>
+    </ul>
+  </section>
+
+  <section id="transform-safety">
+    <h2>6. Tag置換と自動修正の安全性</h2>
+    <p>
+      初期releaseで自動削除するtagはdocument
+      envelopeの<code>html</code>、<code>head</code>、<code>body</code>と許可metadataだけである。本文tagの置換やwrapper削除は実装しない。
+    </p>
+    <table>
+      <caption>
+        既存Lint ruleに対する初期releaseの処理
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Rule</th>
+          <th scope="col">自動修正</th>
+          <th scope="col">理由</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">HTML001–HTML004</th>
+          <td>なし</td>
+          <td>壊れた構文、未知要素、標準構造、suppressionの正しい修正を一意に選べない。</td>
+        </tr>
+        <tr>
+          <th scope="row">DOC001</th>
+          <td>document envelope除去だけ</td>
+          <td>
+            article wrapperの新規追加や<code>main</code>からの置換は別のcontent modelやscript
+            selectorを変え得る。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">DOC002</th>
+          <td>既存articleへのlang/dirコピーだけ</td>
+          <td>sourceに存在しない言語を推測しない。</td>
+        </tr>
+        <tr>
+          <th scope="row">DOC003–DOC004</th>
+          <td>なし</td>
+          <td>題名生成、h1選択、heading level変更は文書outlineの意味を変える。</td>
+        </tr>
+        <tr>
+          <th scope="row">REF001–REF003</th>
+          <td>なし</td>
+          <td>IDやURLの正しい参照先を推測しない。</td>
+        </tr>
+        <tr>
+          <th scope="row">A11Y001–A11Y002</th>
+          <td>なし</td>
+          <td>画像の意味やARIAの参照対象をFormatterが決めない。</td>
+        </tr>
+        <tr>
+          <th scope="row">FIG001、FIG101</th>
+          <td>なし</td>
+          <td>caption本文生成とfigure範囲の決定には内容理解が必要である。</td>
+        </tr>
+        <tr>
+          <th scope="row">TBL001–TBL002</th>
+          <td>なし</td>
+          <td>表の目的、header cell、scope方向を内容から推測しない。</td>
+        </tr>
+        <tr>
+          <th scope="row">DET001</th>
+          <td>なし</td>
+          <td>summaryとして使う本文を選ばない。</td>
+        </tr>
+        <tr>
+          <th scope="row">INT001–INT002</th>
+          <td>なし</td>
+          <td>canvas名やMermaid sourceを生成しない。</td>
+        </tr>
+        <tr>
+          <th scope="row">INT101</th>
+          <td>なし</td>
+          <td>重要なdata tableを生成できない。</td>
+        </tr>
+        <tr>
+          <th scope="row">DOC101、SEM101</th>
+          <td>なし</td>
+          <td>slug、section、aside、navの選択はstable IDと文書意味に関わる。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>6.1 将来Fixerを追加する条件</h3>
+    <p>
+      将来のFixerはFormatter moduleへ直接if文を追加せず、rule
+      ID単位のregistryにする。各fixは、入力のtext、comment、attribute値、node順、local
+      URLを失わないこと、同じ入力から同じeditを返すこと、適用後に対象diagnosticが減り新しいdiagnosticが増えないこと、2回目にeditを返さないことをtestで証明する。
+    </p>
+    <pre><code class="language-typescript">interface FixDefinition {
+  rule: RuleId;
+  safety: &quot;mechanical&quot; | &quot;safe&quot; | &quot;semantic&quot;;
+  createEdits(context: FixContext): readonly TextEdit[] | null;
+}
+</code></pre>
+    <p>
+      <code>semantic</code>はsource
+      editを生成せず、LinterのdiagnosticをLLMへ返すだけにする。<code>div</code>から<code>section</code>への一括置換、単一子wrapperの削除、空element削除は将来もdefault
+      fixへ含めない。
+    </p>
+  </section>
+
+  <section id="pipeline">
+    <h2>7. 処理pipeline</h2>
+    <ol>
+      <li>
+        target pathをfileまたはdirectoryとして解決し、symlinkを除外してHTML
+        fileをPOSIX相対path順に並べる。
+      </li>
+      <li>UTF-8でsourceを読み、BOMの有無を記録する。</li>
+      <li>
+        <code>html-validate</code> Parserを1回実行し、parse errorとtag eventのsource
+        locationを収集する。parse errorがあればFMT001としてfileをblockedにする。
+      </li>
+      <li>同じparse結果からfragmentまたはfull documentへ分類する。</li>
+      <li>
+        full documentなら4節の規則を検査し、安全ならbody inner
+        sourceを切り出して許可attributeを移す。
+      </li>
+      <li>
+        固定optionでPrettierを1回実行し、format
+        failureはFMT001としてblockedにする。成功時はLFとfinal newlineを確認する。
+      </li>
+      <li>整形後sourceを<code>lintDocument</code>へ渡し、残るdiagnosticをresultへ格納する。</li>
+      <li>元sourceとoutputをcode unit単位で比較して<code>changed</code>を決める。</li>
+      <li>
+        project全fileのCore resultを確定してから、checkならreport、writeなら変更fileだけを書き込む。
+      </li>
+    </ol>
+    <p>
+      初期releaseでは、Formatter出力に既存lint
+      errorが残っていても、構文解析とenvelope変換が安全なら整形自体をblockedにしない。FormatterはLinterの修正完了を装わず、残ったdiagnostic件数をreportする。
+    </p>
+
+    <h3>7.1 Failure isolation</h3>
+    <p>
+      <code>--check</code
+      >は常に全targetを処理して、blockedとchangedをまとめて報告する。<code>--write</code>は全targetのparse、normalize、formatが成功した後だけ書込段階へ進み、1件でもblockedなら1fileも書き換えない。書込段階では変更fileだけを順次更新し、unexpected
+      I/O errorが起きた場合はそれまでに書いたfileと未処理fileをstderrへ明示する。
+    </p>
+  </section>
+
+  <section id="api">
+    <h2>8. Core API</h2>
+    <pre><code class="language-typescript">export type FormatInputKind = &quot;fragment&quot; | &quot;document&quot;;
+export type FormatStatus = &quot;ready&quot; | &quot;blocked&quot;;
+
+export type FormatProblemCode =
+  | &quot;FMT001&quot; // parse-error
+  | &quot;FMT002&quot; // unsupported-head-content
+  | &quot;FMT003&quot; // unsafe-envelope-attributes
+  | &quot;FMT004&quot;; // unsupported-envelope
+
+export type FormatChangeKind =
+  | &quot;layout-formatted&quot;
+  | &quot;document-envelope-removed&quot;
+  | &quot;head-metadata-removed&quot;
+  | &quot;envelope-attribute-copied&quot;
+  | &quot;bom-removed&quot;;
+
+export interface FormatProblem {
+  file: string;
+  line: number;
+  column: number;
+  code: FormatProblemCode;
+  message: string;
+  detail?: string;
+}
+
+export interface FormatChange {
+  kind: FormatChangeKind;
+  detail?: string;
+}
+
+export interface FormatDocumentResult {
+  file: string;
+  status: FormatStatus;
+  inputKind: FormatInputKind;
+  output: string | null;
+  changed: boolean;
+  changes: readonly FormatChange[];
+  problems: readonly FormatProblem[];
+  diagnostics: readonly LintDiagnostic[];
+}
+
+export interface FormatProjectSummary {
+  files: number;
+  changed: number;
+  unchanged: number;
+  blocked: number;
+  lintErrors: number;
+  lintWarnings: number;
+}
+
+export interface FormatProjectResult {
+  documents: readonly FormatDocumentResult[];
+  summary: FormatProjectSummary;
+}
+
+export async function formatDocument(
+  source: string,
+  absolutePath: string,
+  relativePath: string,
+): Promise&lt;FormatDocumentResult&gt;;
+
+export async function formatProject(
+  targetPath: string,
+): Promise&lt;FormatProjectResult&gt;;
+</code></pre>
+    <p>
+      <code>formatDocument</code>と<code>formatProject</code>はstdout、stderr、process exit
+      code、file
+      writeを扱わない。<code>output</code>はreadyなら必ずstring、blockedなら必ずnullにする。resultのarrayは相対path順、problemは位置とcode順、lint
+      diagnosticは既存Linterのsort順にする。
+    </p>
+
+    <h3>8.1 Internal envelope model</h3>
+    <pre><code class="language-typescript">interface SourceRange {
+  start: number;
+  end: number;
+}
+
+interface ParsedEnvelope {
+  kind: FormatInputKind;
+  bodyContent: SourceRange | null;
+  htmlAttributes: ReadonlyMap&lt;string, string | null&gt;;
+  bodyAttributes: ReadonlyMap&lt;string, string | null&gt;;
+  headElements: readonly EnvelopeElement[];
+}
+</code></pre>
+    <p>
+      source rangeはUTF-16 code unit
+      offsetとして扱い、JavaScriptの<code>slice</code>へそのまま渡せる値に統一する。lineとcolumnはuser向けproblemだけに使い、source
+      editの境界計算には使わない。
+    </p>
+  </section>
+
+  <section id="reporting">
+    <h2>9. LLM向けreport</h2>
+    <h3>9.1 Compact形式</h3>
+    <pre><code class="language-text">docs/architecture.html
+  C document-envelope-removed
+  F layout-formatted
+docs/unsafe.html
+  4:3 E FMT002 unsupported-head-content — headのstyleを本文へ移してから再実行する
+summary files=2 changed=1 unchanged=0 blocked=1 lint-errors=0 lint-warnings=0
+</code></pre>
+    <p>
+      unchanged
+      fileは個別表示せずsummaryだけに含める。<code>C</code>はcanonicalization、<code>F</code>はlayout
+      formatting、<code>E</code>はblocked problemとする。既存lint diagnostic本文をformat
+      reportへ全件反復せず、summaryの件数と<code>spec-html lint</code>を実行する案内だけを表示する。
+    </p>
+
+    <h3>9.2 JSON形式</h3>
+    <pre><code class="language-json">{
+  &quot;version&quot;: 1,
+  &quot;mode&quot;: &quot;check&quot;,
+  &quot;summary&quot;: {
+    &quot;files&quot;: 1,
+    &quot;changed&quot;: 1,
+    &quot;unchanged&quot;: 0,
+    &quot;blocked&quot;: 0,
+    &quot;lintErrors&quot;: 0,
+    &quot;lintWarnings&quot;: 0
+  },
+  &quot;documents&quot;: [
+    {
+      &quot;file&quot;: &quot;docs/architecture.html&quot;,
+      &quot;status&quot;: &quot;ready&quot;,
+      &quot;inputKind&quot;: &quot;document&quot;,
+      &quot;changed&quot;: true,
+      &quot;changes&quot;: [
+        { &quot;kind&quot;: &quot;document-envelope-removed&quot; },
+        { &quot;kind&quot;: &quot;layout-formatted&quot; }
+      ],
+      &quot;problems&quot;: [],
+      &quot;lint&quot;: { &quot;errors&quot;: 0, &quot;warnings&quot;: 0 }
+    }
+  ]
+}
+</code></pre>
+    <p>
+      JSONへ整形後HTML
+      sourceを含めない。source全体はtoken量が大きく、CLIのcheck/write結果として不要である。Core
+      API利用者は<code>FormatDocumentResult.output</code>から取得する。
+    </p>
+  </section>
+
+  <section id="cli">
+    <h2>10. CLI仕様</h2>
+    <pre><code class="language-bash">spec-html format [path] --check
+spec-html format [path] --write
+spec-html format [path] --check --reporter compact
+spec-html format [path] --check --reporter json
+</code></pre>
+    <ul>
+      <li>
+        <code>path</code>の既定値は<code>./specs</code>で、HTML fileまたはdirectoryを受理する。
+      </li>
+      <li>
+        <code>--check</code>と<code>--write</code>のどちらか1つを必須とし、省略と同時指定をusage
+        errorにする。
+      </li>
+      <li><code>--reporter</code>の既定値は<code>compact</code>とする。</li>
+      <li>
+        stdin、stdoutへのHTML source出力、glob、ignore file、config fileは初期releaseで扱わない。
+      </li>
+      <li>
+        directory探索は既存<code>findContentDocuments</code>と同じ除外、symlink、sort規則を使う。
+      </li>
+      <li>
+        file指定は拡張子をcase-insensitiveに判定し、<code>.html</code>以外、symlink、directory内の<code>nav.html</code>と同名のfileを拒否する。
+      </li>
+    </ul>
+
+    <h3>10.1 終了code</h3>
+    <table>
+      <caption>
+        Format commandの終了code
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Code</th>
+          <th scope="col">条件</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">0</th>
+          <td>checkで全fileがunchanged、またはwriteで全変更の書込が成功した。</td>
+        </tr>
+        <tr>
+          <th scope="row">1</th>
+          <td>checkでchangedが1件以上、またはmodeを問わずblockedが1件以上ある。</td>
+        </tr>
+        <tr>
+          <th scope="row">2</th>
+          <td>usage、path、read/write、dependency、予期しない内部処理に失敗した。</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      lint diagnosticが残っているだけではformat
+      commandを失敗にしない。FormatterとLinterの終了条件を混ぜず、CIでは<code>format --check</code
+      >と<code>lint --warnings-as-errors</code>を別commandとして連続実行する。
+    </p>
+
+    <h3>10.2 既存CLIとの互換性</h3>
+    <ul>
+      <li>先頭argumentが正確に<code>format</code>の場合だけformat parserへ渡す。</li>
+      <li>
+        <code>spec-html ./format</code>は引き続き<code>./format</code>
+        directoryのViewer起動として扱う。
+      </li>
+      <li>
+        formatではViewer optionとlint optionを拒否し、Viewerとlintではformat専用optionを拒否する。
+      </li>
+      <li>
+        <code>spec-html format --help</code>はformat helpを表示し、root
+        helpにはusageを1行だけ追加する。
+      </li>
+      <li>
+        compact reportはstdout、usage、filesystem、write、内部errorは<code>spec-html: </code
+        >prefix付きでstderrへ出す。
+      </li>
+      <li>JSON reporterのstdoutにはJSON document以外を混ぜない。</li>
+    </ul>
+  </section>
+
+  <section id="source-layout">
+    <h2>11. Source構成</h2>
+    <pre><code class="language-text">src/
+├─ content/
+│  └─ documents.ts      # directory探索は既存関数を共有
+├─ format/
+│  ├─ document.ts       # 1 sourceのpipelineと公開formatDocument
+│  ├─ envelope.ts       # Parser event、入力分類、body source slice
+│  ├─ printer.ts        # Prettier固定optionとformat呼出し
+│  ├─ project.ts        # target解決、file読込、formatProject
+│  └─ diagnostics.ts    # problem、change、summary、reporter
+├─ lint/
+│  └─ ...               # 既存lintDocumentを出力検証に利用
+└─ cli/
+   ├─ entry.ts
+   ├─ main.ts
+   └─ options.ts
+
+tests/
+├─ fixtures/format/
+│  ├─ fragments/
+│  ├─ documents/
+│  ├─ blocked/
+│  └─ raw-text/
+└─ unit/
+   ├─ format-document.test.ts
+   ├─ format-envelope.test.ts
+   ├─ format-project.test.ts
+   ├─ format-diagnostics.test.ts
+   └─ format-printer.test.ts
+</code></pre>
+    <p>
+      1 ruleごとのclassやplugin
+      APIは作らない。初期releaseのproject固有変換はenvelopeだけなので、<code>envelope.ts</code>内の明示的な関数とtable-driven
+      testで表現する。Prettier型を<code>document.ts</code>やCLIへ漏らさない。
+    </p>
+  </section>
+
+  <section id="implementation-phases">
+    <h2>12. File単位の実装task</h2>
+    <p>
+      taskはT0から順に行う。各taskは記載した対象以外を変更せず、確認commandが成功してから次へ進む。既存の未commit変更を破棄、上書き、再formatしない。
+    </p>
+
+    <h3>T0: Baseline、dependency、formatter spike</h3>
+    <p>対象: <code>package.json</code>、<code>package-lock.json</code>。</p>
+    <ol>
+      <li>
+        <code>npm run typecheck</code>、<code>npm run lint</code>、<code>npm test</code>、<code
+          >npm run build</code
+        >を実行し、Formatter変更前の結果を記録する。
+      </li>
+      <li><code>npm view prettier@3.9.6 engines --json</code>でNode.js 24との互換を再確認する。</li>
+      <li><code>npm install --save-exact prettier@3.9.6</code>を実行する。</li>
+      <li>
+        一時test内でfragment、full document、inline
+        whitespace、pre、scriptを<code>prettier.format</code>し、固定optionがpublic
+        APIで動作することを確認する。
+      </li>
+    </ol>
+    <p>
+      確認:
+      <code>npm run typecheck &amp;&amp; npm test</code
+      >。spikeで期待と異なる出力があってもoptionを増やさず、5節とfixtureの期待値を見直してから本実装へ進む。
+    </p>
+
+    <h3>T1: Formatter型とreporter</h3>
+    <p>
+      対象:
+      新規<code>src/format/diagnostics.ts</code>、新規<code>tests/unit/format-diagnostics.test.ts</code>。
+    </p>
+    <ol>
+      <li>8節のproblem、change、document result、project summary型を定義する。</li>
+      <li>document resultをrelative path順、problemをline、column、code順にsortする。</li>
+      <li>9節のcompactとJSON reporterを実装する。</li>
+      <li>detailを改行なし60文字へ正規化し、sourceやstack traceをreporterへ含めない。</li>
+    </ol>
+    <p>
+      確認:
+      <code>npm run typecheck &amp;&amp; npm test -- tests/unit/format-diagnostics.test.ts</code
+      >。入力arrayの順序を変えてもsnapshotが一致すること。
+    </p>
+
+    <h3>T2: Prettier printer</h3>
+    <p>
+      対象:
+      新規<code>src/format/printer.ts</code>、新規<code>tests/unit/format-printer.test.ts</code>、<code>tests/fixtures/format/fragments/</code>、<code>tests/fixtures/format/raw-text/</code>。
+    </p>
+    <ol>
+      <li>5.1節の固定optionと<code>formatHtml(source)</code>を実装する。</li>
+      <li>BOM除去、LF、final newlineをprinter境界で保証する。</li>
+      <li>
+        fragment、attribute折返し、inline
+        whitespace、comment、entity、日本語、SVG、MathML、pre、textarea、script、style、Mermaidのgolden
+        fixtureを追加する。
+      </li>
+      <li>全golden fixtureで2回目のformat結果が同一であることを共通test helperで確認する。</li>
+    </ol>
+    <p>
+      確認:
+      <code>npm run typecheck &amp;&amp; npm test -- tests/unit/format-printer.test.ts</code>。
+    </p>
+
+    <h3>T3: Envelope parserと入力分類</h3>
+    <p>
+      対象:
+      新規<code>src/format/envelope.ts</code>、新規<code>tests/unit/format-envelope.test.ts</code>、<code>tests/fixtures/format/documents/</code>、<code>tests/fixtures/format/blocked/</code>。
+    </p>
+    <ol>
+      <li>
+        固定HTML5 metadataを持つ<code>StaticConfigLoader</code>からpublic
+        <code>Parser</code>を作る。
+      </li>
+      <li>
+        <code>parse:error</code>、<code>tag:start</code>、<code>tag:ready</code>、<code
+          >tag:end</code
+        >
+        eventでparse errorとexplicit html、head、bodyのsource rangeを収集する。
+      </li>
+      <li>
+        implicit nodeとexplicit
+        tagをlocationから区別し、3.2節のdocument分類を実装する。html外segmentはwhitespace、comment、DOCTYPEだけを許す小さなtrivia
+        scannerで検査する。
+      </li>
+      <li>
+        body inner sourceをoffsetでsliceし、body内commentとraw
+        textが元sourceのまま得られることを確認する。
+      </li>
+      <li>4節のhead content、wrapper attribute、html外nodeの拒否条件を実装する。</li>
+    </ol>
+    <p>
+      確認:
+      <code>npm run typecheck &amp;&amp; npm test -- tests/unit/format-envelope.test.ts</code
+      >。tag風文字列を持つattribute、comment、scriptと、日本語を含むoffset境界を必ずtestする。
+    </p>
+
+    <h3>T4: 1文書pipeline</h3>
+    <p>
+      対象:
+      新規<code>src/format/document.ts</code>、新規<code>tests/unit/format-document.test.ts</code>。
+    </p>
+    <ol>
+      <li>7節の順序で<code>formatDocument</code>を実装する。</li>
+      <li>full documentのbody内容抽出、lang/dirコピー、Prettier整形を接続する。</li>
+      <li>
+        整形後sourceを既存<code>lintDocument</code>へ渡し、lint
+        diagnosticを変更せずresultへ保持する。
+      </li>
+      <li>
+        parseまたはenvelope
+        failureではoutputをnull、statusをblockedにし、Prettier例外やsource全文をdetailへ露出しない。
+      </li>
+      <li>
+        valid fragment、lint-invalid fragment、安全なfull document、blocked documentのtable-driven
+        testを追加する。
+      </li>
+    </ol>
+    <p>
+      確認:
+      <code
+        >npm run typecheck &amp;&amp; npm test -- tests/unit/format-document.test.ts
+        tests/unit/lint-document.test.ts</code
+      >。
+    </p>
+
+    <h3>T5: Target解決とproject formatting</h3>
+    <p>
+      対象:
+      新規<code>src/format/project.ts</code>、必要最小限の<code>src/content/documents.ts</code>変更、新規<code>tests/unit/format-project.test.ts</code>。
+    </p>
+    <ol>
+      <li>
+        fileまたはdirectoryを受理するtarget
+        resolverを作り、directoryでは既存<code>findContentDocuments</code>を利用する。
+      </li>
+      <li>
+        全sourceを順次読み、<code>formatDocument</code>結果をrelative
+        path順に返す<code>formatProject</code>を実装する。
+      </li>
+      <li>
+        missing path、non-HTML file、symlink、<code>nav.html</code>、空directory、read
+        failureをtestする。
+      </li>
+      <li>
+        fileはfatal UTF-8 decoderで読み、不正byte列を置換文字へ変換して書き戻さずoperational
+        errorにする。
+      </li>
+      <li>blockedを含んでもcheck用resultでは残りのfileを処理する。</li>
+    </ol>
+    <p>
+      確認:
+      <code
+        >npm run typecheck &amp;&amp; npm test -- tests/unit/format-project.test.ts
+        tests/unit/documents.test.ts</code
+      >。
+    </p>
+
+    <h3>T6: CLI parser、check、report</h3>
+    <p>
+      対象:
+      <code>src/cli/options.ts</code
+      >、<code>src/cli/main.ts</code>、<code>tests/unit/cli-options.test.ts</code>、<code>tests/unit/cli-main.test.ts</code>。
+    </p>
+    <ol>
+      <li><code>CliFormatOptions</code>とformat専用<code>parseArgs</code>を追加する。</li>
+      <li>
+        <code>--check</code
+        >/<code>--write</code>必須、相互排他、reporter値、未知option、既存commandとの境界をtestする。
+      </li>
+      <li>
+        <code>runFormatCheck</code>を追加し、compact/JSON reportと10.1節の終了codeを実装する。
+      </li>
+      <li>
+        このtaskではwriteを実装せず、<code>--write</code> parsed
+        commandをT7用の明示的な未実装branchへ接続する。T6完了時点ではunit
+        testからだけ使用し、release可能状態としない。
+      </li>
+    </ol>
+    <p>
+      確認:
+      <code
+        >npm run typecheck &amp;&amp; npm test -- tests/unit/cli-options.test.ts
+        tests/unit/cli-main.test.ts</code
+      >。Viewerとlintの既存testを削除または緩和しない。
+    </p>
+
+    <h3>T7: 安全なwrite</h3>
+    <p>
+      対象:
+      <code>src/format/project.ts</code
+      >、<code>src/cli/main.ts</code>、<code>tests/unit/format-project.test.ts</code>、<code>tests/unit/cli-main.test.ts</code>。
+    </p>
+    <ol>
+      <li>全document resultがreadyであることを確認してからwrite stageへ入る。</li>
+      <li>
+        dry run時の各source
+        digestを内部snapshotとして保持し、write直前にtarget集合と全file内容を再確認する。途中で追加、削除、編集された場合は1fileも書き換えない。
+      </li>
+      <li>changed fileだけを書き、unchanged fileのmtimeを変えない。</li>
+      <li>
+        同じdirectory内に一時fileを作り、元fileのmodeを維持してrenameするatomic file
+        replaceを実装する。
+      </li>
+      <li>
+        一時file名は明示target
+        pathから作り、既存fileと衝突した場合は安全に再試行する。symlink先へ書かない。
+      </li>
+      <li>
+        write、chmod、rename failureを注入したtestで、成功済み、失敗、未処理fileを区別して報告する。
+      </li>
+    </ol>
+    <p>
+      確認:
+      <code
+        >npm run typecheck &amp;&amp; npm test -- tests/unit/format-project.test.ts
+        tests/unit/cli-main.test.ts</code
+      >。
+    </p>
+
+    <h3>T8: Build、repository gate、package smoke test</h3>
+    <p>
+      対象:
+      <code>scripts/build.mjs</code
+      >、<code>scripts/test-pack.mjs</code>、<code>package.json</code>、<code>package-lock.json</code>。
+    </p>
+    <ol>
+      <li>
+        Node buildのexternalへ<code>prettier</code>を追加し、runtime
+        dependencyとしてtarballへ含まれることを確認する。
+      </li>
+      <li>
+        <code>format:check</code
+        >scriptを追加し、build済みCLIで<code>docs</code>と<code>examples</code>を検査する。
+      </li>
+      <li>
+        <code>check</code>を<code
+          >typecheck → ESLint → unit test → build → format:check → lint:docs → browser test → pack
+          test</code
+        >の順にする。
+      </li>
+      <li>
+        pack testの一時projectでfragment、full document、blocked
+        headを作り、install済みCLIのcheck/writeと終了code 0/1/2を確認する。
+      </li>
+      <li>
+        <code>package.json#files</code
+        >へ<code>docs/formatter-implementation-plan.html</code>を追加する。
+      </li>
+    </ol>
+    <p>
+      確認:
+      <code
+        >npm run build &amp;&amp; npm run format:check &amp;&amp; npm run lint:docs &amp;&amp; npm
+        run test:pack</code
+      >。
+    </p>
+
+    <h3>T9: Repository文書の整形と利用説明</h3>
+    <p>
+      対象:
+      <code>docs</code
+      >、<code>examples</code>、<code>README.md</code>、<code>docs/authoring.html</code>、<code>CHANGELOG.md</code>。
+    </p>
+    <ol>
+      <li>
+        Formatterを実装した同じ変更内で既存HTML全体を先に手編集せず、T8までの実装完了後にbuild済みCLIを1回だけ実行する。
+      </li>
+      <li>
+        生成差分をfileごとに確認し、raw text、inline whitespace、script、Mermaid
+        sourceに意図しない変更がないことを確認する。
+      </li>
+      <li>
+        READMEとAuthoring guideへcheck/write、full
+        document入力、head拒否条件、Linterとの役割分担を短く追加する。
+      </li>
+      <li>CHANGELOGへFormatterとfull document envelope正規化を追加する。</li>
+    </ol>
+    <p>
+      最終確認: <code>npm run check</code>。失敗、skip、未完了branch、未確認のgenerated
+      diffが1件でもあれば完了にしない。
+    </p>
+  </section>
+
+  <section id="tests">
+    <h2>13. Test計画</h2>
+    <h3>13.1 Golden fixture</h3>
+    <p>
+      各fixtureは<code>input.html</code>と<code>expected.html</code>のpairにし、test
+      source内へ長いHTMLを埋め込まない。意図を表す短いdirectory名を使い、1
+      fixtureで複数の独立条件を検証しない。
+    </p>
+    <table>
+      <caption>
+        必須golden fixture
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">分類</th>
+          <th scope="col">Cases</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Basic</th>
+          <td>単一article、nested section、list、table、details、aside、長いattribute。</td>
+        </tr>
+        <tr>
+          <th scope="row">Whitespace</th>
+          <td>
+            inline前後spaceあり/なし、mixed content、改行を含むlink、連続するphrasing
+            element、日本語と<code>code</code>。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Raw text</th>
+          <td>
+            pre、textarea、script、style、pre.mermaid、本文中の<code>&lt;/body&gt;</code>風文字列。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Preservation</th>
+          <td>comment、entity、Unicode、emoji、SVG、MathML、data URL、queryとfragment付きURL。</td>
+        </tr>
+        <tr>
+          <th scope="row">Document</th>
+          <td>
+            DOCTYPEあり/なし、title、複数meta、html lang、body lang、既存article
+            lang、bodyにarticle以外のroot。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Blocked</th>
+          <td>
+            base、style、link、head script、未知head element、wrapper
+            class/id/style、html外text、複数html、bodyだけ。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Invalid</th>
+          <td>
+            未閉じquote、close order、duplicate attribute、壊れたcomment、invalid void content。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>13.2 Property</h3>
+    <ul>
+      <li><strong>Idempotence:</strong> 全ready fixtureで<code>F(F(x)) = F(x)</code>。</li>
+      <li><strong>Determinism:</strong> target列挙順を変えてもdocument resultとreportが同じ。</li>
+      <li><strong>No new diagnostics:</strong> lint-valid fragmentはformat後もdiagnostic 0件。</li>
+      <li>
+        <strong>Raw preservation:</strong> raw text nodeのtext contentがformat前後で一致する。
+      </li>
+      <li>
+        <strong>Inline preservation:</strong>空白の有無を変えたpairがformat後も異なるDOM
+        textを維持する。
+      </li>
+      <li>
+        <strong>Envelope isolation:</strong> body内のtag風文字列がbody rangeの検出に影響しない。
+      </li>
+      <li>
+        <strong>No partial preflight write:</strong>
+        blockedを1件混ぜると全fileの内容とmtimeが変わらない。
+      </li>
+    </ul>
+
+    <h3>13.3 Browser regression</h3>
+    <p>
+      代表fixtureをformat前後それぞれViewerで開き、見出し、link、画像、Chart.js、Mermaid、details、document
+      titleを比較する。inline scriptは同じobservable resultを作ること、Mermaid sourceとfallback
+      tableをJavaScript無効contextでも取得できることを確認する。Formatter専用のbrowser
+      suiteを増やさず、既存<code>viewer.spec.ts</code>へ最小caseを追加する。
+    </p>
+  </section>
+
+  <section id="acceptance">
+    <h2>14. 受入条件</h2>
+    <ul>
+      <li>fragmentと定義済みfull documentを同じCLIから処理できる。</li>
+      <li>full documentの出力にDOCTYPE、html、head、body wrapperが残らない。</li>
+      <li>危険なhead contentとwrapper attributeを黙って破棄しない。</li>
+      <li>全ready fixtureでFormatterが冪等である。</li>
+      <li>lint-valid fragmentの整形後diagnosticが0件である。</li>
+      <li>inline whitespace、comment、raw text、scriptのregression testがある。</li>
+      <li>Core APIがconsole、process、file writeへ副作用を持たない。</li>
+      <li>checkはfileを書き換えず、writeはblocked時にpreflightで全書込を止める。</li>
+      <li>unchanged fileの内容とmtimeを変更しない。</li>
+      <li>compact/JSON outputと終了code 0/1/2がunit testとpack testで固定されている。</li>
+      <li><code>npm run check</code>が成功し、skipと未完了TODOがない。</li>
+    </ul>
+  </section>
+
+  <section id="non-goals">
+    <h2>15. 非目標</h2>
+    <ul>
+      <li>HTML以外のMarkdown、MDX、Vue、Angular、template languageを整形しない。</li>
+      <li>利用projectのPrettier config、EditorConfig、ignore file、pluginを読み込まない。</li>
+      <li>JavaScript、CSS、JSON、Mermaidをembedded formatterで整形しない。</li>
+      <li>minify、HTML sanitization、script無効化、外部URL取得を行わない。</li>
+      <li>alt、caption、summary、table、heading、fallback contentを生成しない。</li>
+      <li>attribute、section、list item、table rowを意味や名前でsortしない。</li>
+      <li>semantic elementの置換、wrapper削除、空element削除を行わない。</li>
+      <li>
+        初期releaseではeditor integration、language server、watch mode、cache、parallel
+        formattingを作らない。
+      </li>
+    </ul>
+  </section>
+
+  <section id="maintenance">
+    <h2>16. 保守とupgrade</h2>
+    <p>
+      Prettierのpatch/minor/major
+      upgradeはformatter出力の変更として扱い、dependencyだけを自動更新しない。upgrade時は全golden
+      snapshot、repository HTML差分、browser regression、pack
+      testを確認し、意図した変更だけを同じcommitへ含める。<code>FORMAT_OPTIONS</code>の変更も同じ手順を使う。
+    </p>
+    <p>
+      <code>html-validate</code>のupgradeではParser event locationとLinter
+      diagnosticの両方を確認する。Formatterだけの都合でLinter
+      ruleを弱めず、parser間の差が見つかった場合はinputをblockedにしてfixtureを追加する。
+    </p>
+  </section>
+
+  <section id="llm-execution">
+    <h2>17. LLM実装時の実行規則</h2>
+    <ol>
+      <li>各task開始時に対象fileとbaseline testを確認し、前taskの未完了を次taskへ持ち越さない。</li>
+      <li>本書で固定したdependency、option、command名、終了codeを別案へ変更しない。</li>
+      <li>
+        想定外入力を見つけてもheuristicを追加せず、blocked fixtureと明示的なproblemを追加する。
+      </li>
+      <li>Formatter実装中に既存HTML全体を手動整形しない。generated diffはT9へ分離する。</li>
+      <li>
+        golden expectationを実装結果へ無条件に合わせず、意味とraw
+        contentが保存されていることを先に確認する。
+      </li>
+      <li>既存testを削除、skip、緩和して完了条件を満たさない。</li>
+      <li>
+        最終報告では変更file、実行command、test結果、残るlint diagnostic、未実装事項を明示する。
+      </li>
+    </ol>
+  </section>
+</article>

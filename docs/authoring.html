@@ -1,33 +1,60 @@
 <article lang="ja">
-<header>
-<h1>Authoring guide</h1>
-<p>これは、Spec HTMLの文書を生成・編集するLLM向けの最小ルールです。本文は標準のsemantic HTMLで直接書き、細かな誤りはLinterの診断に従って直します。</p>
-</header>
+  <header>
+    <h1>Authoring guide</h1>
+    <p>
+      これは、Spec HTMLの文書を生成・編集するLLM向けの最小ルールです。本文は標準のsemantic
+      HTMLで直接書き、細かな誤りはLinterの診断に従って直します。
+    </p>
+  </header>
 
-<section id="rules">
-<h2>ルール</h2>
-<ol>
-<li>各fileは、主言語を示す<code>lang</code>属性を持つ1つの<code>article</code>をrootにしたHTML fragmentにする。<code>html</code>、<code>head</code>、<code>body</code>は書かない。</li>
-<li>文書の題名として<code>h1</code>を1つ置き、内容に合う標準HTML要素を選ぶ。独自要素や独自componentは作らない。</li>
-<li>要件、結論、数値などの重要な情報はHTML本文に書く。scriptやcanvasなどは、本文を補強するためだけに使う。</li>
-<li>文書間linkとassetは、content directory内のfileを指す相対URLで書く。</li>
-</ol>
-</section>
+  <section id="rules">
+    <h2>ルール</h2>
+    <ol>
+      <li>
+        各fileは、主言語を示す<code>lang</code>属性を持つ1つの<code>article</code>をrootにしたHTML
+        fragmentにする。<code>html</code>、<code>head</code>、<code>body</code>は書かない。
+      </li>
+      <li>
+        文書の題名として<code>h1</code>を1つ置き、内容に合う標準HTML要素を選ぶ。独自要素や独自componentは作らない。
+      </li>
+      <li>
+        要件、結論、数値などの重要な情報はHTML本文に書く。scriptやcanvasなどは、本文を補強するためだけに使う。
+      </li>
+      <li>文書間linkとassetは、content directory内のfileを指す相対URLで書く。</li>
+    </ol>
+  </section>
 
-<section id="lint">
-<h2>Lintで確認する</h2>
-<p>詳細な禁止事項や要素ごとの規約を覚える必要はありません。作成・編集の後にLinterを実行し、errorを修正します。warningも必要に応じて改善し、CIではerrorとして扱えます。</p>
-<pre><code class="language-sh">spec-html lint ./specs
+  <section id="format">
+    <h2>Formatterで整える</h2>
+    <p>
+      作成後のHTMLはFormatterでインデントと改行を統一します。<code>--check</code>は変更せずに差分の有無を確認し、<code>--write</code>は変更fileだけを書き換えます。
+    </p>
+    <pre><code class="language-sh">spec-html format ./specs --check
+spec-html format ./specs --write
+</code></pre>
+    <p>
+      full HTML documentも入力できます。安全なdocument
+      wrapperとmetadataはfragmentへ正規化されますが、headにstyle、script、link、baseがある場合やwrapperに表示・動作へ影響する属性がある場合は変換されません。Formatterはalt、caption、見出し、semantic
+      elementなど、内容の意味を選ぶ修正を行いません。
+    </p>
+  </section>
+
+  <section id="lint">
+    <h2>Lintで確認する</h2>
+    <p>
+      詳細な禁止事項や要素ごとの規約を覚える必要はありません。作成・編集の後にLinterを実行し、errorを修正します。warningも必要に応じて改善し、CIではerrorとして扱えます。
+    </p>
+    <pre><code class="language-sh">spec-html lint ./specs
 spec-html lint ./specs --warnings-as-errors
 </code></pre>
-<p>診断の修正方法が分からない場合だけ、rule IDを指定して確認します。</p>
-<pre><code class="language-sh">spec-html lint --explain DOC001
+    <p>診断の修正方法が分からない場合だけ、rule IDを指定して確認します。</p>
+    <pre><code class="language-sh">spec-html lint --explain DOC001
 </code></pre>
-</section>
+  </section>
 
-<section id="template">
-<h2>最小テンプレート</h2>
-<pre><code class="language-html">&lt;article lang=&quot;ja&quot;&gt;
+  <section id="template">
+    <h2>最小テンプレート</h2>
+    <pre><code class="language-html">&lt;article lang=&quot;ja&quot;&gt;
   &lt;h1&gt;文書の題名&lt;/h1&gt;
 
   &lt;section id=&quot;overview&quot;&gt;
@@ -36,12 +63,14 @@ spec-html lint ./specs --warnings-as-errors
   &lt;/section&gt;
 &lt;/article&gt;
 </code></pre>
-</section>
+  </section>
 
-<section id="mermaid">
-<h2>Mermaidの例</h2>
-<p>Mermaidを使う場合だけ、図のsourceを<code>pre.mermaid</code>へ書き、<code>figure</code>と<code>figcaption</code>で説明を付けます。</p>
-<pre><code class="language-html">&lt;figure&gt;
+  <section id="mermaid">
+    <h2>Mermaidの例</h2>
+    <p>
+      Mermaidを使う場合だけ、図のsourceを<code>pre.mermaid</code>へ書き、<code>figure</code>と<code>figcaption</code>で説明を付けます。
+    </p>
+    <pre><code class="language-html">&lt;figure&gt;
   &lt;pre class=&quot;mermaid&quot;&gt;
 flowchart LR
   Browser --&gt; API
@@ -50,5 +79,5 @@ flowchart LR
   &lt;figcaption&gt;Request flow&lt;/figcaption&gt;
 &lt;/figure&gt;
 </code></pre>
-</section>
+  </section>
 </article>

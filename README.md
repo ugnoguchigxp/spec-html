@@ -2,6 +2,8 @@
 
 LLMが通常Markdownで生成する設計書や仕様書を、構造的なHTMLへ置き換えてローカルで読みやすく閲覧するためのViewerです。標準のsemantic HTMLを使うことで、Markdown以上の表現力を持つ文書を簡単に作成し、navigation、文書間リンク、画像、Chart.js、Mermaidを活用できます。
 
+![Spec HTMLのlight表示でMermaidを含む設計書を閲覧している画面](./assets/LightMode.webp)
+
 ## Purpose and scope
 
 Spec HTMLの目的は、LLMにWeb application一式を実装させることではありません。LLMに構造的なHTML fragmentを直接生成させ、見出し、table、code、callout、details、画像、図表など、Markdownだけでは表現しにくい情報を読みやすい設計書・仕様書として活用できるようにすることです。共通Viewerが表示とnavigationを整えるため、文書ごとにCSSやメニューを作る必要はありません。
@@ -18,6 +20,7 @@ Spec HTMLの目的は、LLMにWeb application一式を実装させることで�
 - content directory外へのpath traversalとsymbolic link escapeを拒否
 - Chart.jsとMermaidはoptional dependency
 - Mermaidは実行時に公式ES moduleを読み込むため、仕様変更時のSVG変換は不要
+- HTML fragmentとfull HTML documentを決定的なfragmentへ整形するFormatter CLI
 
 ## Requirements
 
@@ -81,12 +84,21 @@ npx --no-install spec-html lint ./specs --warnings-as-errors
 npx --no-install spec-html lint --explain DOC001
 ```
 
+HTMLのインデントと改行を統一する場合はFormatterを使います。`--check`はfileを変更せず、`--write`は変更が必要なfileだけを書き換えます。full HTML documentを渡した場合は、安全に無視できる`doctype`、`html`、`head`、`body`を除いてfragmentへ正規化します。headにstyle、script、link、baseがある場合は内容を失わないよう変換を拒否します。
+
+```bash
+npx --no-install spec-html format ./specs --check
+npx --no-install spec-html format ./specs --write
+```
+
 普段使う場合は利用プロジェクトの`package.json`へ登録します。
 
 ```json
 {
   "scripts": {
-    "docs": "spec-html ./specs"
+    "docs": "spec-html ./specs",
+    "docs:format": "spec-html format ./specs --write",
+    "docs:check": "spec-html format ./specs --check && spec-html lint ./specs"
   }
 }
 ```
@@ -97,6 +109,8 @@ npx --no-install spec-html lint --explain DOC001
 
 Sidebar上部の「Name」「Date」で、各directory内の文書を名前順または更新日順に並び替えられます。選択中のボタンをもう一度押すと、昇順と降順が反転します。「Light」「Dark」からは表示themeを選択でき、選択内容はbrowserへ保存されます。初回表示ではOS設定に合うthemeを使用します。Shell、文書、Chart.js、Mermaidは同時に切り替わり、dark表示は[Tokyo Night Storm](https://github.com/folke/tokyonight.nvim)を参考にした青みのあるpaletteです。Sidebar幅を超える文書タイトルは末尾を省略表示し、hover時のtooltipで全文を確認できます。
 
+![Spec HTMLのdark表示で実装計画を閲覧している画面](./assets/darkMode.webp)
+
 見出し、list、table、code、blockquote、details、figureなどのsemantic HTMLには既定styleが適用されます。`aside`はnote表示になり、`data-type`へ`warning`、`danger`、`success`を指定できます。
 
 ```html
@@ -105,6 +119,10 @@ Sidebar上部の「Name」「Date」で、各directory内の文書を名前順�
   <p>この変更にはdatabase migrationが必要です。</p>
 </aside>
 ```
+
+画面右下のsource buttonから、現在の文書のHTMLをdialogで確認できます。描画結果とLLMが生成したsourceを同じ画面で見比べられます。
+
+![現在の文書のソースHTMLをdialogで表示している画面](./assets/source.webp)
 
 印刷時はSidebarとmobile menu buttonを除外し、現在の文書をlight配色で印刷します。
 
@@ -151,6 +169,7 @@ spec-html [directory] [options]
 --version        versionを表示
 
 spec-html lint [directory] [options]
+spec-html format [path] --check|--write [options]
 ```
 
 ## Security model
@@ -164,6 +183,7 @@ package自体も外部公開を禁止しています。公開npm registryへのp
 ## v0.1 limitations
 
 - 検索、Markdown変換は含みません。
+- Formatterはsemantic tag、alt、caption、見出しなど意味判断が必要な内容を自動修正しません。
 - browser自動テストの対象はChromiumです。
 - Node.js 24未満はサポートしません。
 

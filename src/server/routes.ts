@@ -1,4 +1,14 @@
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
+import {
+  ContentDocumentNotFoundError,
+  ARCHIVE_STATE_DIRECTORY,
+  getDocumentArchived,
+  setDocumentArchived,
+} from "../content/archive.js";
+import {
+  normalizeDocumentPath,
+  type NavigationView,
+} from "../content/document-path.js";
 import type { LiveReload } from "./live-reload.js";
 import type { StartServerOptions } from "./types.js";
 import { createNavigationHtml } from "./navigation.js";
@@ -12,6 +22,7 @@ import {
 const CONTENT_PREFIX = "/_content/";
 const RUNTIME_PREFIX = "/_spec-html/";
 const NAVIGATION_PATH = "/_spec-html/navigation";
+const DOCUMENT_STATE_PATH = "/_spec-html/document-state";
 const LIVE_RELOAD_PATH = "/_spec-html/live-reload";
 const CHART_PATH = "/_spec-html/integrations/chart.js";
 const MERMAID_PREFIX = "/_spec-html/integrations/mermaid/";
@@ -58,17 +69,21 @@ async function handleRequest(
   response: ServerResponse,
   options: RequestHandlerOptions,
 ): Promise<void> {
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    response.writeHead(405, { Allow: "GET, HEAD" });
-    response.end(request.method === "HEAD" ? undefined : "Method Not Allowed");
-    return;
-  }
-
   let url: URL;
   try {
     url = new URL(request.url ?? "/", "http://localhost");
   } catch {
     sendText(request, response, 400, "Bad Request");
+    return;
+  }
+
+  if (url.pathname === DOCUMENT_STATE_PATH) {
+    await handleDocumentState(request, response, options.contentRoot, url);
+    return;
+  }
+
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    sendMethodNotAllowed(request, response, "GET, HEAD");
     return;
   }
 
@@ -99,7 +114,16 @@ async function handleRequest(
   }
 
   if (url.pathname === NAVIGATION_PATH) {
-    sendHtml(request, response, await createNavigationHtml(options.contentRoot));
+    const view = parseNavigationView(url.searchParams.get("view"));
+    if (view === null) {
+      sendText(request, response, 400, "Invalid navigation view");
+      return;
+    }
+    sendHtml(
+      request,
+      response,
+      await createNavigationHtml(options.contentRoot, new Date(), view),
+    );
     return;
   }
 
@@ -124,11 +148,16 @@ async function handleRequest(
   }
 
   if (url.pathname.startsWith(CONTENT_PREFIX)) {
+    const encodedRelativePath = url.pathname.slice(CONTENT_PREFIX.length);
+    if (isPrivateContentPath(encodedRelativePath)) {
+      sendText(request, response, 404, "Not Found");
+      return;
+    }
     await sendStaticRoute(
       request,
       response,
       options.contentRoot,
-      url.pathname.slice(CONTENT_PREFIX.length),
+      encodedRelativePath,
     );
     return;
   }
@@ -145,6 +174,106 @@ async function handleRequest(
   }
 
   sendText(request, response, 404, "Not Found");
+}
+
+async function handleDocumentState(
+  request: IncomingMessage,
+  response: ServerResponse,
+  contentRoot: string,
+  url: URL,
+): Promise<void> {
+  if (
+    request.method !== "GET" &&
+    request.method !== "HEAD" &&
+    request.method !== "PUT"
+  ) {
+    sendMethodNotAllowed(request, response, "GET, HEAD, PUT");
+    return;
+  }
+
+  const rawDocumentPath = url.searchParams.get("doc") ?? "";
+  const documentPath = normalizeDocumentPath(rawDocumentPath);
+  if (documentPath === null) {
+    sendText(request, response, 400, "Invalid document path");
+    return;
+  }
+
+  try {
+    if (request.method === "PUT") {
+      const archived = await readArchivedUpdate(request);
+      if (archived === null) {
+        sendText(request, response, 400, "Invalid request body");
+        return;
+      }
+      await setDocumentArchived(contentRoot, documentPath, archived);
+    }
+    const archived = await getDocumentArchived(contentRoot, documentPath);
+    sendJson(request, response, { doc: documentPath, archived });
+  } catch (error: unknown) {
+    if (error instanceof ContentDocumentNotFoundError) {
+      sendText(request, response, 404, "Document not found");
+      return;
+    }
+    throw error;
+  }
+}
+
+function parseNavigationView(value: string | null): NavigationView | null {
+  if (value === null || value === "documents") {
+    return "documents";
+  }
+  return value === "archive" ? "archive" : null;
+}
+
+function isPrivateContentPath(encodedRelativePath: string): boolean {
+  const firstSegment = encodedRelativePath.split("/", 1)[0];
+  try {
+    return decodeURIComponent(firstSegment ?? "") === ARCHIVE_STATE_DIRECTORY;
+  } catch {
+    return false;
+  }
+}
+
+async function readArchivedUpdate(
+  request: IncomingMessage,
+): Promise<boolean | null> {
+  if (!request.headers["content-type"]?.startsWith("application/json")) {
+    return null;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of request as AsyncIterable<unknown>) {
+    const buffer = typeof chunk === "string"
+      ? Buffer.from(chunk)
+      : chunk instanceof Uint8Array
+      ? chunk
+      : null;
+    if (buffer === null) {
+      return null;
+    }
+    size += buffer.length;
+    if (size > 4096) {
+      return null;
+    }
+    chunks.push(buffer);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    return null;
+  }
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    !("archived" in parsed) ||
+    typeof parsed.archived !== "boolean"
+  ) {
+    return null;
+  }
+  return parsed.archived;
 }
 
 async function sendStaticRoute(
@@ -179,6 +308,35 @@ function sendHtml(
     "Cache-Control": "no-store",
     "Content-Length": String(Buffer.byteLength(body)),
     "Content-Type": "text/html; charset=utf-8",
+  });
+  response.end(request.method === "HEAD" ? undefined : body);
+}
+
+function sendJson(
+  request: IncomingMessage,
+  response: ServerResponse,
+  value: unknown,
+): void {
+  const body = `${JSON.stringify(value)}\n`;
+  response.writeHead(200, {
+    "Cache-Control": "no-store",
+    "Content-Length": String(Buffer.byteLength(body)),
+    "Content-Type": "application/json; charset=utf-8",
+  });
+  response.end(request.method === "HEAD" ? undefined : body);
+}
+
+function sendMethodNotAllowed(
+  request: IncomingMessage,
+  response: ServerResponse,
+  allow: string,
+): void {
+  const body = "Method Not Allowed";
+  response.writeHead(405, {
+    Allow: allow,
+    "Cache-Control": "no-store",
+    "Content-Length": String(Buffer.byteLength(body)),
+    "Content-Type": "text/plain; charset=utf-8",
   });
   response.end(request.method === "HEAD" ? undefined : body);
 }

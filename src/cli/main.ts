@@ -1,5 +1,7 @@
 import { stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { formatFormatCompact, formatFormatJson } from "../format/diagnostics.js";
+import { formatProject, writeFormatProject } from "../format/project.js";
 import { formatCompact, formatJson } from "../lint/diagnostics.js";
 import { lintProject } from "../lint/project.js";
 import { getRule } from "../lint/rules.js";
@@ -8,6 +10,7 @@ import { openViewer } from "./open-browser.js";
 import {
   CliUsageError,
   parseCliCommand,
+  type CliFormatOptions,
   type CliLintOptions,
   type CliRunOptions,
 } from "./options.js";
@@ -25,7 +28,10 @@ Options:
   --version        versionを表示
 
 Lint:
-  spec-html lint [directory] [options]`;
+  spec-html lint [directory] [options]
+
+Format:
+  spec-html format [path] --check|--write [options]`;
 
 export const LINT_HELP_TEXT = `使い方: spec-html lint [directory] [options]
 
@@ -35,6 +41,14 @@ Options:
   --max-issues <number>    最大表示件数（既定: 50、0で全件）
   --explain <RULE_ID>      ruleの理由と最小例を表示
   --help                   このhelpを表示`;
+
+export const FORMAT_HELP_TEXT = `使い方: spec-html format [path] --check|--write [options]
+
+Options:
+  --check                      変更が必要か確認する
+  --write                      整形結果をfileへ書き込む
+  --reporter <compact|json>    report形式（既定: compact）
+  --help                       このhelpを表示`;
 
 /** Dispatch a parsed command without an import-time process side effect. */
 export async function main(args: readonly string[]): Promise<number> {
@@ -47,6 +61,9 @@ export async function main(args: readonly string[]): Promise<number> {
       case "lint-help":
         console.log(LINT_HELP_TEXT);
         return 0;
+      case "format-help":
+        console.log(FORMAT_HELP_TEXT);
+        return 0;
       case "version":
         console.log(__SPEC_HTML_VERSION__);
         return 0;
@@ -55,6 +72,8 @@ export async function main(args: readonly string[]): Promise<number> {
         return 0;
       case "lint":
         return await runLint(command.options);
+      case "format":
+        return await runFormat(command.options);
       case "run":
         return await runViewer(command.options);
     }
@@ -67,8 +86,23 @@ export async function main(args: readonly string[]): Promise<number> {
     ) {
       console.error(error.stack);
     }
-    return args[0] === "lint" ? 2 : 1;
+    return args[0] === "lint" || args[0] === "format" ? 2 : 1;
   }
+}
+
+export async function runFormat(options: CliFormatOptions): Promise<number> {
+  const result = await formatProject(options.targetPath);
+  if (options.mode === "write" && result.summary.blocked === 0) {
+    await writeFormatProject(options.targetPath, result);
+  }
+  const output = options.reporter === "json"
+    ? formatFormatJson(result, options.mode)
+    : formatFormatCompact(result);
+  console.log(output.trimEnd());
+  if (result.summary.blocked > 0) {
+    return 1;
+  }
+  return options.mode === "check" && result.summary.changed > 0 ? 1 : 0;
 }
 
 export async function runLint(options: CliLintOptions): Promise<number> {

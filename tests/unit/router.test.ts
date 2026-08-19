@@ -32,31 +32,47 @@ describe("route URLs", () => {
   it("parses missing, valid, and invalid routes", () => {
     expect(parseRoute(new URL("http://localhost/"))).toEqual({
       kind: "missing",
-      route: { doc: null, hash: "" },
+      route: { doc: null, hash: "", view: "documents" },
     });
     expect(parseRoute(new URL("http://localhost/?doc=nested%2Fpage.html#section"))).toEqual({
       kind: "valid",
-      route: { doc: "nested/page.html", hash: "#section" },
+      route: { doc: "nested/page.html", hash: "#section", view: "documents" },
     });
     expect(parseRoute(new URL("http://localhost/?doc=../secret.html"))).toEqual({
       kind: "invalid",
       rawDoc: "../secret.html",
       hash: "",
+      view: "documents",
     });
     expect(parseRoute(new URL("http://localhost/?doc=%2Fnested.html"))).toEqual({
       kind: "invalid",
       rawDoc: "/nested.html",
       hash: "",
+      view: "documents",
+    });
+    expect(
+      parseRoute(
+        new URL("http://localhost/?doc=nested%2Fpage.html&view=archive"),
+      ),
+    ).toEqual({
+      kind: "valid",
+      route: { doc: "nested/page.html", hash: "", view: "archive" },
     });
   });
 
   it("serializes shell and content URLs", () => {
     expect(
       createShellUrl(
-        { doc: "nested/page.html", hash: "#details" },
+        { doc: "nested/page.html", hash: "#details", view: "documents" },
         new URL("http://localhost/?unused=yes"),
       ).href,
     ).toBe("http://localhost/?doc=nested%2Fpage.html#details");
+    expect(
+      createShellUrl(
+        { doc: "nested/page.html", hash: "", view: "archive" },
+        new URL("http://localhost/"),
+      ).href,
+    ).toBe("http://localhost/?doc=nested%2Fpage.html&view=archive");
     expect(createContentUrl("nested/page.html", BASE).href).toBe(
       "http://127.0.0.1:4173/_content/nested/page.html",
     );

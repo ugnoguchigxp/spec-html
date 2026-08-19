@@ -1,8 +1,9 @@
-import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createNavigationHtml } from "../../src/server/navigation.js";
+import { setDocumentArchived } from "../../src/content/archive.js";
 
 let root: string;
 
@@ -85,6 +86,27 @@ describe("createNavigationHtml", () => {
   it("returns an empty nav for a directory without documents", async () => {
     await expect(createNavigationHtml(root)).resolves.toBe(
       '<nav aria-label="Documents">\n</nav>\n',
+    );
+  });
+
+  it("separates current and archived documents without moving source files", async () => {
+    await Promise.all([
+      writeFile(join(root, "current.html"), "<h1>Current</h1>"),
+      writeFile(join(root, "archived.html"), "<h1>Archived</h1>"),
+    ]);
+    await setDocumentArchived(root, "archived.html", true);
+
+    const documents = await createNavigationHtml(root);
+    const archive = await createNavigationHtml(root, new Date(), "archive");
+
+    expect(documents).toContain('aria-label="Documents"');
+    expect(documents).toContain("Current");
+    expect(documents).not.toContain("Archived");
+    expect(archive).toContain('aria-label="Archive"');
+    expect(archive).toContain("Archived");
+    expect(archive).not.toContain("Current");
+    await expect(readFile(join(root, "archived.html"), "utf8")).resolves.toContain(
+      "Archived",
     );
   });
 });

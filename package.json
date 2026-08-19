@@ -26,7 +26,8 @@
     "docs/implementation-plan.html",
     "docs/mermaid-showcase.html",
     "docs/charts-showcase.html",
-    "docs/linter-implementation-plan.html"
+    "docs/linter-implementation-plan.html",
+    "docs/formatter-implementation-plan.html"
   ],
   "engines": {
     "node": ">=24"
@@ -39,14 +40,16 @@
     "test": "vitest run",
     "test:browser": "playwright test",
     "test:pack": "node ./scripts/test-pack.mjs",
+    "format:check": "node ./dist/cli.js format ./docs --check && node ./dist/cli.js format ./examples --check && node ./dist/cli.js format ./tests/fixtures/browser --check",
     "lint:docs": "node ./dist/cli.js lint ./docs --warnings-as-errors && node ./dist/cli.js lint ./examples --warnings-as-errors",
-    "check": "npm run typecheck && npm run lint && npm test && npm run build && npm run lint:docs && npm run test:browser && npm run test:pack",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build && npm run format:check && npm run lint:docs && npm run test:browser && npm run test:pack",
     "prepack": "npm run typecheck && npm test && npm run build",
     "prepublishOnly": "node ./scripts/refuse-publish.mjs"
   },
   "dependencies": {
     "html-validate": "11.3.0",
-    "open": "^11.0.1"
+    "open": "^11.0.1",
+    "prettier": "3.9.6"
   },
   "peerDependencies": {
     "chart.js": "^4.5.1",

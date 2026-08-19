@@ -101,6 +101,96 @@ test("shows the first navigation document and updates active navigation", async 
 
 });
 
+test("archives and restores the current document from the actions menu", async ({
+  page,
+}) => {
+  const archiveStateDirectory = resolve("tests/fixtures/browser/.spec-html");
+  await rm(archiveStateDirectory, { recursive: true, force: true });
+
+  try {
+    await page.goto("/");
+    const frame = page.frameLocator("iframe.viewer-document");
+    const actionsButton = page.getByRole("button", { name: "Document actions" });
+    const navigationViewButton = page.locator(".navigation-view-button");
+
+    await expect(frame.locator("h1")).toHaveText("Overview");
+    await expect(actionsButton).toHaveCSS("position", "static");
+    await expect(page.locator(".document-actions")).toHaveCSS("top", "16px");
+    await expect(page.locator(".document-actions")).toHaveCSS("right", "16px");
+    await expect(navigationViewButton).toHaveText("Archived");
+    await expect(navigationViewButton).toHaveAttribute(
+      "aria-label",
+      "Show archived documents",
+    );
+
+    await actionsButton.click();
+    await expect(actionsButton).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByRole("menuitem", { name: "Archive" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(actionsButton).toHaveAttribute("aria-expanded", "false");
+    await expect(actionsButton).toBeFocused();
+
+    await actionsButton.click();
+    await page.getByRole("menuitem", { name: "Archive" }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("view")).toBe(
+      "archive",
+    );
+    await expect(frame.locator("h1")).toHaveText("Overview");
+    await expect(page.locator(".viewer-navigation a")).toHaveCount(1);
+    await expect(page.locator(".viewer-navigation a")).toHaveText(/Overview/);
+    await expect(navigationViewButton).toHaveText("Documents");
+    await expect(navigationViewButton).toHaveAttribute(
+      "aria-label",
+      "Show documents",
+    );
+
+    await page.reload();
+    await expect(frame.locator("h1")).toHaveText("Overview");
+    await actionsButton.click();
+    await expect(page.getByRole("menuitem", { name: "Restore" })).toBeVisible();
+    await page.getByRole("menuitem", { name: "Restore" }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("view")).toBeNull();
+    await expect(frame.locator("h1")).toHaveText("Overview");
+    await expect(navigationViewButton).toHaveText("Archived");
+
+    await actionsButton.click();
+    await expect(page.getByRole("menuitem", { name: "Archive" })).toBeVisible();
+    await page.setViewportSize({ width: 375, height: 700 });
+    await expect(page.locator(".document-actions")).toHaveCSS("top", "12px");
+    await expect(page.locator(".document-actions")).toHaveCSS("right", "60px");
+    await expect(page.getByRole("button", { name: "メニュー" })).toHaveCSS(
+      "right",
+      "12px",
+    );
+  } finally {
+    await rm(archiveStateDirectory, { recursive: true, force: true });
+  }
+});
+
+test("switches between Documents and an empty Archive from the sidebar", async ({
+  page,
+}) => {
+  const archiveStateDirectory = resolve("tests/fixtures/browser/.spec-html");
+  await rm(archiveStateDirectory, { recursive: true, force: true });
+
+  await page.goto("/");
+  const navigationViewButton = page.locator(".navigation-view-button");
+  await navigationViewButton.click();
+
+  await expect(page.locator(".viewer-status")).toHaveText(
+    "アーカイブされた設計書がありません",
+  );
+  await expect(page).toHaveURL(/\?view=archive$/);
+  await expect(navigationViewButton).toHaveText("Documents");
+
+  await navigationViewButton.click();
+  await expect(
+    page.frameLocator("iframe.viewer-document").locator("h1"),
+  ).toHaveText("Overview");
+  await expect(page).toHaveURL(/\?doc=overview\.html$/);
+  await expect(navigationViewButton).toHaveText("Archived");
+});
+
 test("opens source HTML in a modal without replacing the document preview", async ({ page }) => {
   await page.goto("/");
 

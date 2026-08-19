@@ -1,102 +1,153 @@
 <article lang="ja">
-<header>
-<h1>HTML document Linter 実装計画</h1>
-<p>本書は、Spec HTMLで扱うPure HTML fragmentを静的検査し、LLMと人間へ推奨される修正を少ないtokenで伝えるLinterの実装計画を定める。標準HTMLを独自DSLへ置き換えず、機械的に判定できる欠陥と、確度の高い改善候補だけを報告する。</p>
-</header>
+  <header>
+    <h1>HTML document Linter 実装計画</h1>
+    <p>
+      本書は、Spec HTMLで扱うPure HTML
+      fragmentを静的検査し、LLMと人間へ推奨される修正を少ないtokenで伝えるLinterの実装計画を定める。標準HTMLを独自DSLへ置き換えず、機械的に判定できる欠陥と、確度の高い改善候補だけを報告する。
+    </p>
+  </header>
 
-<section id="goals">
-<h2>1. 目標</h2>
-<ul>
-<li>HTML構文、文書構造、参照、accessibility、段階的強化に関する欠陥を、Viewerで開く前に検出する。</li>
-<li>各診断を、LLMが追加調査なしで修正へ移れる短い命令形にする。</li>
-<li>同じ原因から派生する診断を抑え、LLMへ渡すcontextを小さく保つ。</li>
-<li>標準HTMLの規則を再実装せず、project固有コードを検出と整形の薄い層に留める。</li>
-<li><a href="authoring.html#rules">Authoring guideのルール</a>を自動検証可能な範囲で保護する。</li>
-</ul>
+  <section id="goals">
+    <h2>1. 目標</h2>
+    <ul>
+      <li>
+        HTML構文、文書構造、参照、accessibility、段階的強化に関する欠陥を、Viewerで開く前に検出する。
+      </li>
+      <li>各診断を、LLMが追加調査なしで修正へ移れる短い命令形にする。</li>
+      <li>同じ原因から派生する診断を抑え、LLMへ渡すcontextを小さく保つ。</li>
+      <li>標準HTMLの規則を再実装せず、project固有コードを検出と整形の薄い層に留める。</li>
+      <li>
+        <a href="authoring.html#rules">Authoring guideのルール</a>を自動検証可能な範囲で保護する。
+      </li>
+    </ul>
 
-<h3>1.1 成功状態</h3>
-<ul>
-<li><code>spec-html lint ./specs</code>がcontent directory内のHTMLを再帰的に検査する。</li>
-<li>通常出力はfile単位にまとめられ、各問題が位置、severity、rule ID、推奨修正の1行で分かる。</li>
-<li>妥当な標準HTML要素をproject独自の許可listで制限しない。</li>
-<li><code>docs</code>と<code>examples</code>がerrorなしで検査を通過する。</li>
-<li>全ruleに、合格例、違反例、境界例の自動testがある。</li>
-</ul>
-</section>
+    <h3>1.1 成功状態</h3>
+    <ul>
+      <li><code>spec-html lint ./specs</code>がcontent directory内のHTMLを再帰的に検査する。</li>
+      <li>
+        通常出力はfile単位にまとめられ、各問題が位置、severity、rule ID、推奨修正の1行で分かる。
+      </li>
+      <li>妥当な標準HTML要素をproject独自の許可listで制限しない。</li>
+      <li><code>docs</code>と<code>examples</code>がerrorなしで検査を通過する。</li>
+      <li>全ruleに、合格例、違反例、境界例の自動testがある。</li>
+    </ul>
+  </section>
 
-<section id="principles">
-<h2>2. Linter設計原則</h2>
-<ol>
-<li><strong>標準優先:</strong> HTML Living Standardとaccessibility上の確立した要件を基準とし、独自要素や独自文法を導入しない。</li>
-<li><strong>最小制約:</strong> 正誤を断定できるものをerror、意味の改善を高い確度で提案できるものだけをwarningにする。</li>
-<li><strong>修正優先:</strong> messageは原因の長い説明ではなく、望ましいHTMLの形を命令形で示す。</li>
-<li><strong>一原因一診断:</strong> 構文崩れや参照元欠落から派生する二次的な診断を出さない。</li>
-<li><strong>決定的出力:</strong> file path、位置、rule IDの順で常に同じ並びにし、LLMが差分を比較しやすくする。</li>
-<li><strong>段階的強化:</strong> JavaScriptを使う表現でも、重要な内容をHTML本文から取得できることを検査する。</li>
-</ol>
+  <section id="principles">
+    <h2>2. Linter設計原則</h2>
+    <ol>
+      <li>
+        <strong>標準優先:</strong> HTML Living
+        Standardとaccessibility上の確立した要件を基準とし、独自要素や独自文法を導入しない。
+      </li>
+      <li>
+        <strong>最小制約:</strong>
+        正誤を断定できるものをerror、意味の改善を高い確度で提案できるものだけをwarningにする。
+      </li>
+      <li>
+        <strong>修正優先:</strong> messageは原因の長い説明ではなく、望ましいHTMLの形を命令形で示す。
+      </li>
+      <li>
+        <strong>一原因一診断:</strong> 構文崩れや参照元欠落から派生する二次的な診断を出さない。
+      </li>
+      <li>
+        <strong>決定的出力:</strong> file path、位置、rule
+        IDの順で常に同じ並びにし、LLMが差分を比較しやすくする。
+      </li>
+      <li>
+        <strong>段階的強化:</strong>
+        JavaScriptを使う表現でも、重要な内容をHTML本文から取得できることを検査する。
+      </li>
+    </ol>
 
-<h3>2.1 Severity</h3>
-<table>
-<caption>Severityの判定基準</caption>
-<thead>
-<tr>
-<th scope="col">表示</th>
-<th scope="col">意味</th>
-<th scope="col">終了code</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<th scope="row"><code>E</code> / error</th>
-<td>構文違反、project契約違反、壊れた参照、明確なaccessibility欠陥。修正必須。</td>
-<td>1</td>
-</tr>
-<tr>
-<th scope="row"><code>W</code> / warning</th>
-<td>HTMLとして有効だが、より意味の明確な構造を高い確度で提案できる。既定では失敗にしない。</td>
-<td>0</td>
-</tr>
-</tbody>
-</table>
-<p><code>--warnings-as-errors</code>指定時だけwarningを失敗として扱う。情報だけを出す第3のseverityは設けない。</p>
-</section>
+    <h3>2.1 Severity</h3>
+    <table>
+      <caption>
+        Severityの判定基準
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">表示</th>
+          <th scope="col">意味</th>
+          <th scope="col">終了code</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><code>E</code> / error</th>
+          <td>構文違反、project契約違反、壊れた参照、明確なaccessibility欠陥。修正必須。</td>
+          <td>1</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>W</code> / warning</th>
+          <td>
+            HTMLとして有効だが、より意味の明確な構造を高い確度で提案できる。既定では失敗にしない。
+          </td>
+          <td>0</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      <code>--warnings-as-errors</code
+      >指定時だけwarningを失敗として扱う。情報だけを出す第3のseverityは設けない。
+    </p>
+  </section>
 
-<section id="diagnostics">
-<h2>3. LLM向け診断形式</h2>
-<p>既定の<code>compact</code>形式はfile pathを一度だけ表示し、診断を1行に収める。messageは「違反している」ではなく「何へ直すか」を先に書く。</p>
-<pre><code class="language-text">docs/sample.html
+  <section id="diagnostics">
+    <h2>3. LLM向け診断形式</h2>
+    <p>
+      既定の<code>compact</code>形式はfile
+      pathを一度だけ表示し、診断を1行に収める。messageは「違反している」ではなく「何へ直すか」を先に書く。
+    </p>
+    <pre><code class="language-text">docs/sample.html
   1:1 E DOC001 root-article — 最上位を article[lang] 1個にする
   8:3 W DOC101 section-anchor — h2を含むsectionへidを付ける
 summary files=1 errors=1 warnings=1
 </code></pre>
-<p>省略がある場合だけsummary末尾へ<code>displayed=50 omitted=N</code>を追加する。detailがある診断は推奨文の後ろへ<code>; detail</code>として1回だけ付ける。</p>
+    <p>
+      省略がある場合だけsummary末尾へ<code>displayed=50 omitted=N</code
+      >を追加する。detailがある診断は推奨文の後ろへ<code>; detail</code>として1回だけ付ける。
+    </p>
 
-<h3>3.1 1診断に含める情報</h3>
-<ol>
-<li>content rootからの相対file path</li>
-<li>1始まりの行と列</li>
-<li><code>E</code>または<code>W</code></li>
-<li>変更しないrule ID</li>
-<li>短いrule名</li>
-<li>推奨形を示す1文</li>
-<li>必要な場合だけ、実際の個数や未解決の参照値</li>
-</ol>
-<p>一般論、成功したcheck、source全体、stack trace、同じ修正説明の反復は通常出力へ含めない。</p>
-<p>推奨修正messageは80文字以内、detailは60文字以内、file見出しを除く診断1行は180文字以内にする。上限へ収まらない理由、違反例、推奨例はrule registryへ分離し、通常出力には含めない。</p>
+    <h3>3.1 1診断に含める情報</h3>
+    <ol>
+      <li>content rootからの相対file path</li>
+      <li>1始まりの行と列</li>
+      <li><code>E</code>または<code>W</code></li>
+      <li>変更しないrule ID</li>
+      <li>短いrule名</li>
+      <li>推奨形を示す1文</li>
+      <li>必要な場合だけ、実際の個数や未解決の参照値</li>
+    </ol>
+    <p>一般論、成功したcheck、source全体、stack trace、同じ修正説明の反復は通常出力へ含めない。</p>
+    <p>
+      推奨修正messageは80文字以内、detailは60文字以内、file見出しを除く診断1行は180文字以内にする。上限へ収まらない理由、違反例、推奨例はrule
+      registryへ分離し、通常出力には含めない。
+    </p>
 
-<h3>3.2 Token量を抑える規則</h3>
-<ul>
-<li>file名を診断ごとに反復せず、file単位にgroup化する。</li>
-<li>code frameと詳しい理由は既定で省略し、<code>--explain RULE_ID</code>で要求されたruleだけ表示する。</li>
-<li>同一要素へ同じruleが複数回成立しても1件にまとめる。</li>
-<li>構文解析が信頼できないfileでは構文errorを先に出し、誤検出し得る構造ruleを実行しない。</li>
-<li>既定の最大診断数を50件とし、超過時は省略件数と<code>--max-issues 0</code>による全件表示方法だけを末尾に示す。</li>
-<li>問題がなければ<code>summary files=N errors=0 warnings=0</code>の1行だけを出す。</li>
-</ul>
+    <h3>3.2 Token量を抑える規則</h3>
+    <ul>
+      <li>file名を診断ごとに反復せず、file単位にgroup化する。</li>
+      <li>
+        code frameと詳しい理由は既定で省略し、<code>--explain RULE_ID</code
+        >で要求されたruleだけ表示する。
+      </li>
+      <li>同一要素へ同じruleが複数回成立しても1件にまとめる。</li>
+      <li>構文解析が信頼できないfileでは構文errorを先に出し、誤検出し得る構造ruleを実行しない。</li>
+      <li>
+        既定の最大診断数を50件とし、超過時は省略件数と<code>--max-issues 0</code
+        >による全件表示方法だけを末尾に示す。
+      </li>
+      <li>問題がなければ<code>summary files=N errors=0 warnings=0</code>の1行だけを出す。</li>
+    </ul>
 
-<h3>3.3 JSON形式</h3>
-<p><code>--format json</code>はeditorや他toolとの連携用とし、LLMへ直接渡す用途では<code>compact</code>を推奨する。JSONはschema version、summary、diagnosticsを持ち、message文字列の解析を必要としない構造にする。</p>
-<pre><code class="language-json">{
+    <h3>3.3 JSON形式</h3>
+    <p>
+      <code>--format json</code
+      >はeditorや他toolとの連携用とし、LLMへ直接渡す用途では<code>compact</code>を推奨する。JSONはschema
+      version、summary、diagnosticsを持ち、message文字列の解析を必要としない構造にする。
+    </p>
+    <pre><code class="language-json">{
   "version": 1,
   "summary": {
     "files": 1,
@@ -119,180 +170,551 @@ summary files=1 errors=1 warnings=1
 }
 </code></pre>
 
-<h3>3.4 Rule説明とLLM修正loop</h3>
-<p>各ruleは、通常出力に使う短い推奨文に加え、<code>--explain</code>専用の理由、最小の違反例、最小の推奨例を1組だけ持つ。LLMは通常、次の短いloopで修正する。</p>
-<ol>
-<li><code>compact</code>形式で実行する。</li>
-<li>errorをfile内の上から順に修正する。</li>
-<li>修正方法が不明なruleだけ<code>--explain RULE_ID</code>で確認する。</li>
-<li>再実行して派生診断が消えたことを確認し、warningを判断する。</li>
-</ol>
-<p>このloopを成立させるため、rule ID、severity、推奨文はrelease間で不用意に変更しない。</p>
-<p><code>--explain</code>の出力順は見出し、理由、NG、OKに固定する。NGとOKは各1個の最小snippetだけを表示する。</p>
-<pre><code class="language-text">DOC001 root-article [error]
+    <h3>3.4 Rule説明とLLM修正loop</h3>
+    <p>
+      各ruleは、通常出力に使う短い推奨文に加え、<code>--explain</code>専用の理由、最小の違反例、最小の推奨例を1組だけ持つ。LLMは通常、次の短いloopで修正する。
+    </p>
+    <ol>
+      <li><code>compact</code>形式で実行する。</li>
+      <li>errorをfile内の上から順に修正する。</li>
+      <li>修正方法が不明なruleだけ<code>--explain RULE_ID</code>で確認する。</li>
+      <li>再実行して派生診断が消えたことを確認し、warningを判断する。</li>
+    </ol>
+    <p>このloopを成立させるため、rule ID、severity、推奨文はrelease間で不用意に変更しない。</p>
+    <p>
+      <code>--explain</code
+      >の出力順は見出し、理由、NG、OKに固定する。NGとOKは各1個の最小snippetだけを表示する。
+    </p>
+    <pre><code class="language-text">DOC001 root-article [error]
 理由: Viewerへ渡す本文fragmentの文書境界を一意にする。
 NG: &lt;h1&gt;Title&lt;/h1&gt;
 OK: &lt;article lang=&quot;ja&quot;&gt;&lt;h1&gt;Title&lt;/h1&gt;&lt;/article&gt;
 </code></pre>
-</section>
+  </section>
 
-<section id="error-rules">
-<h2>4. Error rules</h2>
-<p>Errorは自動判定が安定し、修正しない限り文書の解釈、参照、または利用可能性が損なわれる項目に限定する。</p>
-<table>
-<caption>初期releaseで有効にするerror rules</caption>
-<thead>
-<tr>
-<th scope="col">ID</th>
-<th scope="col">Rule</th>
-<th scope="col">検出条件と推奨形</th>
-</tr>
-</thead>
-<tbody>
-<tr><th scope="row"><code>HTML001</code></th><td>valid-syntax</td><td>HTML parserが構文errorを報告する。位置に対応する構文を標準HTMLへ直す。</td></tr>
-<tr><th scope="row"><code>HTML002</code></th><td>known-element</td><td>標準HTML、SVG、MathMLにない要素を使っている。内容に合う標準要素へ置き換える。</td></tr>
-<tr><th scope="row"><code>HTML003</code></th><td>conforming-markup</td><td>要素、属性、親子関係が標準HTMLのcontent modelに合わない。validatorが示す標準構造へ直す。</td></tr>
-<tr><th scope="row"><code>HTML004</code></th><td>fixed-rules</td><td><code>html-validate-*</code> inline directiveを使っている。suppressionを削除し、固定ruleへ適合させる。</td></tr>
-<tr><th scope="row"><code>DOC001</code></th><td>root-article</td><td>意味のある最上位要素が1個の<code>article</code>ではない。文書全体を1個の<code>article</code>にする。</td></tr>
-<tr><th scope="row"><code>DOC002</code></th><td>document-language</td><td>root <code>article</code>に空でない<code>lang</code>がない。本文の主言語を指定する。</td></tr>
-<tr><th scope="row"><code>DOC003</code></th><td>single-h1</td><td><code>h1</code>が1個ではない。文書題名を示す<code>h1</code>を1個だけ置く。</td></tr>
-<tr><th scope="row"><code>DOC004</code></th><td>heading-order</td><td>見出しlevelが下方向に飛ぶ。直前の見出しから1段ずつ深くする。</td></tr>
-<tr><th scope="row"><code>REF001</code></th><td>unique-id</td><td>同じfile内で<code>id</code>が重複する。各<code>id</code>を一意にする。</td></tr>
-<tr><th scope="row"><code>REF002</code></th><td>resolved-fragment</td><td>同一文書または文書間linkのfragmentが存在しない。参照値か対象<code>id</code>を直す。</td></tr>
-<tr><th scope="row"><code>REF003</code></th><td>resolved-local-file</td><td>Viewerで解決できないlocal参照である。content root内の実在する相対pathへ直す。</td></tr>
-<tr><th scope="row"><code>A11Y001</code></th><td>image-alt</td><td><code>img</code>に<code>alt</code>がない。内容を表す代替文、または装飾画像なら空の<code>alt</code>を指定する。</td></tr>
-<tr><th scope="row"><code>A11Y002</code></th><td>aria-reference</td><td><code>aria-labelledby</code>または<code>aria-describedby</code>の参照先がない。実在する一意な<code>id</code>を参照する。</td></tr>
-<tr><th scope="row"><code>FIG001</code></th><td>figure-caption</td><td><code>figure</code>に<code>figcaption</code>がない。図表の意味を短く示すcaptionを置く。</td></tr>
-<tr><th scope="row"><code>TBL001</code></th><td>table-caption</td><td>data tableに<code>caption</code>がない。表の目的を示すcaptionを置く。</td></tr>
-<tr><th scope="row"><code>TBL002</code></th><td>table-headers</td><td>見出しが<code>td</code>だけで表現される、または<code>th</code>の対応方向が不明。<code>th scope="col|row"</code>を使う。</td></tr>
-<tr><th scope="row"><code>DET001</code></th><td>details-summary</td><td><code>details</code>の最初の子が<code>summary</code>ではない。開閉内容の題名を<code>summary</code>にする。</td></tr>
-<tr><th scope="row"><code>INT001</code></th><td>canvas-name</td><td><code>canvas</code>にaccessibility tree上の名前がない。<code>aria-label</code>か<code>aria-labelledby</code>で名前を付ける。<code>aria-describedby</code>だけでは名前にならない。</td></tr>
-<tr><th scope="row"><code>INT002</code></th><td>mermaid-source</td><td><code>pre.mermaid</code>が空である。JavaScriptなしでも取得できるdiagram sourceを本文へ置く。</td></tr>
-</tbody>
-</table>
-</section>
+  <section id="error-rules">
+    <h2>4. Error rules</h2>
+    <p>
+      Errorは自動判定が安定し、修正しない限り文書の解釈、参照、または利用可能性が損なわれる項目に限定する。
+    </p>
+    <table>
+      <caption>
+        初期releaseで有効にするerror rules
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">ID</th>
+          <th scope="col">Rule</th>
+          <th scope="col">検出条件と推奨形</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><code>HTML001</code></th>
+          <td>valid-syntax</td>
+          <td>HTML parserが構文errorを報告する。位置に対応する構文を標準HTMLへ直す。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>HTML002</code></th>
+          <td>known-element</td>
+          <td>標準HTML、SVG、MathMLにない要素を使っている。内容に合う標準要素へ置き換える。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>HTML003</code></th>
+          <td>conforming-markup</td>
+          <td>
+            要素、属性、親子関係が標準HTMLのcontent modelに合わない。validatorが示す標準構造へ直す。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>HTML004</code></th>
+          <td>fixed-rules</td>
+          <td>
+            <code>html-validate-*</code> inline
+            directiveを使っている。suppressionを削除し、固定ruleへ適合させる。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>DOC001</code></th>
+          <td>root-article</td>
+          <td>
+            意味のある最上位要素が1個の<code>article</code>ではない。文書全体を1個の<code>article</code>にする。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>DOC002</code></th>
+          <td>document-language</td>
+          <td>
+            root <code>article</code>に空でない<code>lang</code>がない。本文の主言語を指定する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>DOC003</code></th>
+          <td>single-h1</td>
+          <td><code>h1</code>が1個ではない。文書題名を示す<code>h1</code>を1個だけ置く。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>DOC004</code></th>
+          <td>heading-order</td>
+          <td>見出しlevelが下方向に飛ぶ。直前の見出しから1段ずつ深くする。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>REF001</code></th>
+          <td>unique-id</td>
+          <td>同じfile内で<code>id</code>が重複する。各<code>id</code>を一意にする。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>REF002</code></th>
+          <td>resolved-fragment</td>
+          <td>
+            同一文書または文書間linkのfragmentが存在しない。参照値か対象<code>id</code>を直す。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>REF003</code></th>
+          <td>resolved-local-file</td>
+          <td>Viewerで解決できないlocal参照である。content root内の実在する相対pathへ直す。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>A11Y001</code></th>
+          <td>image-alt</td>
+          <td>
+            <code>img</code
+            >に<code>alt</code>がない。内容を表す代替文、または装飾画像なら空の<code>alt</code>を指定する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>A11Y002</code></th>
+          <td>aria-reference</td>
+          <td>
+            <code>aria-labelledby</code
+            >または<code>aria-describedby</code>の参照先がない。実在する一意な<code>id</code>を参照する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>FIG001</code></th>
+          <td>figure-caption</td>
+          <td>
+            <code>figure</code>に<code>figcaption</code>がない。図表の意味を短く示すcaptionを置く。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>TBL001</code></th>
+          <td>table-caption</td>
+          <td>data tableに<code>caption</code>がない。表の目的を示すcaptionを置く。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>TBL002</code></th>
+          <td>table-headers</td>
+          <td>
+            見出しが<code>td</code>だけで表現される、または<code>th</code>の対応方向が不明。<code
+              >th scope="col|row"</code
+            >を使う。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>DET001</code></th>
+          <td>details-summary</td>
+          <td>
+            <code>details</code
+            >の最初の子が<code>summary</code>ではない。開閉内容の題名を<code>summary</code>にする。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>INT001</code></th>
+          <td>canvas-name</td>
+          <td>
+            <code>canvas</code>にaccessibility
+            tree上の名前がない。<code>aria-label</code>か<code>aria-labelledby</code>で名前を付ける。<code>aria-describedby</code>だけでは名前にならない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>INT002</code></th>
+          <td>mermaid-source</td>
+          <td>
+            <code>pre.mermaid</code>が空である。JavaScriptなしでも取得できるdiagram
+            sourceを本文へ置く。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
 
-<section id="warning-rules">
-<h2>5. Warning rules</h2>
-<p>WarningはHTMLとして有効な書き方を禁止しない。意味を推測するruleは、誤検出が少ない限定的なpatternだけを対象にする。</p>
-<table>
-<caption>初期releaseで有効にするwarning rules</caption>
-<thead>
-<tr>
-<th scope="col">ID</th>
-<th scope="col">Rule</th>
-<th scope="col">検出条件と推奨形</th>
-</tr>
-</thead>
-<tbody>
-<tr><th scope="row"><code>DOC101</code></th><td>section-anchor</td><td><code>h2</code>を持つ<code>section</code>に<code>id</code>がない。安定したdeep link用の<code>id</code>をsectionへ付ける。</td></tr>
-<tr><th scope="row"><code>SEM101</code></th><td>semantic-section</td><td><code>article</code>直下の<code>div</code>が見出しと本文をまとめている。意味に応じて<code>section</code>、<code>aside</code>、<code>nav</code>などを使う。</td></tr>
-<tr><th scope="row"><code>FIG101</code></th><td>visual-figure</td><td><code>canvas</code>または<code>pre.mermaid</code>が<code>figure</code>外にある。図とcaptionを<code>figure</code>でまとめる。</td></tr>
-<tr><th scope="row"><code>INT101</code></th><td>chart-fallback</td><td><code>canvas</code>と同じsectioning範囲にdata tableがない。重要な値をHTMLの<code>table</code>にも置く。</td></tr>
-</tbody>
-</table>
-<p><code>div</code>、<code>span</code>、<code>p</code>の存在だけでは警告しない。<code>section</code>や<code>table</code>の使用回数も評価しない。内容の意味をLinterが断定できないためである。</p>
-</section>
+  <section id="warning-rules">
+    <h2>5. Warning rules</h2>
+    <p>
+      WarningはHTMLとして有効な書き方を禁止しない。意味を推測するruleは、誤検出が少ない限定的なpatternだけを対象にする。
+    </p>
+    <table>
+      <caption>
+        初期releaseで有効にするwarning rules
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">ID</th>
+          <th scope="col">Rule</th>
+          <th scope="col">検出条件と推奨形</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><code>DOC101</code></th>
+          <td>section-anchor</td>
+          <td>
+            <code>h2</code>を持つ<code>section</code>に<code>id</code>がない。安定したdeep
+            link用の<code>id</code>をsectionへ付ける。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>SEM101</code></th>
+          <td>semantic-section</td>
+          <td>
+            <code>article</code
+            >直下の<code>div</code>が見出しと本文をまとめている。意味に応じて<code>section</code>、<code>aside</code>、<code>nav</code>などを使う。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>FIG101</code></th>
+          <td>visual-figure</td>
+          <td>
+            <code>canvas</code
+            >または<code>pre.mermaid</code>が<code>figure</code>外にある。図とcaptionを<code>figure</code>でまとめる。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>INT101</code></th>
+          <td>chart-fallback</td>
+          <td>
+            <code>canvas</code>と同じsectioning範囲にdata
+            tableがない。重要な値をHTMLの<code>table</code>にも置く。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      <code>div</code
+      >、<code>span</code>、<code>p</code>の存在だけでは警告しない。<code>section</code>や<code>table</code>の使用回数も評価しない。内容の意味をLinterが断定できないためである。
+    </p>
+  </section>
 
-<section id="engine">
-<h2>6. 検査engine</h2>
-<p>標準HTMLの構文、要素metadata、source位置付きDOMには<a href="https://html-validate.org/guide/api/getting-started.html"><code>html-validate</code> API</a>を使用する。Spec HTML固有層は、root契約、複数fileの参照、段階的強化、診断の正規化だけを担当する。</p>
+  <section id="engine">
+    <h2>6. 検査engine</h2>
+    <p>
+      標準HTMLの構文、要素metadata、source位置付きDOMには<a
+        href="https://html-validate.org/guide/api/getting-started.html"
+        ><code>html-validate</code> API</a
+      >を使用する。Spec
+      HTML固有層は、root契約、複数fileの参照、段階的強化、診断の正規化だけを担当する。
+    </p>
 
-<h3>6.1 固定する技術選択</h3>
-<table>
-<caption>実装者が選び直さない技術事項</caption>
-<thead>
-<tr><th scope="col">項目</th><th scope="col">固定値</th></tr>
-</thead>
-<tbody>
-<tr><th scope="row">validator</th><td><code>html-validate</code>をruntime dependencyとして正確に<code>11.3.0</code>へ固定する。caretやtildeを付けない。</td></tr>
-<tr><th scope="row">version固定理由</th><td><code>11.3.0</code>はproject契約のNode.js 24以上と両立する。upgradeは新versionの<code>engines.node</code>を確認する別変更で行う。</td></tr>
-<tr><th scope="row">API</th><td><code>StaticConfigLoader</code>と非同期<code>HtmlValidate.validateString</code>を使う。同期APIと<code>validateFile</code>は使わない。</td></tr>
-<tr><th scope="row">設定</th><td>TypeScript内の固定configだけを使う。利用projectの<code>.htmlvalidate*</code>、ignore file、preset、inline suppressionを読み込まない。</td></tr>
-<tr><th scope="row">独自検査</th><td>外部公開しないinline pluginを作り、<code>Rule</code>の<code>dom:ready</code> eventで判定する。user向けplugin APIにはしない。</td></tr>
-<tr><th scope="row">実行方式</th><td>fileをsort後に1件ずつ順次検査する。並列化とcacheは初期releaseでは行わない。</td></tr>
-<tr><th scope="row">bundle</th><td><code>scripts/build.mjs</code>のNode buildで<code>html-validate</code>をexternalにする。Browser bundleへ含めない。</td></tr>
-</tbody>
-</table>
+    <h3>6.1 固定する技術選択</h3>
+    <table>
+      <caption>
+        実装者が選び直さない技術事項
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">項目</th>
+          <th scope="col">固定値</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">validator</th>
+          <td>
+            <code>html-validate</code>をruntime
+            dependencyとして正確に<code>11.3.0</code>へ固定する。caretやtildeを付けない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">version固定理由</th>
+          <td>
+            <code>11.3.0</code>はproject契約のNode.js
+            24以上と両立する。upgradeは新versionの<code>engines.node</code>を確認する別変更で行う。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">API</th>
+          <td>
+            <code>StaticConfigLoader</code
+            >と非同期<code>HtmlValidate.validateString</code>を使う。同期APIと<code>validateFile</code>は使わない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">設定</th>
+          <td>
+            TypeScript内の固定configだけを使う。利用projectの<code>.htmlvalidate*</code>、ignore
+            file、preset、inline suppressionを読み込まない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">独自検査</th>
+          <td>
+            外部公開しないinline pluginを作り、<code>Rule</code>の<code>dom:ready</code>
+            eventで判定する。user向けplugin APIにはしない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">実行方式</th>
+          <td>fileをsort後に1件ずつ順次検査する。並列化とcacheは初期releaseでは行わない。</td>
+        </tr>
+        <tr>
+          <th scope="row">bundle</th>
+          <td>
+            <code>scripts/build.mjs</code>のNode
+            buildで<code>html-validate</code>をexternalにする。Browser bundleへ含めない。
+          </td>
+        </tr>
+      </tbody>
+    </table>
 
-<h3>6.2 HTML Validate設定</h3>
-<p><code>html-validate:recommended</code>や<code>html-validate:document</code>は使わない。fragmentに不要なDOCTYPEやstyle上の好みまで混入させないため、次のbuiltin ruleだけを明示的に有効化する。</p>
-<table>
-<caption>builtin ruleから公開rule IDへの対応</caption>
-<thead>
-<tr><th scope="col">公開ID</th><th scope="col"><code>html-validate</code> rule</th></tr>
-</thead>
-<tbody>
-<tr><th scope="row"><code>HTML001</code></th><td><code>parser-error</code>、<code>close-order</code>、<code>no-dup-attr</code>、<code>script-element</code>、<code>void-content</code></td></tr>
-<tr><th scope="row"><code>HTML002</code></th><td><code>no-unknown-elements</code></td></tr>
-<tr><th scope="row"><code>HTML003</code></th><td><code>attribute-allowed-values</code>、<code>attribute-misuse</code>、<code>deprecated</code>、<code>element-name</code>、<code>element-permitted-content</code>、<code>element-permitted-occurrences</code>、<code>element-permitted-order</code>、<code>element-permitted-parent</code>、<code>element-required-ancestor</code>、<code>element-required-attributes</code>、<code>element-required-content</code>、<code>no-deprecated-attr</code>、<code>no-unknown-attributes</code>、<code>valid-id</code></td></tr>
-<tr><th scope="row"><code>DOC004</code></th><td><code>heading-level</code></td></tr>
-<tr><th scope="row"><code>REF001</code></th><td><code>no-dup-id</code></td></tr>
-<tr><th scope="row"><code>A11Y001</code></th><td><code>wcag/h37</code></td></tr>
-<tr><th scope="row"><code>A11Y002</code></th><td><code>no-missing-references</code></td></tr>
-<tr><th scope="row"><code>TBL002</code></th><td><code>wcag/h63</code></td></tr>
-</tbody>
-</table>
-<p>Configは<code>root: true</code>、<code>extends: []</code>、<code>elements: ["html5"]</code>とし、表にないbuiltin ruleはすべて無効にする。標準ruleの英語messageはそのまま公開せず、表の公開IDと<code>rules.ts</code>の日本語推奨文へ変換する。元messageは改行を空白へ変換して60文字で切り、必要な場合だけ<code>detail</code>として付ける。</p>
-<p>内部ruleは<code>spec-html/document-errors: error</code>、<code>spec-html/document-warnings: warn</code>、<code>spec-html/collect-facts: error</code>で有効化する。<code>collect-facts</code>はinstance生成のため有効にするだけで<code>report</code>を呼ばない。</p>
+    <h3>6.2 HTML Validate設定</h3>
+    <p>
+      <code>html-validate:recommended</code
+      >や<code>html-validate:document</code>は使わない。fragmentに不要なDOCTYPEやstyle上の好みまで混入させないため、次のbuiltin
+      ruleだけを明示的に有効化する。
+    </p>
+    <table>
+      <caption>
+        builtin ruleから公開rule IDへの対応
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">公開ID</th>
+          <th scope="col"><code>html-validate</code> rule</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><code>HTML001</code></th>
+          <td>
+            <code>parser-error</code
+            >、<code>close-order</code>、<code>no-dup-attr</code>、<code>script-element</code>、<code
+              >void-content</code
+            >
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>HTML002</code></th>
+          <td><code>no-unknown-elements</code></td>
+        </tr>
+        <tr>
+          <th scope="row"><code>HTML003</code></th>
+          <td>
+            <code>attribute-allowed-values</code
+            >、<code>attribute-misuse</code>、<code>deprecated</code>、<code>element-name</code>、<code>element-permitted-content</code>、<code>element-permitted-occurrences</code>、<code>element-permitted-order</code>、<code>element-permitted-parent</code>、<code>element-required-ancestor</code>、<code>element-required-attributes</code>、<code>element-required-content</code>、<code>no-deprecated-attr</code>、<code>no-unknown-attributes</code>、<code
+              >valid-id</code
+            >
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>DOC004</code></th>
+          <td><code>heading-level</code></td>
+        </tr>
+        <tr>
+          <th scope="row"><code>REF001</code></th>
+          <td><code>no-dup-id</code></td>
+        </tr>
+        <tr>
+          <th scope="row"><code>A11Y001</code></th>
+          <td><code>wcag/h37</code></td>
+        </tr>
+        <tr>
+          <th scope="row"><code>A11Y002</code></th>
+          <td><code>no-missing-references</code></td>
+        </tr>
+        <tr>
+          <th scope="row"><code>TBL002</code></th>
+          <td><code>wcag/h63</code></td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Configは<code>root: true</code>、<code>extends: []</code>、<code>elements: ["html5"]</code
+      >とし、表にないbuiltin
+      ruleはすべて無効にする。標準ruleの英語messageはそのまま公開せず、表の公開IDと<code>rules.ts</code>の日本語推奨文へ変換する。元messageは改行を空白へ変換して60文字で切り、必要な場合だけ<code>detail</code>として付ける。
+    </p>
+    <p>
+      内部ruleは<code>spec-html/document-errors: error</code>、<code
+        >spec-html/document-warnings: warn</code
+      >、<code>spec-html/collect-facts: error</code
+      >で有効化する。<code>collect-facts</code>はinstance生成のため有効にするだけで<code>report</code>を呼ばない。
+    </p>
 
-<h3>6.3 Project ruleの判定algorithm</h3>
-<table>
-<caption>独自判定を行うruleの成立条件</caption>
-<thead>
-<tr><th scope="col">ID</th><th scope="col">成立条件、位置、cascade</th></tr>
-</thead>
-<tbody>
-<tr><th scope="row"><code>HTML004</code></th><td><code>/&lt;!--[\s\S]*?html-validate-(?:enable|disable(?:-next|-block)?)[\s\S]*?--&gt;/gi</code>に一致するcommentがある。validator実行前にscanし、各comment開始位置へ報告する。</td></tr>
-<tr><th scope="row"><code>DOC001</code></th><td>root直下のcommentと空白textを除いたnodeが、1個の<code>article</code>だけではない。最初の違反node、nodeがない場合は1:1へ報告する。</td></tr>
-<tr><th scope="row"><code>DOC002</code></th><td>root <code>article</code>の<code>lang</code>がない、またはtrim後に空。<code>article</code>へ報告する。DOC001成立時は実行しない。</td></tr>
-<tr><th scope="row"><code>DOC003</code></th><td>fragment全体の<code>h1</code>が1個でない、または唯一の<code>h1</code>のtext contentがtrim後に空。個数違反は<code>article</code>、空textは<code>h1</code>へ報告する。</td></tr>
-<tr><th scope="row"><code>FIG001</code></th><td>各<code>figure</code>に直接の子である非空<code>figcaption</code>がない。<code>figure</code>へ1件だけ報告する。複数配置や順序の標準違反はHTML003だけで報告する。</td></tr>
-<tr><th scope="row"><code>TBL001</code></th><td>各<code>table</code>に直接の子である非空<code>caption</code>がない。<code>table</code>へ1件だけ報告する。複数配置や順序の標準違反はHTML003だけで報告する。</td></tr>
-<tr><th scope="row"><code>DET001</code></th><td><code>details</code>の最初のelement childが非空の<code>summary</code>ではない。<code>details</code>へ1件報告する。</td></tr>
-<tr><th scope="row"><code>INT001</code></th><td>各<code>canvas</code>が、非空の<code>aria-label</code>、または非空textを持つ実在IDを指す<code>aria-labelledby</code>のどちらも持たない。<code>canvas</code>へ報告する。</td></tr>
-<tr><th scope="row"><code>INT002</code></th><td><code>pre</code>のclass tokenに<code>mermaid</code>があり、text contentがtrim後に空。対象<code>pre</code>へ報告する。</td></tr>
-<tr><th scope="row"><code>DOC101</code></th><td><code>section</code>の直接の<code>h2</code>、または直接の<code>header</code>内の<code>h2</code>があり、section自身に非空<code>id</code>がない。<code>section</code>へ報告する。</td></tr>
-<tr><th scope="row"><code>SEM101</code></th><td>root <code>article</code>直下の<code>div</code>が、直接の見出し、または直接の<code>header</code>内の見出しを持つ。対象<code>div</code>へ報告する。</td></tr>
-<tr><th scope="row"><code>FIG101</code></th><td>各<code>canvas</code>または<code>pre.mermaid</code>に祖先<code>figure</code>がない。可視化要素へ報告する。</td></tr>
-<tr><th scope="row"><code>INT101</code></th><td><code>canvas</code>の最寄りの祖先<code>section</code>、なければroot <code>article</code>に<code>table</code>がない。値の一致は判定せずwarningに留める。</td></tr>
-</tbody>
-</table>
+    <h3>6.3 Project ruleの判定algorithm</h3>
+    <table>
+      <caption>
+        独自判定を行うruleの成立条件
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">ID</th>
+          <th scope="col">成立条件、位置、cascade</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><code>HTML004</code></th>
+          <td>
+            <code
+              >/&lt;!--[\s\S]*?html-validate-(?:enable|disable(?:-next|-block)?)[\s\S]*?--&gt;/gi</code
+            >に一致するcommentがある。validator実行前にscanし、各comment開始位置へ報告する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>DOC001</code></th>
+          <td>
+            root直下のcommentと空白textを除いたnodeが、1個の<code>article</code>だけではない。最初の違反node、nodeがない場合は1:1へ報告する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>DOC002</code></th>
+          <td>
+            root
+            <code>article</code
+            >の<code>lang</code>がない、またはtrim後に空。<code>article</code>へ報告する。DOC001成立時は実行しない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>DOC003</code></th>
+          <td>
+            fragment全体の<code>h1</code>が1個でない、または唯一の<code>h1</code>のtext
+            contentがtrim後に空。個数違反は<code>article</code>、空textは<code>h1</code>へ報告する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>FIG001</code></th>
+          <td>
+            各<code>figure</code>に直接の子である非空<code>figcaption</code>がない。<code>figure</code>へ1件だけ報告する。複数配置や順序の標準違反はHTML003だけで報告する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>TBL001</code></th>
+          <td>
+            各<code>table</code>に直接の子である非空<code>caption</code>がない。<code>table</code>へ1件だけ報告する。複数配置や順序の標準違反はHTML003だけで報告する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>DET001</code></th>
+          <td>
+            <code>details</code>の最初のelement
+            childが非空の<code>summary</code>ではない。<code>details</code>へ1件報告する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>INT001</code></th>
+          <td>
+            各<code>canvas</code>が、非空の<code>aria-label</code>、または非空textを持つ実在IDを指す<code>aria-labelledby</code>のどちらも持たない。<code>canvas</code>へ報告する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>INT002</code></th>
+          <td>
+            <code>pre</code>のclass tokenに<code>mermaid</code>があり、text
+            contentがtrim後に空。対象<code>pre</code>へ報告する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>DOC101</code></th>
+          <td>
+            <code>section</code
+            >の直接の<code>h2</code>、または直接の<code>header</code>内の<code>h2</code>があり、section自身に非空<code>id</code>がない。<code>section</code>へ報告する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>SEM101</code></th>
+          <td>
+            root
+            <code>article</code
+            >直下の<code>div</code>が、直接の見出し、または直接の<code>header</code>内の見出しを持つ。対象<code>div</code>へ報告する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>FIG101</code></th>
+          <td>
+            各<code>canvas</code>または<code>pre.mermaid</code>に祖先<code>figure</code>がない。可視化要素へ報告する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>INT101</code></th>
+          <td>
+            <code>canvas</code>の最寄りの祖先<code>section</code>、なければroot
+            <code>article</code>に<code>table</code>がない。値の一致は判定せずwarningに留める。
+          </td>
+        </tr>
+      </tbody>
+    </table>
 
-<h3>6.4 Parser errorと診断の重複</h3>
-<ul>
-<li>HTML004が1件以上あるfileはHTML004だけを残し、validatorを実行しない。suppression削除後の再実行で本来の診断を出す。</li>
-<li>1fileのreportに<code>parser-error</code>が1件以上あれば、そのfileは<code>HTML001</code>だけを残し、他のbuiltin診断、project rule、収集した参照情報を破棄する。</li>
-<li>構文errorのあるfileを参照する別fileについて、対象fragmentの<code>REF002</code>は出さない。先に対象fileのHTML001を直させる。</li>
-<li>診断の重複keyは<code>file + line + column + 公開rule ID</code>とする。同じkeyでは最初の1件だけを残す。</li>
-<li>異なるruleが同じ位置で成立する場合は両方残す。ただしDOC001成立時はDOC002とDOC003を実行しない。</li>
-</ul>
+    <h3>6.4 Parser errorと診断の重複</h3>
+    <ul>
+      <li>
+        HTML004が1件以上あるfileはHTML004だけを残し、validatorを実行しない。suppression削除後の再実行で本来の診断を出す。
+      </li>
+      <li>
+        1fileのreportに<code>parser-error</code>が1件以上あれば、そのfileは<code>HTML001</code>だけを残し、他のbuiltin診断、project
+        rule、収集した参照情報を破棄する。
+      </li>
+      <li>
+        構文errorのあるfileを参照する別fileについて、対象fragmentの<code>REF002</code>は出さない。先に対象fileのHTML001を直させる。
+      </li>
+      <li>
+        診断の重複keyは<code>file + line + column + 公開rule ID</code
+        >とする。同じkeyでは最初の1件だけを残す。
+      </li>
+      <li>
+        異なるruleが同じ位置で成立する場合は両方残す。ただしDOC001成立時はDOC002とDOC003を実行しない。
+      </li>
+    </ul>
 
-<h3>6.5 文書間参照</h3>
-<p>DOM構築時に、各fileから<code>id</code>と次のURL属性を収集する。</p>
-<p><code>a[href]</code>、<code>link[href]</code>、<code>img[src]</code>、<code>script[src]</code>、<code>video[src]</code>、<code>video[poster]</code>、<code>audio[src]</code>、<code>source[src]</code>、<code>track[src]</code>、<code>iframe[src]</code>、<code>object[data]</code>、SVGの<code>image[href]</code>と<code>use[href]</code>を初期対象とする。<code>srcset</code>は初期releaseでは検査しない。</p>
-<ul>
-<li><code>http:</code>、<code>https:</code>、<code>mailto:</code>、<code>tel:</code>、<code>data:</code>、<code>blob:</code>と<code>//</code>始まりは外部参照として無視する。</li>
-<li><code>javascript:</code>、<code>file:</code>を含む上記以外のschemeはViewerのcontent参照として扱えないためREF003とする。</li>
-<li><code>#id</code>は現在file、相対pathは現在fileのdirectoryを基準にする。queryは存在確認から除き、fragmentはpercent decodeしてID照合する。</li>
-<li><code>/</code>始まり、NUL、不正percent encoding、root外へ出る<code>..</code>、root外を指すsymlinkはREF003とする。</li>
-<li>参照先fileがない、directoryである、または読めない場合はREF003とする。HTML fileにfragmentがあり、そのIDがない場合だけREF002とする。</li>
-<li>空の<code>href</code>とqueryだけの<code>href</code>は現在documentを指すものとしてfile存在検査を省略する。</li>
-<li><code>href</code>以外の対象URL属性が空の場合はREF003とする。</li>
-</ul>
+    <h3>6.5 文書間参照</h3>
+    <p>DOM構築時に、各fileから<code>id</code>と次のURL属性を収集する。</p>
+    <p>
+      <code>a[href]</code
+      >、<code>link[href]</code>、<code>img[src]</code>、<code>script[src]</code>、<code>video[src]</code>、<code>video[poster]</code>、<code>audio[src]</code>、<code>source[src]</code>、<code>track[src]</code>、<code>iframe[src]</code>、<code>object[data]</code>、SVGの<code>image[href]</code>と<code>use[href]</code>を初期対象とする。<code>srcset</code>は初期releaseでは検査しない。
+    </p>
+    <ul>
+      <li>
+        <code>http:</code
+        >、<code>https:</code>、<code>mailto:</code>、<code>tel:</code>、<code>data:</code>、<code>blob:</code>と<code>//</code>始まりは外部参照として無視する。
+      </li>
+      <li>
+        <code>javascript:</code
+        >、<code>file:</code>を含む上記以外のschemeはViewerのcontent参照として扱えないためREF003とする。
+      </li>
+      <li>
+        <code>#id</code
+        >は現在file、相対pathは現在fileのdirectoryを基準にする。queryは存在確認から除き、fragmentはpercent
+        decodeしてID照合する。
+      </li>
+      <li>
+        <code>/</code>始まり、NUL、不正percent
+        encoding、root外へ出る<code>..</code>、root外を指すsymlinkはREF003とする。
+      </li>
+      <li>
+        参照先fileがない、directoryである、または読めない場合はREF003とする。HTML
+        fileにfragmentがあり、そのIDがない場合だけREF002とする。
+      </li>
+      <li>
+        空の<code>href</code>とqueryだけの<code>href</code>は現在documentを指すものとしてfile存在検査を省略する。
+      </li>
+      <li><code>href</code>以外の対象URL属性が空の場合はREF003とする。</li>
+    </ul>
 
-<h3>6.6 検査順</h3>
-<ol>
-<li>content rootを<code>realpath</code>で固定し、共通file探索でHTMLを収集する。</li>
-<li>各fileをUTF-8で読み、HTML004を先に検査する。</li>
-<li><code>validateString(source, absolutePath)</code>でfragmentを検査し、builtin診断と内部plugin診断を正規化する。</li>
-<li>parser errorのないfileからIDとURL属性を収集する。</li>
-<li>全fileの収集完了後にREF002とREF003を解決する。</li>
-<li>重複を除き、path、行、列、rule IDでsortして出力する。</li>
-</ol>
+    <h3>6.6 検査順</h3>
+    <ol>
+      <li>content rootを<code>realpath</code>で固定し、共通file探索でHTMLを収集する。</li>
+      <li>各fileをUTF-8で読み、HTML004を先に検査する。</li>
+      <li>
+        <code>validateString(source, absolutePath)</code
+        >でfragmentを検査し、builtin診断と内部plugin診断を正規化する。
+      </li>
+      <li>parser errorのないfileからIDとURL属性を収集する。</li>
+      <li>全fileの収集完了後にREF002とREF003を解決する。</li>
+      <li>重複を除き、path、行、列、rule IDでsortして出力する。</li>
+    </ol>
 
-<h3>6.7 型と関数契約</h3>
-<pre><code class="language-typescript">export type DiagnosticSeverity = "error" | "warning";
+    <h3>6.7 型と関数契約</h3>
+    <pre><code class="language-typescript">export type DiagnosticSeverity = "error" | "warning";
 
 export type RuleId =
   | "HTML001" | "HTML002" | "HTML003" | "HTML004"
@@ -362,11 +784,19 @@ export async function lintProject(contentRoot: string): Promise&lt;LintResult&gt
 export function formatCompact(result: LintResult, maxIssues: number): string;
 export function formatJson(result: LintResult, maxIssues: number): string;
 </code></pre>
-<p><code>lintProject</code>は診断を返し、stdoutとstderrへ書かない。directoryがない、directoryでない、readまたは<code>realpath</code>に失敗した場合は例外を投げる。Formatterだけが件数制限を適用する。</p>
-<p>内部plugin factoryはfacts保存callbackをclosureで受け取り、<code>spec-html/document-errors</code>、<code>spec-html/document-warnings</code>、<code>spec-html/collect-facts</code>の3 ruleを返す。前2ruleのreportは<code>SpecRuleContext.rule</code>へ公開IDを必ず設定し、converterはcontextのない内部rule診断をprogramming errorとして例外にする。</p>
+    <p>
+      <code>lintProject</code
+      >は診断を返し、stdoutとstderrへ書かない。directoryがない、directoryでない、readまたは<code>realpath</code>に失敗した場合は例外を投げる。Formatterだけが件数制限を適用する。
+    </p>
+    <p>
+      内部plugin
+      factoryはfacts保存callbackをclosureで受け取り、<code>spec-html/document-errors</code>、<code>spec-html/document-warnings</code>、<code>spec-html/collect-facts</code>の3
+      ruleを返す。前2ruleのreportは<code>SpecRuleContext.rule</code>へ公開IDを必ず設定し、converterはcontextのない内部rule診断をprogramming
+      errorとして例外にする。
+    </p>
 
-<h3>6.8 Source構成</h3>
-<pre><code class="language-text">src/
+    <h3>6.8 Source構成</h3>
+    <pre><code class="language-text">src/
 ├─ content/
 │  └─ documents.ts  # navigationとlintが共有するHTML探索
 ├─ lint/
@@ -386,37 +816,67 @@ tests/
    ├─ lint-project.test.ts
    └─ lint-diagnostics.test.ts
 </code></pre>
-<p><code>documents.ts</code>は、隠しdirectory、<code>node_modules</code>、<code>nav.html</code>、symlinkを探索せず、拡張子をcase-insensitiveに判定し、POSIX形式の相対pathでsortする。現在<code>src/server/navigation.ts</code>内にある探索をここへ移し、navigationの表示順と除外条件を変えない。</p>
-<p>内部pluginにはerror用、warning用、文書facts収集用の3 rule classだけを置く。公開API、user plugin、設定loader、ruleごとのfileは作らない。</p>
-</section>
+    <p>
+      <code>documents.ts</code
+      >は、隠しdirectory、<code>node_modules</code>、<code>nav.html</code>、symlinkを探索せず、拡張子をcase-insensitiveに判定し、POSIX形式の相対pathでsortする。現在<code>src/server/navigation.ts</code>内にある探索をここへ移し、navigationの表示順と除外条件を変えない。
+    </p>
+    <p>
+      内部pluginにはerror用、warning用、文書facts収集用の3 rule classだけを置く。公開API、user
+      plugin、設定loader、ruleごとのfileは作らない。
+    </p>
+  </section>
 
-<section id="cli">
-<h2>7. CLI仕様</h2>
-<pre><code class="language-bash">spec-html lint [directory]
+  <section id="cli">
+    <h2>7. CLI仕様</h2>
+    <pre><code class="language-bash">spec-html lint [directory]
 spec-html lint [directory] --format compact
 spec-html lint [directory] --format json
 spec-html lint [directory] --warnings-as-errors
 spec-html lint [directory] --max-issues 50
 spec-html lint --explain DOC001
 </code></pre>
-<ul>
-<li><code>directory</code>の既定値はViewerと同じ<code>./specs</code>とする。</li>
-<li>lintの終了code 0は成功、1はlint errorまたは<code>--warnings-as-errors</code>による失敗、2はlintの引数、filesystem、内部処理の失敗とする。</li>
-<li>外部URLは存在確認しない。構文上有効なら検査対象外とする。</li>
-<li><code>--explain</code>はruleの理由、違反例、推奨例を表示して終了し、通常診断へ説明を反復しない。</li>
-<li><code>--max-issues 0</code>は件数制限なしとする。</li>
-<li><code>--warnings-as-errors</code>は終了codeだけを変え、warningの表示記号、severity、JSON値をerrorへ書き換えない。</li>
-</ul>
+    <ul>
+      <li><code>directory</code>の既定値はViewerと同じ<code>./specs</code>とする。</li>
+      <li>
+        lintの終了code 0は成功、1はlint
+        errorまたは<code>--warnings-as-errors</code>による失敗、2はlintの引数、filesystem、内部処理の失敗とする。
+      </li>
+      <li>外部URLは存在確認しない。構文上有効なら検査対象外とする。</li>
+      <li>
+        <code>--explain</code
+        >はruleの理由、違反例、推奨例を表示して終了し、通常診断へ説明を反復しない。
+      </li>
+      <li><code>--max-issues 0</code>は件数制限なしとする。</li>
+      <li>
+        <code>--warnings-as-errors</code
+        >は終了codeだけを変え、warningの表示記号、severity、JSON値をerrorへ書き換えない。
+      </li>
+    </ul>
 
-<h3>7.1 既存CLIとの互換性</h3>
-<ul>
-<li>先頭argumentが正確に<code>lint</code>の場合だけlint parserへ渡す。それ以外は現在のViewer起動parserへ渡す。</li>
-<li><code>spec-html ./lint</code>は引き続き<code>./lint</code> directoryのViewer起動として扱う。</li>
-<li>既存の<code>spec-html [directory] [--host ...]</code>、Viewer optionのhelp行、成功出力、失敗時の終了code 1を変更しない。root helpにはlint usageだけを追記する。</li>
-<li>lintでは<code>--host</code>、<code>--port</code>、<code>--open</code>、<code>--no-open</code>を拒否する。Viewer起動ではlint専用optionを拒否する。</li>
-<li><code>spec-html lint --help</code>はlint help、rootの<code>--help</code>は両方のusageを表示する。<code>--version</code>はroot commandだけで扱う。</li>
-</ul>
-<pre><code class="language-typescript">export interface CliLintOptions {
+    <h3>7.1 既存CLIとの互換性</h3>
+    <ul>
+      <li>
+        先頭argumentが正確に<code>lint</code>の場合だけlint
+        parserへ渡す。それ以外は現在のViewer起動parserへ渡す。
+      </li>
+      <li>
+        <code>spec-html ./lint</code>は引き続き<code>./lint</code> directoryのViewer起動として扱う。
+      </li>
+      <li>
+        既存の<code>spec-html [directory] [--host ...]</code>、Viewer
+        optionのhelp行、成功出力、失敗時の終了code 1を変更しない。root helpにはlint
+        usageだけを追記する。
+      </li>
+      <li>
+        lintでは<code>--host</code>、<code>--port</code>、<code>--open</code>、<code>--no-open</code>を拒否する。Viewer起動ではlint専用optionを拒否する。
+      </li>
+      <li>
+        <code>spec-html lint --help</code>はlint
+        help、rootの<code>--help</code>は両方のusageを表示する。<code>--version</code>はroot
+        commandだけで扱う。
+      </li>
+    </ul>
+    <pre><code class="language-typescript">export interface CliLintOptions {
   contentRoot: string;
   format: "compact" | "json";
   warningsAsErrors: boolean;
@@ -431,130 +891,266 @@ export type CliCommand =
   | { kind: "lint-help" }
   | { kind: "version" };
 </code></pre>
-<p><code>--explain</code>はdirectory、<code>--format</code>、<code>--warnings-as-errors</code>、<code>--max-issues</code>と同時指定できない。未知のformat、未知のrule ID、負数、小数、指数表記、値なしは<code>CliUsageError</code>にする。</p>
+    <p>
+      <code>--explain</code
+      >はdirectory、<code>--format</code>、<code>--warnings-as-errors</code>、<code>--max-issues</code>と同時指定できない。未知のformat、未知のrule
+      ID、負数、小数、指数表記、値なしは<code>CliUsageError</code>にする。
+    </p>
 
-<h3>7.2 出力channel</h3>
-<ul>
-<li>lint結果と<code>--explain</code>はstdoutへ出す。</li>
-<li>usage、filesystem、内部errorは<code>spec-html: </code>prefix付きでstderrへ出す。</li>
-<li>JSON形式のstdoutにはJSON document以外を混ぜない。</li>
-<li>compact形式は末尾を改行1個、JSON形式は<code>JSON.stringify(value, null, 2)</code>と末尾改行に固定する。</li>
-<li>件数制限はsort後の先頭N件に適用し、summaryのerrorsとwarningsは省略前、displayedとomittedは省略後の値にする。</li>
-</ul>
-<p>repository自身の検査には、build済みCLIを使う次のscriptを追加する。</p>
-<pre><code class="language-json">{
+    <h3>7.2 出力channel</h3>
+    <ul>
+      <li>lint結果と<code>--explain</code>はstdoutへ出す。</li>
+      <li>usage、filesystem、内部errorは<code>spec-html: </code>prefix付きでstderrへ出す。</li>
+      <li>JSON形式のstdoutにはJSON document以外を混ぜない。</li>
+      <li>
+        compact形式は末尾を改行1個、JSON形式は<code>JSON.stringify(value, null, 2)</code
+        >と末尾改行に固定する。
+      </li>
+      <li>
+        件数制限はsort後の先頭N件に適用し、summaryのerrorsとwarningsは省略前、displayedとomittedは省略後の値にする。
+      </li>
+    </ul>
+    <p>repository自身の検査には、build済みCLIを使う次のscriptを追加する。</p>
+    <pre><code class="language-json">{
   "scripts": {
     "lint:docs": "node ./dist/cli.js lint ./docs --warnings-as-errors &amp;&amp; node ./dist/cli.js lint ./examples --warnings-as-errors"
   }
 }
 </code></pre>
-<p><code>check</code>では<code>build</code>直後に<code>lint:docs</code>を実行し、実際に配布するCLI bundleを検証する。</p>
-</section>
+    <p>
+      <code>check</code
+      >では<code>build</code>直後に<code>lint:docs</code>を実行し、実際に配布するCLI
+      bundleを検証する。
+    </p>
+  </section>
 
-<section id="implementation-phases">
-<h2>8. File単位の実装task</h2>
-<p>taskはT0から順に行う。各taskでは記載した対象以外を変更せず、確認commandが成功してから次へ進む。</p>
+  <section id="implementation-phases">
+    <h2>8. File単位の実装task</h2>
+    <p>
+      taskはT0から順に行う。各taskでは記載した対象以外を変更せず、確認commandが成功してから次へ進む。
+    </p>
 
-<h3>T0: BaselineとAPI smoke test</h3>
-<p>対象: 変更なし。</p>
-<ol>
-<li><code>npm run typecheck</code>、<code>npm run lint</code>、<code>npm test</code>、<code>npm run build</code>を実行し、既存失敗があればLinter実装と混ぜずに記録する。</li>
-<li><code>npm view html-validate@11.3.0 engines --json</code>でNode.js 24以上との互換を確認する。</li>
-<li>実装開始後の最初のunit testで、<code>StaticConfigLoader</code>、inline plugin、非同期<code>validateString</code>、<code>dom:ready</code>、reportの<code>context</code>が動く最小caseを先に通す。</li>
-</ol>
-<p>現在の手動auditで既知のproject rule違反は、<code>examples/charts/latency.html</code>のcanvasが<code>aria-describedby</code>だけを持つINT001の1件である。新たな標準HTML違反が見つかった場合はruleを弱めず、T8の対象へ該当fileを追記して修正する。</p>
-<p>完了条件: baselineの成否と依存versionが確定し、別parser案を検討する必要がない。</p>
+    <h3>T0: BaselineとAPI smoke test</h3>
+    <p>対象: 変更なし。</p>
+    <ol>
+      <li>
+        <code>npm run typecheck</code>、<code>npm run lint</code>、<code>npm test</code>、<code
+          >npm run build</code
+        >を実行し、既存失敗があればLinter実装と混ぜずに記録する。
+      </li>
+      <li>
+        <code>npm view html-validate@11.3.0 engines --json</code>でNode.js
+        24以上との互換を確認する。
+      </li>
+      <li>
+        実装開始後の最初のunit testで、<code>StaticConfigLoader</code>、inline
+        plugin、非同期<code>validateString</code>、<code>dom:ready</code>、reportの<code>context</code>が動く最小caseを先に通す。
+      </li>
+    </ol>
+    <p>
+      現在の手動auditで既知のproject
+      rule違反は、<code>examples/charts/latency.html</code>のcanvasが<code>aria-describedby</code>だけを持つINT001の1件である。新たな標準HTML違反が見つかった場合はruleを弱めず、T8の対象へ該当fileを追記して修正する。
+    </p>
+    <p>完了条件: baselineの成否と依存versionが確定し、別parser案を検討する必要がない。</p>
 
-<h3>T1: Dependencyと共有file探索</h3>
-<p>対象: <code>package.json</code>、<code>package-lock.json</code>、<code>src/content/documents.ts</code>、<code>src/server/navigation.ts</code>、<code>tests/unit/navigation.test.ts</code>、新規<code>tests/unit/documents.test.ts</code>。</p>
-<ol>
-<li><code>npm install --save-exact html-validate@11.3.0</code>を実行する。</li>
-<li><code>findContentDocuments(contentRoot)</code>を新設し、<code>Promise&lt;{ absolutePath: string; path: string }[]&gt;</code>を返す。</li>
-<li>現在のnavigation探索を共通関数へ置き換え、title抽出とHTML生成はnavigation側へ残す。</li>
-<li>隠しdirectory、<code>node_modules</code>、<code>nav.html</code>、symlink、非HTML、sort順が従来どおりであることをtestする。</li>
-</ol>
-<p>確認: <code>npm run typecheck &amp;&amp; npm test -- tests/unit/documents.test.ts tests/unit/navigation.test.ts</code>。</p>
+    <h3>T1: Dependencyと共有file探索</h3>
+    <p>
+      対象:
+      <code>package.json</code
+      >、<code>package-lock.json</code>、<code>src/content/documents.ts</code>、<code>src/server/navigation.ts</code>、<code>tests/unit/navigation.test.ts</code>、新規<code>tests/unit/documents.test.ts</code>。
+    </p>
+    <ol>
+      <li><code>npm install --save-exact html-validate@11.3.0</code>を実行する。</li>
+      <li>
+        <code>findContentDocuments(contentRoot)</code>を新設し、<code
+          >Promise&lt;{ absolutePath: string; path: string }[]&gt;</code
+        >を返す。
+      </li>
+      <li>現在のnavigation探索を共通関数へ置き換え、title抽出とHTML生成はnavigation側へ残す。</li>
+      <li>
+        隠しdirectory、<code>node_modules</code>、<code>nav.html</code>、symlink、非HTML、sort順が従来どおりであることをtestする。
+      </li>
+    </ol>
+    <p>
+      確認:
+      <code
+        >npm run typecheck &amp;&amp; npm test -- tests/unit/documents.test.ts
+        tests/unit/navigation.test.ts</code
+      >。
+    </p>
 
-<h3>T2: Rule registryと診断formatter</h3>
-<p>対象: <code>src/lint/rules.ts</code>、<code>src/lint/diagnostics.ts</code>、<code>tests/unit/lint-diagnostics.test.ts</code>。</p>
-<ol>
-<li>6.7節の型、全ruleのID、name、severity、80文字以内のmessage、explain用reason/bad/goodを定数として定義する。</li>
-<li>builtin rule ID mapping、detailの空白正規化と60文字切詰め、重複除去、sortを実装する。</li>
-<li>compactとJSON formatter、50件制限、0による無制限、summaryを実装する。</li>
-</ol>
-<p>確認: <code>npm run typecheck &amp;&amp; npm test -- tests/unit/lint-diagnostics.test.ts</code>。同じ入力を並べ替えても出力snapshotが一致すること。</p>
+    <h3>T2: Rule registryと診断formatter</h3>
+    <p>
+      対象:
+      <code>src/lint/rules.ts</code
+      >、<code>src/lint/diagnostics.ts</code>、<code>tests/unit/lint-diagnostics.test.ts</code>。
+    </p>
+    <ol>
+      <li>
+        6.7節の型、全ruleのID、name、severity、80文字以内のmessage、explain用reason/bad/goodを定数として定義する。
+      </li>
+      <li>builtin rule ID mapping、detailの空白正規化と60文字切詰め、重複除去、sortを実装する。</li>
+      <li>compactとJSON formatter、50件制限、0による無制限、summaryを実装する。</li>
+    </ol>
+    <p>
+      確認:
+      <code>npm run typecheck &amp;&amp; npm test -- tests/unit/lint-diagnostics.test.ts</code
+      >。同じ入力を並べ替えても出力snapshotが一致すること。
+    </p>
 
-<h3>T3: 1文書の検査</h3>
-<p>対象: <code>src/lint/document.ts</code>、<code>tests/unit/lint-document.test.ts</code>。</p>
-<ol>
-<li>6.2節の固定config、内部inline plugin、builtin診断変換を実装する。</li>
-<li>HTML004、DOC001からDOC003、FIG001、TBL001、DET001、INT001、INT002と全warningを6.3節どおり実装する。</li>
-<li>IDとURL属性を<code>DocumentFacts</code>へ収集する。attributeのsource locationを保存する。</li>
-<li>parser-error時のfilterとfacts破棄を実装する。</li>
-</ol>
-<p>確認: <code>npm run typecheck &amp;&amp; npm test -- tests/unit/lint-document.test.ts</code>。4節と5節の全ruleに合格、違反、境界caseがあること。</p>
+    <h3>T3: 1文書の検査</h3>
+    <p>対象: <code>src/lint/document.ts</code>、<code>tests/unit/lint-document.test.ts</code>。</p>
+    <ol>
+      <li>6.2節の固定config、内部inline plugin、builtin診断変換を実装する。</li>
+      <li>
+        HTML004、DOC001からDOC003、FIG001、TBL001、DET001、INT001、INT002と全warningを6.3節どおり実装する。
+      </li>
+      <li>
+        IDとURL属性を<code>DocumentFacts</code>へ収集する。attributeのsource locationを保存する。
+      </li>
+      <li>parser-error時のfilterとfacts破棄を実装する。</li>
+    </ol>
+    <p>
+      確認:
+      <code>npm run typecheck &amp;&amp; npm test -- tests/unit/lint-document.test.ts</code
+      >。4節と5節の全ruleに合格、違反、境界caseがあること。
+    </p>
 
-<h3>T4: Project検査と参照解決</h3>
-<p>対象: <code>src/lint/project.ts</code>、<code>tests/unit/lint-project.test.ts</code>。</p>
-<ol>
-<li>共有探索、UTF-8読込、1文書検査を順次実行する<code>lintProject</code>を実装する。</li>
-<li>6.5節のURL分類、realpath境界、REF002、REF003を実装する。</li>
-<li>空directoryは<code>files=0</code>の成功とし、存在しないdirectory、file指定、read失敗は例外にする。</li>
-</ol>
-<p>確認: <code>npm run typecheck &amp;&amp; npm test -- tests/unit/lint-project.test.ts</code>。同一file fragment、文書間fragment、asset、space、日本語、query、不正encoding、root外symlinkをtestすること。</p>
+    <h3>T4: Project検査と参照解決</h3>
+    <p>対象: <code>src/lint/project.ts</code>、<code>tests/unit/lint-project.test.ts</code>。</p>
+    <ol>
+      <li>共有探索、UTF-8読込、1文書検査を順次実行する<code>lintProject</code>を実装する。</li>
+      <li>6.5節のURL分類、realpath境界、REF002、REF003を実装する。</li>
+      <li>
+        空directoryは<code>files=0</code>の成功とし、存在しないdirectory、file指定、read失敗は例外にする。
+      </li>
+    </ol>
+    <p>
+      確認:
+      <code>npm run typecheck &amp;&amp; npm test -- tests/unit/lint-project.test.ts</code
+      >。同一file
+      fragment、文書間fragment、asset、space、日本語、query、不正encoding、root外symlinkをtestすること。
+    </p>
 
-<h3>T5: CLI parser</h3>
-<p>対象: <code>src/cli/options.ts</code>、<code>tests/unit/cli-options.test.ts</code>。</p>
-<ol>
-<li>7.1節の<code>CliCommand</code>とlint専用<code>parseArgs</code>を実装する。</li>
-<li>先頭<code>lint</code>の分岐前後で既存run parserの結果を変えない。</li>
-<li>lintのdefault、全option、競合、数値境界、未知ruleをtable-driven testに追加する。</li>
-</ol>
-<p>確認: <code>npm run typecheck &amp;&amp; npm test -- tests/unit/cli-options.test.ts</code>。既存testを削除または緩和しない。</p>
+    <h3>T5: CLI parser</h3>
+    <p>対象: <code>src/cli/options.ts</code>、<code>tests/unit/cli-options.test.ts</code>。</p>
+    <ol>
+      <li>7.1節の<code>CliCommand</code>とlint専用<code>parseArgs</code>を実装する。</li>
+      <li>先頭<code>lint</code>の分岐前後で既存run parserの結果を変えない。</li>
+      <li>lintのdefault、全option、競合、数値境界、未知ruleをtable-driven testに追加する。</li>
+    </ol>
+    <p>
+      確認:
+      <code>npm run typecheck &amp;&amp; npm test -- tests/unit/cli-options.test.ts</code
+      >。既存testを削除または緩和しない。
+    </p>
 
-<h3>T6: CLI実行とhelp</h3>
-<p>対象: 新規<code>src/cli/entry.ts</code>、<code>src/cli/main.ts</code>、新規<code>tests/unit/cli-main.test.ts</code>。</p>
-<ol>
-<li><code>process.argv</code>と<code>process.exitCode</code>を扱う現在の末尾処理を<code>entry.ts</code>へ移し、<code>main.ts</code>をimport時に実行されないmoduleにする。</li>
-<li>Viewer起動処理を<code>runViewer</code>、lint処理を<code>runLint</code>へ分け、<code>main</code>はcommand dispatchだけを行う。</li>
-<li>7.2節のstdout/stderrと終了codeを実装する。testではconsoleをspyし、serverやbrowserを起動しないlint pathだけを直接呼ぶ。</li>
-<li>root helpへ<code>spec-html lint [directory] [options]</code>を1行追加し、lint helpを別定数にする。</li>
-</ol>
-<p>確認: <code>npm run typecheck &amp;&amp; npm test -- tests/unit/cli-main.test.ts tests/unit/cli-options.test.ts</code>。</p>
+    <h3>T6: CLI実行とhelp</h3>
+    <p>
+      対象:
+      新規<code>src/cli/entry.ts</code>、<code>src/cli/main.ts</code>、新規<code>tests/unit/cli-main.test.ts</code>。
+    </p>
+    <ol>
+      <li>
+        <code>process.argv</code
+        >と<code>process.exitCode</code>を扱う現在の末尾処理を<code>entry.ts</code>へ移し、<code>main.ts</code>をimport時に実行されないmoduleにする。
+      </li>
+      <li>
+        Viewer起動処理を<code>runViewer</code>、lint処理を<code>runLint</code>へ分け、<code>main</code>はcommand
+        dispatchだけを行う。
+      </li>
+      <li>
+        7.2節のstdout/stderrと終了codeを実装する。testではconsoleをspyし、serverやbrowserを起動しないlint
+        pathだけを直接呼ぶ。
+      </li>
+      <li>
+        root helpへ<code>spec-html lint [directory] [options]</code>を1行追加し、lint
+        helpを別定数にする。
+      </li>
+    </ol>
+    <p>
+      確認:
+      <code
+        >npm run typecheck &amp;&amp; npm test -- tests/unit/cli-main.test.ts
+        tests/unit/cli-options.test.ts</code
+      >。
+    </p>
 
-<h3>T7: Build、repository gate、package smoke test</h3>
-<p>対象: <code>scripts/build.mjs</code>、<code>scripts/test-pack.mjs</code>、<code>package.json</code>、<code>package-lock.json</code>。</p>
-<ol>
-<li>Node bundleのentry pointを<code>src/cli/entry.ts</code>へ変更し、externalへ<code>html-validate</code>を追加する。出力pathとshebangは変えない。</li>
-<li><code>lint:docs</code>を追加し、<code>check</code>を<code>typecheck → ESLint → unit test → build → lint:docs → browser test → pack test</code>の順にする。</li>
-<li>pack testの一時projectへvalid HTMLとinvalid HTMLを置き、install済みpackageの<code>spec-html lint</code>がそれぞれ0と1を返すことを確認する。存在しないdirectoryは2を確認する。</li>
-<li><code>package.json#files</code>へ<code>docs/linter-implementation-plan.html</code>を追加する。</li>
-</ol>
-<p>確認: <code>npm run build &amp;&amp; npm run lint:docs &amp;&amp; npm run test:pack</code>。</p>
+    <h3>T7: Build、repository gate、package smoke test</h3>
+    <p>
+      対象:
+      <code>scripts/build.mjs</code
+      >、<code>scripts/test-pack.mjs</code>、<code>package.json</code>、<code>package-lock.json</code>。
+    </p>
+    <ol>
+      <li>
+        Node bundleのentry
+        pointを<code>src/cli/entry.ts</code>へ変更し、externalへ<code>html-validate</code>を追加する。出力pathとshebangは変えない。
+      </li>
+      <li>
+        <code>lint:docs</code>を追加し、<code>check</code>を<code
+          >typecheck → ESLint → unit test → build → lint:docs → browser test → pack test</code
+        >の順にする。
+      </li>
+      <li>
+        pack testの一時projectへvalid HTMLとinvalid HTMLを置き、install済みpackageの<code
+          >spec-html lint</code
+        >がそれぞれ0と1を返すことを確認する。存在しないdirectoryは2を確認する。
+      </li>
+      <li>
+        <code>package.json#files</code
+        >へ<code>docs/linter-implementation-plan.html</code>を追加する。
+      </li>
+    </ol>
+    <p>
+      確認: <code>npm run build &amp;&amp; npm run lint:docs &amp;&amp; npm run test:pack</code>。
+    </p>
 
-<h3>T8: 既存文書の適合と利用説明</h3>
-<p>対象: <code>examples/charts/latency.html</code>、<code>docs/authoring.html</code>、<code>README.md</code>、<code>CHANGELOG.md</code>。</p>
-<ol>
-<li><code>examples/charts/latency.html</code>のcanvasで<code>aria-describedby="latency-chart-caption"</code>を<code>aria-labelledby="latency-chart-caption"</code>へ変更し、既知のINT001を解消する。</li>
-<li><code>docs/authoring.html</code>内のChart code例も同じく<code>aria-labelledby</code>へ直し、Linter command、severity、<code>--explain</code>への短い案内を追加する。</li>
-<li>READMEへViewer commandと並べてlint commandを追加し、CHANGELOGへ機能追加を記録する。</li>
-</ol>
-<p>確認: <code>npm run build &amp;&amp; npm run lint:docs</code>がerrors 0、warnings 0で成功すること。</p>
+    <h3>T8: 既存文書の適合と利用説明</h3>
+    <p>
+      対象:
+      <code>examples/charts/latency.html</code
+      >、<code>docs/authoring.html</code>、<code>README.md</code>、<code>CHANGELOG.md</code>。
+    </p>
+    <ol>
+      <li>
+        <code>examples/charts/latency.html</code
+        >のcanvasで<code>aria-describedby="latency-chart-caption"</code>を<code>aria-labelledby="latency-chart-caption"</code>へ変更し、既知のINT001を解消する。
+      </li>
+      <li>
+        <code>docs/authoring.html</code>内のChart
+        code例も同じく<code>aria-labelledby</code>へ直し、Linter
+        command、severity、<code>--explain</code>への短い案内を追加する。
+      </li>
+      <li>READMEへViewer commandと並べてlint commandを追加し、CHANGELOGへ機能追加を記録する。</li>
+    </ol>
+    <p>
+      確認: <code>npm run build &amp;&amp; npm run lint:docs</code>がerrors 0、warnings
+      0で成功すること。
+    </p>
 
-<h3>T9: 描画後検査と全体確認</h3>
-<p>対象: <code>tests/browser/viewer.spec.ts</code>。通常の<code>spec-html lint</code>からbrowserは起動しない。</p>
-<ol>
-<li>Chart canvasがaccessibility tree上で非空nameを持つことを確認する。</li>
-<li>JavaScript無効contextでも重要なtable、caption、Mermaid sourceを取得できることを確認する。</li>
-<li>既存のoverflow検査を再利用し、Linter用の別browser suiteは作らない。</li>
-</ol>
-<p>最終確認: <code>npm run check</code>。失敗、skip、未完了TODOが1件でもあれば完了にしない。</p>
-</section>
+    <h3>T9: 描画後検査と全体確認</h3>
+    <p>
+      対象: <code>tests/browser/viewer.spec.ts</code>。通常の<code>spec-html lint</code
+      >からbrowserは起動しない。
+    </p>
+    <ol>
+      <li>Chart canvasがaccessibility tree上で非空nameを持つことを確認する。</li>
+      <li>
+        JavaScript無効contextでも重要なtable、caption、Mermaid sourceを取得できることを確認する。
+      </li>
+      <li>既存のoverflow検査を再利用し、Linter用の別browser suiteは作らない。</li>
+    </ol>
+    <p>最終確認: <code>npm run check</code>。失敗、skip、未完了TODOが1件でもあれば完了にしない。</p>
+  </section>
 
-<section id="tests">
-<h2>9. Test計画</h2>
-<p><code>lint-document.test.ts</code>では次のvalid fragmentを共通fixtureにし、各testで1条件だけ壊す。複数の違反を混ぜてdiagnostic数を曖昧にしない。</p>
-<pre><code class="language-html">&lt;article lang=&quot;en&quot;&gt;
+  <section id="tests">
+    <h2>9. Test計画</h2>
+    <p>
+      <code>lint-document.test.ts</code>では次のvalid
+      fragmentを共通fixtureにし、各testで1条件だけ壊す。複数の違反を混ぜてdiagnostic数を曖昧にしない。
+    </p>
+    <pre><code class="language-html">&lt;article lang=&quot;en&quot;&gt;
   &lt;h1&gt;Service metrics&lt;/h1&gt;
   &lt;section id=&quot;latency&quot;&gt;
     &lt;h2&gt;Latency&lt;/h2&gt;
@@ -575,71 +1171,172 @@ export type CliCommand =
   &lt;/section&gt;
 &lt;/article&gt;
 </code></pre>
-<table>
-<caption>検証層と成功条件</caption>
-<thead>
-<tr>
-<th scope="col">層</th>
-<th scope="col">検証内容</th>
-</tr>
-</thead>
-<tbody>
-<tr><th scope="row">Rule unit test</th><td>全ruleに最小の合格例、違反例、誤検出しやすい境界例がある。</td></tr>
-<tr><th scope="row">Project test</th><td>文書間fragment、asset、root外参照、重複ID、除外directoryを一時directoryで検証する。</td></tr>
-<tr><th scope="row">Formatter test</th><td>compact出力をsnapshot化し、順序、group化、件数制限、summaryが安定している。</td></tr>
-<tr><th scope="row">CLI test</th><td>成功、error、warning、<code>--warnings-as-errors</code>、内部失敗の終了codeを検証する。</td></tr>
-<tr><th scope="row">Repository test</th><td><code>docs</code>と<code>examples</code>がerror 0、意図しないwarning 0になる。</td></tr>
-<tr><th scope="row">Browser test</th><td>静的解析では確定できないaccessibilityと非JS表示をChromiumで検証する。</td></tr>
-</tbody>
-</table>
-<h3>9.1 必須case</h3>
-<table>
-<caption>実装完了に必要な最小case</caption>
-<thead>
-<tr><th scope="col">対象</th><th scope="col">必須case</th></tr>
-</thead>
-<tbody>
-<tr><th scope="row">HTML001–HTML004</th><td>閉じtag不整合、未知要素、無効な親子関係、未知属性、inline disable directive。parser error時はHTML001以外が出ない。</td></tr>
-<tr><th scope="row">DOC001–DOC004</th><td>空fragment、root 2個、root外text、lang欠落、h1 0/2/空、h1→h3。commentと空白はroot数へ含めない。</td></tr>
-<tr><th scope="row">REF001–REF003</th><td>重複ID、同一file fragment、文書間fragment、missing file、root外<code>..</code>、root外symlink、不正percent encoding、外部URL除外。</td></tr>
-<tr><th scope="row">A11Y001–A11Y002</th><td>imgのalt欠落、<code>alt=&quot;&quot;</code>合格、ARIA単一/複数ID、欠落ID。</td></tr>
-<tr><th scope="row">FIG/TBL/DET</th><td>caption/figcaption/summaryの欠落、空、複数、誤順序と、th scope欠落。</td></tr>
-<tr><th scope="row">INT001–INT101</th><td>canvasのaria-label、aria-labelledby、describedbyだけ、空Mermaid、figure外、同sectionのtable有無。</td></tr>
-<tr><th scope="row">DOC101/SEM101</th><td>section ID有無、article直下のheading付きdiv、通常のlayout divとspanが警告されない。</td></tr>
-<tr><th scope="row">Formatter</th><td>path group、POSIX separator、sort、detail短縮、重複除去、0/1/50/51件、成功1行、JSON parse成功。</td></tr>
-<tr><th scope="row">CLI</th><td>既存run全case、<code>./lint</code> directory、lint help、compact/JSON、explain、option競合、終了code 0/1/2。</td></tr>
-</tbody>
-</table>
-<p>Project testは既存testと同じ<code>mkdtemp</code> / <code>afterEach rm</code> patternを使う。物理fixtureはpack testで使うvalid/invalid HTMLだけにし、unit test用の似たfileを大量にrepositoryへ追加しない。</p>
-<p>rule追加時は、診断数だけでなく出力tokenの増加もreviewする。同じfixtureに対するcompact出力が冗長になった場合、messageの短縮かcascade抑制を先に検討する。</p>
-</section>
+    <table>
+      <caption>
+        検証層と成功条件
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">層</th>
+          <th scope="col">検証内容</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Rule unit test</th>
+          <td>全ruleに最小の合格例、違反例、誤検出しやすい境界例がある。</td>
+        </tr>
+        <tr>
+          <th scope="row">Project test</th>
+          <td>
+            文書間fragment、asset、root外参照、重複ID、除外directoryを一時directoryで検証する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Formatter test</th>
+          <td>compact出力をsnapshot化し、順序、group化、件数制限、summaryが安定している。</td>
+        </tr>
+        <tr>
+          <th scope="row">CLI test</th>
+          <td>
+            成功、error、warning、<code>--warnings-as-errors</code>、内部失敗の終了codeを検証する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Repository test</th>
+          <td><code>docs</code>と<code>examples</code>がerror 0、意図しないwarning 0になる。</td>
+        </tr>
+        <tr>
+          <th scope="row">Browser test</th>
+          <td>静的解析では確定できないaccessibilityと非JS表示をChromiumで検証する。</td>
+        </tr>
+      </tbody>
+    </table>
+    <h3>9.1 必須case</h3>
+    <table>
+      <caption>
+        実装完了に必要な最小case
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">対象</th>
+          <th scope="col">必須case</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">HTML001–HTML004</th>
+          <td>
+            閉じtag不整合、未知要素、無効な親子関係、未知属性、inline disable directive。parser
+            error時はHTML001以外が出ない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">DOC001–DOC004</th>
+          <td>
+            空fragment、root 2個、root外text、lang欠落、h1
+            0/2/空、h1→h3。commentと空白はroot数へ含めない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">REF001–REF003</th>
+          <td>
+            重複ID、同一file fragment、文書間fragment、missing
+            file、root外<code>..</code>、root外symlink、不正percent encoding、外部URL除外。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">A11Y001–A11Y002</th>
+          <td>imgのalt欠落、<code>alt=&quot;&quot;</code>合格、ARIA単一/複数ID、欠落ID。</td>
+        </tr>
+        <tr>
+          <th scope="row">FIG/TBL/DET</th>
+          <td>caption/figcaption/summaryの欠落、空、複数、誤順序と、th scope欠落。</td>
+        </tr>
+        <tr>
+          <th scope="row">INT001–INT101</th>
+          <td>
+            canvasのaria-label、aria-labelledby、describedbyだけ、空Mermaid、figure外、同sectionのtable有無。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">DOC101/SEM101</th>
+          <td>
+            section ID有無、article直下のheading付きdiv、通常のlayout divとspanが警告されない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">Formatter</th>
+          <td>
+            path group、POSIX separator、sort、detail短縮、重複除去、0/1/50/51件、成功1行、JSON
+            parse成功。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">CLI</th>
+          <td>
+            既存run全case、<code>./lint</code> directory、lint
+            help、compact/JSON、explain、option競合、終了code 0/1/2。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Project testは既存testと同じ<code>mkdtemp</code> /
+      <code>afterEach rm</code> patternを使う。物理fixtureはpack testで使うvalid/invalid
+      HTMLだけにし、unit test用の似たfileを大量にrepositoryへ追加しない。
+    </p>
+    <p>
+      rule追加時は、診断数だけでなく出力tokenの増加もreviewする。同じfixtureに対するcompact出力が冗長になった場合、messageの短縮かcascade抑制を先に検討する。
+    </p>
+  </section>
 
-<section id="acceptance">
-<h2>10. 完了条件</h2>
-<ul>
-<li>本書のerror ruleとwarning ruleがすべて実装され、rule IDがtestで固定されている。</li>
-<li>有効な<code>html-validate</code> builtin ruleがすべて公開rule IDへmappingされ、未知のengine rule IDを黙って捨てない。</li>
-<li>1件の診断だけで対象位置、severity、推奨修正が分かる。</li>
-<li>message 80文字、detail 60文字、診断1行180文字の上限をunit testで検証し、通常出力にcode frameや成功logを含めない。</li>
-<li>壊れた1要素から同じ修正を要求する診断が連鎖しない。</li>
-<li><code>npm run check</code>がLinter自身、repository文書、browser上の補完検査を含めて成功する。</li>
-<li>pack testでinstallしたpackageから<code>html-validate</code>を解決でき、lintの終了code 0/1/2を再現できる。</li>
-<li><code>as any</code>、HTML parserの自作、正規表現による一般HTML解析、user config探索を含まない。</li>
-<li>Linterを通すためだけの独自要素、必須class、必須<code>data-*</code>属性が導入されていない。</li>
-</ul>
-</section>
+  <section id="acceptance">
+    <h2>10. 完了条件</h2>
+    <ul>
+      <li>本書のerror ruleとwarning ruleがすべて実装され、rule IDがtestで固定されている。</li>
+      <li>
+        有効な<code>html-validate</code> builtin ruleがすべて公開rule IDへmappingされ、未知のengine
+        rule IDを黙って捨てない。
+      </li>
+      <li>1件の診断だけで対象位置、severity、推奨修正が分かる。</li>
+      <li>
+        message 80文字、detail 60文字、診断1行180文字の上限をunit testで検証し、通常出力にcode
+        frameや成功logを含めない。
+      </li>
+      <li>壊れた1要素から同じ修正を要求する診断が連鎖しない。</li>
+      <li>
+        <code>npm run check</code
+        >がLinter自身、repository文書、browser上の補完検査を含めて成功する。
+      </li>
+      <li>
+        pack testでinstallしたpackageから<code>html-validate</code>を解決でき、lintの終了code
+        0/1/2を再現できる。
+      </li>
+      <li>
+        <code>as any</code>、HTML parserの自作、正規表現による一般HTML解析、user
+        config探索を含まない。
+      </li>
+      <li>
+        Linterを通すためだけの独自要素、必須class、必須<code>data-*</code>属性が導入されていない。
+      </li>
+    </ul>
+  </section>
 
-<section id="non-goals">
-<h2>11. 非目標</h2>
-<ul>
-<li>HTML Living Standard全体のvalidatorを自作すること</li>
-<li>文章内容の正しさ、十分さ、読みやすさを採点すること</li>
-<li><code>section</code>、<code>table</code>、<code>header</code>、<code>footer</code>などの使用量を強制すること</li>
-<li><code>div</code>、<code>span</code>、<code>p</code>を一律禁止すること</li>
-<li>自動修正、対話UI、Viewer内の診断panelを初期releaseへ含めること</li>
-<li>user定義rule、plugin、設定file、inline suppressionを初期releaseへ含めること</li>
-<li>外部URLへrequestして到達性を検査すること</li>
-<li>信頼できないHTMLを安全化するsanitizerとして扱うこと</li>
-</ul>
-</section>
+  <section id="non-goals">
+    <h2>11. 非目標</h2>
+    <ul>
+      <li>HTML Living Standard全体のvalidatorを自作すること</li>
+      <li>文章内容の正しさ、十分さ、読みやすさを採点すること</li>
+      <li>
+        <code>section</code
+        >、<code>table</code>、<code>header</code>、<code>footer</code>などの使用量を強制すること
+      </li>
+      <li><code>div</code>、<code>span</code>、<code>p</code>を一律禁止すること</li>
+      <li>自動修正、対話UI、Viewer内の診断panelを初期releaseへ含めること</li>
+      <li>user定義rule、plugin、設定file、inline suppressionを初期releaseへ含めること</li>
+      <li>外部URLへrequestして到達性を検査すること</li>
+      <li>信頼できないHTMLを安全化するsanitizerとして扱うこと</li>
+    </ul>
+  </section>
 </article>

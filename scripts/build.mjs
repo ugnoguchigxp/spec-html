@@ -29,7 +29,7 @@ await build({
   platform: "node",
   format: "esm",
   target: "node24",
-  external: ["open", "html-validate"],
+  external: ["open", "html-validate", "prettier"],
   banner: { js: "#!/usr/bin/env node" },
   define: {
     __SPEC_HTML_VERSION__: JSON.stringify(packageJson.version),

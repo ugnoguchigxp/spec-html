@@ -158,6 +158,80 @@ describe("local content server", () => {
     );
   });
 
+  it("archives and restores documents through persisted document state", async () => {
+    const origin = requireServer().origin;
+    const stateUrl = `${origin}/_spec-html/document-state?doc=nested%2Fpage.html`;
+
+    await expect((await fetch(stateUrl)).json()).resolves.toEqual({
+      doc: "nested/page.html",
+      archived: false,
+    });
+
+    const archived = await fetch(stateUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived: true }),
+    });
+    expect(archived.status).toBe(200);
+    await expect(archived.json()).resolves.toEqual({
+      doc: "nested/page.html",
+      archived: true,
+    });
+
+    const documents = await (
+      await fetch(`${origin}/_spec-html/navigation`)
+    ).text();
+    const archive = await (
+      await fetch(`${origin}/_spec-html/navigation?view=archive`)
+    ).text();
+    expect(documents).not.toContain("Nested");
+    expect(archive).toContain("Nested");
+    expect(
+      await (await fetch(`${origin}/_content/nested/page.html`)).text(),
+    ).toContain("Nested");
+    expect(
+      (await fetch(`${origin}/_content/.spec-html/archive.json`)).status,
+    ).toBe(404);
+
+    const restored = await fetch(stateUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived: false }),
+    });
+    expect(restored.status).toBe(200);
+    await expect((await fetch(stateUrl)).json()).resolves.toEqual({
+      doc: "nested/page.html",
+      archived: false,
+    });
+  });
+
+  it("validates document state requests and navigation views", async () => {
+    const origin = requireServer().origin;
+    const validState = `${origin}/_spec-html/document-state?doc=nested%2Fpage.html`;
+
+    const unsupported = await fetch(validState, { method: "POST" });
+    expect(unsupported.status).toBe(405);
+    expect(unsupported.headers.get("allow")).toBe("GET, HEAD, PUT");
+    expect(
+      (await fetch(`${origin}/_spec-html/document-state?doc=..%2Fpage.html`)).status,
+    ).toBe(400);
+    expect(
+      (await fetch(`${origin}/_spec-html/document-state?doc=missing.html`)).status,
+    ).toBe(404);
+    expect(
+      (
+        await fetch(validState, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ archived: "yes" }),
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (await fetch(`${origin}/_spec-html/navigation?view=unknown`)).status,
+    ).toBe(400);
+  });
+
   it("returns useful HTTP errors", async () => {
     const server = requireServer();
     expect((await fetch(`${server.origin}/missing`)).status).toBe(404);

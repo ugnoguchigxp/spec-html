@@ -1,13 +1,27 @@
 <article lang="en">
   <h1>Chart</h1>
   <figure>
-    <canvas id="latency-chart" width="320" height="180" role="img" aria-label="P95 latency chart">P95 latency by release.</canvas>
+    <canvas id="latency-chart" width="320" height="180" role="img" aria-label="P95 latency chart"
+      >P95 latency by release.</canvas
+    >
     <figcaption>P95 latency by release.</figcaption>
   </figure>
   <table>
-    <caption>P95 latency by release</caption>
-    <thead><tr><th scope="col">Release</th><th scope="col">P95</th></tr></thead>
-    <tbody><tr><th scope="row">2.1</th><td>180 ms</td></tr></tbody>
+    <caption>
+      P95 latency by release
+    </caption>
+    <thead>
+      <tr>
+        <th scope="col">Release</th>
+        <th scope="col">P95</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th scope="row">2.1</th>
+        <td>180 ms</td>
+      </tr>
+    </tbody>
   </table>
   <script>
     const latencyCanvas = document.getElementById("latency-chart");

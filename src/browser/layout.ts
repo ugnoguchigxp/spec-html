@@ -71,7 +71,16 @@ export function createLayout(container: HTMLElement): ViewerElements {
 
   const navigation = document.createElement("div");
   navigation.className = "viewer-navigation";
-  sidebar.append(sidebarControls, navigation);
+
+  const sidebarFooter = document.createElement("div");
+  sidebarFooter.className = "viewer-sidebar-footer";
+
+  const navigationViewButton = document.createElement("button");
+  navigationViewButton.className = "navigation-view-button";
+  navigationViewButton.type = "button";
+  navigationViewButton.textContent = "Archived";
+  sidebarFooter.append(navigationViewButton);
+  sidebar.append(sidebarControls, navigation, sidebarFooter);
 
   const main = document.createElement("main");
   main.className = "viewer-main";
@@ -84,6 +93,43 @@ export function createLayout(container: HTMLElement): ViewerElements {
   frame.className = "viewer-document";
   frame.title = "設計書";
   frame.hidden = true;
+
+  const documentActions = document.createElement("div");
+  documentActions.className = "document-actions";
+  documentActions.hidden = true;
+
+  const documentActionsButton = document.createElement("button");
+  documentActionsButton.className = "document-actions-button";
+  documentActionsButton.type = "button";
+  documentActionsButton.textContent = "•••";
+  documentActionsButton.setAttribute("aria-label", "Document actions");
+  documentActionsButton.setAttribute("aria-controls", "document-actions-menu");
+  documentActionsButton.setAttribute("aria-expanded", "false");
+  documentActionsButton.setAttribute("aria-haspopup", "menu");
+
+  const documentActionsMenu = document.createElement("div");
+  documentActionsMenu.className = "document-actions-menu";
+  documentActionsMenu.id = "document-actions-menu";
+  documentActionsMenu.setAttribute("role", "menu");
+  documentActionsMenu.hidden = true;
+
+  const documentArchiveButton = document.createElement("button");
+  documentArchiveButton.className = "document-archive-button";
+  documentArchiveButton.type = "button";
+  documentArchiveButton.textContent = "Archive";
+  documentArchiveButton.setAttribute("role", "menuitem");
+  documentActionsMenu.append(documentArchiveButton);
+
+  const documentActionStatus = document.createElement("div");
+  documentActionStatus.className = "document-action-status";
+  documentActionStatus.hidden = true;
+  documentActionStatus.setAttribute("role", "alert");
+
+  documentActions.append(
+    documentActionsButton,
+    documentActionsMenu,
+    documentActionStatus,
+  );
 
   const documentModeButton = document.createElement("button");
   documentModeButton.className = "document-mode-button";
@@ -137,13 +183,18 @@ export function createLayout(container: HTMLElement): ViewerElements {
   sourceDialogHeader.append(sourceDialogTitle, sourceDialogCloseButton);
   sourceDialog.append(sourceDialogHeader, sourceDialogCode);
 
-  main.append(status, frame, documentModeButton);
+  main.append(status, frame, documentActions, documentModeButton);
   root.append(menuButton, sidebar, main, sourceDialog);
   container.replaceChildren(root);
 
   return {
     root,
     menuButton,
+    documentActions,
+    documentActionsButton,
+    documentActionsMenu,
+    documentArchiveButton,
+    documentActionStatus,
     documentModeButton,
     sourceDialog,
     sourceDialogCode,
@@ -151,6 +202,7 @@ export function createLayout(container: HTMLElement): ViewerElements {
     sortButtons,
     themeButtons,
     sidebar,
+    navigationViewButton,
     navigation,
     status,
     frame,
@@ -169,6 +221,7 @@ export function renderLoadState(
       elements.status.replaceChildren();
       elements.status.hidden = true;
       elements.frame.hidden = true;
+      elements.documentActions.hidden = true;
       elements.documentModeButton.hidden = true;
       break;
     case "loading":
@@ -176,12 +229,14 @@ export function renderLoadState(
       elements.status.setAttribute("role", "status");
       elements.status.hidden = false;
       elements.frame.hidden = true;
+      elements.documentActions.hidden = true;
       elements.documentModeButton.hidden = true;
       break;
     case "ready":
       elements.status.replaceChildren();
       elements.status.hidden = true;
       elements.frame.hidden = false;
+      elements.documentActions.hidden = false;
       elements.documentModeButton.hidden = false;
       break;
     case "error":
@@ -189,6 +244,7 @@ export function renderLoadState(
       elements.status.setAttribute("role", "alert");
       elements.status.hidden = false;
       elements.frame.hidden = true;
+      elements.documentActions.hidden = true;
       elements.documentModeButton.hidden = true;
       break;
   }

@@ -1,111 +1,239 @@
 <article lang="ja">
   <header>
     <h1>Chart.js showcase</h1>
-    <p>設計書の指標や比較を可視化するChart.jsの表示例です。各chartはsemanticな<code>figure</code>と<code>canvas</code>で構成し、Viewerのthemeに合わせた色を使用します。</p>
+    <p>
+      設計書の指標や比較を可視化するChart.jsの表示例です。各chartはsemanticな<code>figure</code>と<code>canvas</code>で構成し、Viewerのthemeに合わせた色を使用します。
+    </p>
   </header>
 
   <aside aria-labelledby="charts-note">
     <strong id="charts-note">このページについて</strong>
-    <p>Chart.jsを導入したprojectでは、HTML fragmentのinline scriptからglobalの<code>Chart</code>を直接利用できます。</p>
+    <p>
+      Chart.jsを導入したprojectでは、HTML fragmentのinline
+      scriptからglobalの<code>Chart</code>を直接利用できます。
+    </p>
   </aside>
 
   <section id="trend">
-  <h2>Latency trend</h2>
-  <p>複数系列の時系列変化を比較する折れ線chartです。</p>
-  <figure>
-    <canvas id="latency-trend-chart" width="760" height="340" role="img" aria-label="直近6週間のP50とP95 latencyの推移">直近6週間のP50とP95 latencyの推移。</canvas>
-    <figcaption>直近6週間のAPI latency。単位はms。</figcaption>
-  </figure>
-  <details>
-    <summary>Source data</summary>
-    <table>
-      <caption>週別API latency（ms）</caption>
-      <thead>
-        <tr><th scope="col">週</th><th scope="col">P50</th><th scope="col">P95</th></tr>
-      </thead>
-      <tbody>
-        <tr><th scope="row">W1</th><td>82</td><td>220</td></tr>
-        <tr><th scope="row">W2</th><td>78</td><td>205</td></tr>
-        <tr><th scope="row">W3</th><td>74</td><td>198</td></tr>
-        <tr><th scope="row">W4</th><td>71</td><td>176</td></tr>
-        <tr><th scope="row">W5</th><td>68</td><td>169</td></tr>
-        <tr><th scope="row">W6</th><td>64</td><td>151</td></tr>
-      </tbody>
-    </table>
-  </details>
+    <h2>Latency trend</h2>
+    <p>複数系列の時系列変化を比較する折れ線chartです。</p>
+    <figure>
+      <canvas
+        id="latency-trend-chart"
+        width="760"
+        height="340"
+        role="img"
+        aria-label="直近6週間のP50とP95 latencyの推移"
+        >直近6週間のP50とP95 latencyの推移。</canvas
+      >
+      <figcaption>直近6週間のAPI latency。単位はms。</figcaption>
+    </figure>
+    <details>
+      <summary>Source data</summary>
+      <table>
+        <caption>
+          週別API latency（ms）
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">週</th>
+            <th scope="col">P50</th>
+            <th scope="col">P95</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">W1</th>
+            <td>82</td>
+            <td>220</td>
+          </tr>
+          <tr>
+            <th scope="row">W2</th>
+            <td>78</td>
+            <td>205</td>
+          </tr>
+          <tr>
+            <th scope="row">W3</th>
+            <td>74</td>
+            <td>198</td>
+          </tr>
+          <tr>
+            <th scope="row">W4</th>
+            <td>71</td>
+            <td>176</td>
+          </tr>
+          <tr>
+            <th scope="row">W5</th>
+            <td>68</td>
+            <td>169</td>
+          </tr>
+          <tr>
+            <th scope="row">W6</th>
+            <td>64</td>
+            <td>151</td>
+          </tr>
+        </tbody>
+      </table>
+    </details>
   </section>
 
   <section id="comparison">
-  <h2>Requests by endpoint</h2>
-  <p>categoryごとの量と内訳を比較する積み上げ棒chartです。</p>
-  <figure>
-    <canvas id="request-volume-chart" width="760" height="340" role="img" aria-label="endpoint別の成功requestとerror requestの件数">endpoint別の成功requestとerror requestの件数。</canvas>
-    <figcaption>1時間あたりのrequest数をendpointと結果別に比較。</figcaption>
-  </figure>
-  <details>
-    <summary>Source data</summary>
-    <table>
-      <caption>endpoint別の1時間あたりrequest数</caption>
-      <thead>
-        <tr><th scope="col">Endpoint</th><th scope="col">成功</th><th scope="col">Error</th></tr>
-      </thead>
-      <tbody>
-        <tr><th scope="row"><code>GET /docs</code></th><td>1240</td><td>24</td></tr>
-        <tr><th scope="row"><code>GET /assets</code></th><td>940</td><td>18</td></tr>
-        <tr><th scope="row"><code>GET /nav</code></th><td>430</td><td>7</td></tr>
-        <tr><th scope="row"><code>GET /runtime</code></th><td>380</td><td>3</td></tr>
-      </tbody>
-    </table>
-  </details>
+    <h2>Requests by endpoint</h2>
+    <p>categoryごとの量と内訳を比較する積み上げ棒chartです。</p>
+    <figure>
+      <canvas
+        id="request-volume-chart"
+        width="760"
+        height="340"
+        role="img"
+        aria-label="endpoint別の成功requestとerror requestの件数"
+        >endpoint別の成功requestとerror requestの件数。</canvas
+      >
+      <figcaption>1時間あたりのrequest数をendpointと結果別に比較。</figcaption>
+    </figure>
+    <details>
+      <summary>Source data</summary>
+      <table>
+        <caption>
+          endpoint別の1時間あたりrequest数
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Endpoint</th>
+            <th scope="col">成功</th>
+            <th scope="col">Error</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row"><code>GET /docs</code></th>
+            <td>1240</td>
+            <td>24</td>
+          </tr>
+          <tr>
+            <th scope="row"><code>GET /assets</code></th>
+            <td>940</td>
+            <td>18</td>
+          </tr>
+          <tr>
+            <th scope="row"><code>GET /nav</code></th>
+            <td>430</td>
+            <td>7</td>
+          </tr>
+          <tr>
+            <th scope="row"><code>GET /runtime</code></th>
+            <td>380</td>
+            <td>3</td>
+          </tr>
+        </tbody>
+      </table>
+    </details>
   </section>
 
   <section id="composition">
-  <h2>Traffic sources</h2>
-  <p>全体に占める割合を示すドーナツchartです。</p>
-  <figure>
-    <canvas id="traffic-source-chart" width="760" height="340" role="img" aria-label="client種別ごとのtraffic構成比">client種別ごとのtraffic構成比。</canvas>
-    <figcaption>client種別ごとのtraffic構成比。</figcaption>
-  </figure>
-  <details>
-    <summary>Source data</summary>
-    <table>
-      <caption>client種別ごとのtraffic構成比</caption>
-      <thead>
-        <tr><th scope="col">Client</th><th scope="col">構成比（%）</th></tr>
-      </thead>
-      <tbody>
-        <tr><th scope="row">Desktop</th><td>48</td></tr>
-        <tr><th scope="row">Mobile</th><td>31</td></tr>
-        <tr><th scope="row">Automation</th><td>16</td></tr>
-        <tr><th scope="row">Other</th><td>5</td></tr>
-      </tbody>
-    </table>
-  </details>
+    <h2>Traffic sources</h2>
+    <p>全体に占める割合を示すドーナツchartです。</p>
+    <figure>
+      <canvas
+        id="traffic-source-chart"
+        width="760"
+        height="340"
+        role="img"
+        aria-label="client種別ごとのtraffic構成比"
+        >client種別ごとのtraffic構成比。</canvas
+      >
+      <figcaption>client種別ごとのtraffic構成比。</figcaption>
+    </figure>
+    <details>
+      <summary>Source data</summary>
+      <table>
+        <caption>
+          client種別ごとのtraffic構成比
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Client</th>
+            <th scope="col">構成比（%）</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Desktop</th>
+            <td>48</td>
+          </tr>
+          <tr>
+            <th scope="row">Mobile</th>
+            <td>31</td>
+          </tr>
+          <tr>
+            <th scope="row">Automation</th>
+            <td>16</td>
+          </tr>
+          <tr>
+            <th scope="row">Other</th>
+            <td>5</td>
+          </tr>
+        </tbody>
+      </table>
+    </details>
   </section>
 
   <section id="profile">
-  <h2>Quality profile</h2>
-  <p>複数の評価軸をまとめて比較するレーダーchartです。</p>
-  <figure>
-    <canvas id="quality-profile-chart" width="760" height="340" role="img" aria-label="現行releaseと次期releaseの品質指標比較">現行releaseと次期releaseの品質指標比較。</canvas>
-    <figcaption>現行releaseと次期releaseの品質指標。値が大きいほど良好。</figcaption>
-  </figure>
-  <details>
-    <summary>Source data</summary>
-    <table>
-      <caption>release別の品質指標</caption>
-      <thead>
-        <tr><th scope="col">指標</th><th scope="col">現行release</th><th scope="col">次期release</th></tr>
-      </thead>
-      <tbody>
-        <tr><th scope="row">速度</th><td>68</td><td>84</td></tr>
-        <tr><th scope="row">安定性</th><td>78</td><td>90</td></tr>
-        <tr><th scope="row">可用性</th><td>74</td><td>82</td></tr>
-        <tr><th scope="row">保守性</th><td>65</td><td>88</td></tr>
-        <tr><th scope="row">accessibility</th><td>72</td><td>91</td></tr>
-      </tbody>
-    </table>
-  </details>
+    <h2>Quality profile</h2>
+    <p>複数の評価軸をまとめて比較するレーダーchartです。</p>
+    <figure>
+      <canvas
+        id="quality-profile-chart"
+        width="760"
+        height="340"
+        role="img"
+        aria-label="現行releaseと次期releaseの品質指標比較"
+        >現行releaseと次期releaseの品質指標比較。</canvas
+      >
+      <figcaption>現行releaseと次期releaseの品質指標。値が大きいほど良好。</figcaption>
+    </figure>
+    <details>
+      <summary>Source data</summary>
+      <table>
+        <caption>
+          release別の品質指標
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">指標</th>
+            <th scope="col">現行release</th>
+            <th scope="col">次期release</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">速度</th>
+            <td>68</td>
+            <td>84</td>
+          </tr>
+          <tr>
+            <th scope="row">安定性</th>
+            <td>78</td>
+            <td>90</td>
+          </tr>
+          <tr>
+            <th scope="row">可用性</th>
+            <td>74</td>
+            <td>82</td>
+          </tr>
+          <tr>
+            <th scope="row">保守性</th>
+            <td>65</td>
+            <td>88</td>
+          </tr>
+          <tr>
+            <th scope="row">accessibility</th>
+            <td>72</td>
+            <td>91</td>
+          </tr>
+        </tbody>
+      </table>
+    </details>
   </section>
 
   <script>
