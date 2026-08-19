@@ -1,0 +1,82 @@
+<article lang="ja">
+  <h1>Runtime compatibility</h1>
+
+  <section id="support-policy-section" aria-labelledby="support-policy">
+    <h2 id="support-policy">Support policy</h2>
+    <p>
+      Spec
+      HTMLは、対象directoryへ設定fileや初期化codeを追加せず、対応runtimeだけでinstall、build、test、Viewer起動まで実行できることを保証する。
+    </p>
+    <table>
+      <caption>
+        対応runtimeとCIでの検証範囲
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Runtime</th>
+          <th scope="col">Minimum version</th>
+          <th scope="col">CI verification</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Node.js 20</th>
+          <td>20.19.0</td>
+          <td>clean install、typecheck、unit/server test、build、consumer package test</td>
+        </tr>
+        <tr>
+          <th scope="row">Node.js 22</th>
+          <td>22.16.0</td>
+          <td>clean install、typecheck、unit/server test、build、consumer package test</td>
+        </tr>
+        <tr>
+          <th scope="row">Node.js 24</th>
+          <td>24.0.0</td>
+          <td>全check、Chromium、Firefox、WebKit、macOS、Windows</td>
+        </tr>
+        <tr>
+          <th scope="row">Bun</th>
+          <td>1.3</td>
+          <td>Bun runtimeでのtypecheck、unit/server test、build、CLI起動、consumer package test</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      BunではNode.js用shebangをBun runtimeへ切り替えるため、利用時に<code>bunx --bun spec-html</code
+      >を使用する。
+    </p>
+  </section>
+
+  <section id="compatibility-boundary-section" aria-labelledby="compatibility-boundary">
+    <h2 id="compatibility-boundary">Compatibility boundary</h2>
+    <ul>
+      <li>
+        packageのNode.js engine条件はruntime dependencyが対応する最小minor versionと一致させる。
+      </li>
+      <li>CLI bundleは最小対応Node.jsである<code>node20</code>をbuild targetとする。</li>
+      <li>Node.js固有APIを使う場合は、Bunで同等APIがない場合の安全なfallbackをtestする。</li>
+      <li>optional dependencyが存在しない状態でも、通常のHTML表示とViewer起動を成功させる。</li>
+      <li>
+        browser testはNode.js 24で実行し、生成したbrowser assetのruntime互換性はPlaywrightの3
+        engineで検証する。
+      </li>
+    </ul>
+  </section>
+
+  <section id="regressions-section" aria-labelledby="regressions">
+    <h2 id="regressions">Prevented regressions</h2>
+    <ul>
+      <li>
+        Bunで<code>IncomingMessage.headersDistinct</code>がない場合は<code>rawHeaders</code>からHostとOriginを取得し、重複headerの拒否を維持する。
+      </li>
+      <li>
+        Bunのmodule解決errorが<code>Error</code>を継承しない場合も、error codeでoptional
+        dependency未導入を判定する。
+      </li>
+      <li>
+        filesystem
+        APIの成功時戻り値はruntime間で異なる可能性があるため、testでは値ではなく成功そのものを検証する。
+      </li>
+    </ul>
+  </section>
+</article>

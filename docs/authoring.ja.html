@@ -94,6 +94,31 @@ spec-html check ./specs --fix
 </code></pre>
   </section>
 
+  <section id="chart-js">
+    <h2>Chart.jsの例</h2>
+    <p>
+      Chart.jsを使う場合は、canvasを<code>figure</code>に入れてaccessible nameを付け、inline
+      scriptからglobal
+      <code>Chart</code>
+      APIを呼び出します。JavaScriptが動かない場合にも内容を確認できるよう、正確な値は通常のHTMLにも残します。
+    </p>
+    <pre><code class="language-html">&lt;figure&gt;
+  &lt;canvas id=&quot;latency-chart&quot; aria-label=&quot;versionごとのP95 latency&quot;&gt;&lt;/canvas&gt;
+  &lt;figcaption&gt;P95 latency: 2.1 = 180 ms、2.2 = 220 ms、2.3 = 230 ms&lt;/figcaption&gt;
+&lt;/figure&gt;
+
+&lt;script&gt;
+  new Chart(document.getElementById(&quot;latency-chart&quot;), {
+    type: &quot;line&quot;,
+    data: {
+      labels: [&quot;2.1&quot;, &quot;2.2&quot;, &quot;2.3&quot;],
+      datasets: [{ label: &quot;P95 (ms)&quot;, data: [180, 220, 230] }]
+    }
+  });
+&lt;/script&gt;
+</code></pre>
+  </section>
+
   <section id="mermaid">
     <h2>Mermaidの例</h2>
     <p>
