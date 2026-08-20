@@ -86,11 +86,46 @@ export async function lintMarkdownDocument(
   };
 }
 
-async function loadMermaidParser(): Promise<{
+interface MermaidParser {
   parse(source: string): Promise<unknown>;
-}> {
-  const moduleName = "mermaid";
-  const imported: unknown = await import(moduleName);
+}
+
+let mermaidParser: Promise<MermaidParser> | undefined;
+
+function loadMermaidParser(): Promise<MermaidParser> {
+  mermaidParser ??= importMermaidParser();
+  return mermaidParser;
+}
+
+async function importMermaidParser(): Promise<MermaidParser> {
+  const dom = await createMermaidDom();
+  const windowDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "window",
+  );
+  const documentDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "document",
+  );
+  let imported: unknown;
+  try {
+    defineGlobal("window", dom.window);
+    defineGlobal("document", dom.window.document);
+    const moduleName = "mermaid";
+    imported = await import(moduleName);
+  } catch (error: unknown) {
+    if (isMissingMermaidPackage(error)) {
+      throw new Error(
+        "Mermaid syntax validation requires the optional mermaid package. Install mermaid in this project.",
+        { cause: error },
+      );
+    }
+    throw error;
+  } finally {
+    restoreGlobal("document", documentDescriptor);
+    restoreGlobal("window", windowDescriptor);
+    dom.window.close();
+  }
   if (
     typeof imported !== "object" ||
     imported === null ||
@@ -102,7 +137,62 @@ async function loadMermaidParser(): Promise<{
   ) {
     throw new Error("Mermaid parser is unavailable");
   }
-  return imported.default as { parse(source: string): Promise<unknown> };
+  return imported.default as MermaidParser;
+}
+
+interface MermaidDom {
+  window: {
+    document: Document;
+    close(): void;
+  };
+}
+
+async function createMermaidDom(): Promise<MermaidDom> {
+  const moduleName = "jsdom";
+  const imported: unknown = await import(moduleName);
+  if (
+    typeof imported !== "object" ||
+    imported === null ||
+    !("JSDOM" in imported) ||
+    typeof imported.JSDOM !== "function"
+  ) {
+    throw new Error("DOM support for Mermaid syntax validation is unavailable");
+  }
+  const JSDOM = imported.JSDOM as new (html?: string) => MermaidDom;
+  return new JSDOM("");
+}
+
+function defineGlobal(name: "window" | "document", value: unknown): void {
+  Object.defineProperty(globalThis, name, {
+    configurable: true,
+    enumerable: false,
+    value,
+    writable: true,
+  });
+}
+
+function restoreGlobal(
+  name: "window" | "document",
+  descriptor: PropertyDescriptor | undefined,
+): void {
+  if (descriptor === undefined) {
+    Reflect.deleteProperty(globalThis, name);
+    return;
+  }
+  Object.defineProperty(globalThis, name, descriptor);
+}
+
+function isMissingMermaidPackage(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error.code === "ERR_MODULE_NOT_FOUND" ||
+      error.code === "MODULE_NOT_FOUND") &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    /(?:package|module) ['"]?mermaid['"]?/iu.test(error.message)
+  );
 }
 
 function sourceLocation(

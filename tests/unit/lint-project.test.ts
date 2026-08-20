@@ -68,7 +68,12 @@ describe("lintProject", () => {
         "",
         "```mermaid",
         "flowchart LR",
-        "  A --> B",
+        "  A[Start] --> B[End]",
+        "```",
+        "",
+        "```mermaid",
+        "classDiagram",
+        "  Animal <|-- Duck",
         "```",
       ].join("\n"),
     );
@@ -239,10 +244,10 @@ describe("lintProject", () => {
     const root = await createProject();
     await writeFile(join(root, "not-a-directory"), "x", "utf8");
     await expect(lintProject(join(root, "missing"))).rejects.toThrow(
-      "対象ディレクトリが見つかりません",
+      "Target directory was not found",
     );
     await expect(lintProject(join(root, "not-a-directory"))).rejects.toThrow(
-      "ディレクトリではありません",
+      "Target path is not a directory",
     );
   });
 });

@@ -126,10 +126,10 @@ async function resolveContentRoot(contentRoot: string): Promise<string> {
   try {
     stats = await stat(contentRoot);
   } catch {
-    throw new Error(`対象ディレクトリが見つかりません: ${contentRoot}`);
+    throw new Error(`Target directory was not found: ${contentRoot}`);
   }
   if (!stats.isDirectory()) {
-    throw new Error("対象パスはディレクトリではありません");
+    throw new Error(`Target path is not a directory: ${contentRoot}`);
   }
   return realpath(contentRoot);
 }

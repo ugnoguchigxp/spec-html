@@ -2,6 +2,13 @@
 
 Notable changes to Spec HTML are recorded here. The project follows [Semantic Versioning](https://semver.org/).
 
+## 0.1.4 - 2026-08-20
+
+### Fixed
+
+- Markdown lint now initializes Mermaid with an isolated DOM, so valid diagrams with labels no longer become `MD003` findings or fail with `DOMPurify.addHook is not a function` on Node.js or Bun
+- Missing lint target directories and non-directory lint targets now report English operational errors
+
 ## 0.1.3 - 2026-08-20
 
 ### Added

@@ -100,7 +100,9 @@ describe("lint CLI execution", () => {
     await expect(
       main(["lint", join(tmpdir(), "missing-spec-html-project")]),
     ).resolves.toBe(2);
-    expect(error).toHaveBeenCalledWith(expect.stringContaining("spec-html:"));
+    expect(error).toHaveBeenCalledWith(
+      expect.stringMatching(/^spec-html: Target directory was not found:/u),
+    );
   });
 });
 

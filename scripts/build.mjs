@@ -29,7 +29,7 @@ await build({
   platform: "node",
   format: "esm",
   target: "node20",
-  external: ["open", "html-validate", "mermaid", "prettier"],
+  external: ["open", "html-validate", "jsdom", "mermaid", "prettier"],
   banner: { js: "#!/usr/bin/env node" },
   define: {
     __SPEC_HTML_VERSION__: JSON.stringify(packageJson.version),

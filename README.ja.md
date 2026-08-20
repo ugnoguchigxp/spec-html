@@ -301,7 +301,7 @@ help、usage error、lint診断の既定出力言語は英語です。directory�
 - `1`: lint／migrationの指摘、check modeでの差分、fix／formatのblock、またはViewer実行時の失敗があった。
 - `2`: subcommandの引数不正、またはsubcommand完了前の運用上の失敗があった。
 
-`lint`と`check`のlint stageはHTMLとMarkdownの両方を検査します。Markdownでは空でないh1が1つあること、local参照、危険URL、Mermaid構文を検査し、compact／JSON summaryに検査したMarkdown件数を含めます。
+`lint`と`check`のlint stageはHTMLとMarkdownの両方を検査します。Markdownでは空でないh1が1つあること、local参照、危険URL、Mermaid構文を検査し、compact／JSON summaryに検査したMarkdown件数を含めます。Mermaid fenceを含むprojectでは、CLIが構文を検証できるようoptional peer dependencyの`mermaid`を導入してください。
 
 ## Security model
 

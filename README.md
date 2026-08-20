@@ -308,7 +308,7 @@ Exit codes are part of the CLI contract:
 - `1`: lint or migration findings, check-mode changes, blocked fixes/formatting, or a viewer runtime failure.
 - `2`: invalid subcommand arguments or an operational failure before a subcommand could complete.
 
-`lint` and the lint stage of `check` inspect both HTML and Markdown. Markdown checks cover a single non-empty h1, local references, unsafe URLs, and Mermaid syntax; compact and JSON summaries include the number of inspected Markdown files.
+`lint` and the lint stage of `check` inspect both HTML and Markdown. Markdown checks cover a single non-empty h1, local references, unsafe URLs, and Mermaid syntax; compact and JSON summaries include the number of inspected Markdown files. A project with Markdown Mermaid fences must install the optional `mermaid` peer dependency so the CLI can validate their syntax.
 
 ## Security model
 

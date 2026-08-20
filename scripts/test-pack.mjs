@@ -80,7 +80,8 @@ try {
   }
   if (
     installedPackageJson.dependencies?.marked !== "18.0.10" ||
-    installedPackageJson.dependencies?.["github-slugger"] !== "2.0.0"
+    installedPackageJson.dependencies?.["github-slugger"] !== "2.0.0" ||
+    installedPackageJson.dependencies?.jsdom !== "26.1.0"
   ) {
     throw new Error(
       "packしたpackageのMarkdown dependency versionが固定されていません",
@@ -429,6 +430,36 @@ try {
 
   await stopViewer(viewerProcess);
   viewerProcess = undefined;
+
+  await writeFile(
+    join(temporaryRoot, "specs", "mermaid.md"),
+    "# Mermaid\n\n## Flow\n\n```mermaid\nflowchart LR\n  A[Start] --> B[End]\n```\n\n## Types\n\n```mermaid\nclassDiagram\n  Animal <|-- Duck\n```\n",
+  );
+  const missingMermaid = await expectExitCode(
+    npmCommand,
+    ["exec", "--", "spec-html", "lint", "./specs"],
+    temporaryRoot,
+    2,
+  );
+  if (
+    !missingMermaid.stderr.includes(
+      "spec-html: Mermaid syntax validation requires the optional mermaid package. Install mermaid in this project.",
+    )
+  ) {
+    throw new Error(
+      `Packed CLI did not report the English missing-Mermaid error: ${missingMermaid.stderr}`,
+    );
+  }
+  await run(
+    npmCommand,
+    ["install", "--save-dev", "--save-exact", "mermaid@11.16.1"],
+    temporaryRoot,
+  );
+  await run(
+    npmCommand,
+    ["exec", "--", "spec-html", "lint", "./specs"],
+    temporaryRoot,
+  );
 } finally {
   if (viewerProcess !== undefined) {
     await stopViewer(viewerProcess);
@@ -543,14 +574,25 @@ async function expectExitCode(command, args, cwd, expected) {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
     child.once("error", reject);
-    child.once("exit", (code) => resolvePromise(code));
+    child.once("close", (code) => resolvePromise({ code, stdout, stderr }));
   });
-  if (result !== expected) {
+  if (result.code !== expected) {
     throw new Error(
-      `${command} ${args.join(" ")} returned ${result}, expected ${expected}`,
+      `${command} ${args.join(" ")} returned ${result.code}, expected ${expected}: ${result.stderr || result.stdout}`,
     );
   }
+  return result;
 }
 
 function commandArguments(command, args) {

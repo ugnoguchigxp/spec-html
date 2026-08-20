@@ -1,0 +1,79 @@
+<article lang="ja">
+  <h1>Markdown Mermaid lintの実行時互換性修正</h1>
+
+  <p>
+    Mermaid
+    11.16.1をNode.jsまたはBunから直接読み込むと、DOMを持たない実行環境ではDOMPurifyが未初期化のfactoryとして残る。ラベルのサニタイズを行う正常な図で<code>DOMPurify.addHook is not a function</code>が発生し、lintが誤って<code>MD003</code>を報告していた。
+  </p>
+
+  <section id="decision">
+    <h2>決定</h2>
+    <p>
+      Markdown
+      lintがMermaidを最初に読み込む間だけ、<code>jsdom</code>で作った隔離DOMをglobalへ公開する。import後はglobalを元のproperty
+      descriptorへ戻してDOMを閉じる。初期化済みMermaid
+      parserはprocess内で再利用し、文書ごとのDOM生成とglobal変更を避ける。
+    </p>
+    <figure>
+      <pre class="mermaid">
+flowchart LR
+  A[Markdown Mermaid fence] --> B[隔離DOMを作成]
+  B --> C[Mermaidを初期化]
+  C --> D[globalを復元]
+  D --> E[構文をparse]
+  E --> F{結果}
+  F -->|valid| G[診断なし]
+  F -->|invalid| H[MD003]
+      </pre>
+      <figcaption>
+        DOMはMermaid初期化にだけ使用し、図の描画や生成HTMLのサニタイズ結果には使用しない。
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="contract">
+    <h2>挙動と依存関係</h2>
+    <table>
+      <caption>
+        修正後のMarkdown Mermaid lint契約
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">条件</th>
+          <th scope="col">結果</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">Mermaid導入済み・正常な図</th>
+          <td>診断なし。ラベルを含むflowchart、class diagramを回帰テスト対象にする。</td>
+        </tr>
+        <tr>
+          <th scope="row">Mermaid導入済み・不正な図</th>
+          <td><code>MD003</code>を報告する。</td>
+        </tr>
+        <tr>
+          <th scope="row">Mermaid未導入・Mermaid fenceあり</th>
+          <td>
+            optional packageの導入が必要であることを英語で示し、運用エラーとして終了code 2を返す。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      <code>jsdom</code>はlint実行時に必要なためruntime
+      dependencyへ移す。Viewer側のMermaidは引き続きoptional peer
+      dependencyとし、図を含まないprojectでは読み込まない。
+    </p>
+  </section>
+
+  <section id="verification">
+    <h2>検証条件</h2>
+    <ul>
+      <li>Node.js 24.11.1とBun 1.3.14で、ラベル付きの正常図がlintを通過する。</li>
+      <li>不正な図は引き続き<code>MD003</code>になる。</li>
+      <li>存在しないlint対象directoryのCLIエラーは英語になる。</li>
+      <li>package後のconsumer環境でも同じ結果になる。</li>
+    </ul>
+  </section>
+</article>
