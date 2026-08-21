@@ -92,6 +92,14 @@ export function createLayout(container: HTMLElement): ViewerElements {
   frame.title = "Document";
   frame.hidden = true;
 
+  const documentScrollTopButton = document.createElement("button");
+  documentScrollTopButton.className = "document-scroll-top-button";
+  documentScrollTopButton.type = "button";
+  documentScrollTopButton.textContent = "↑";
+  documentScrollTopButton.setAttribute("aria-label", "Scroll to top");
+  documentScrollTopButton.title = "Scroll to top";
+  documentScrollTopButton.hidden = true;
+
   const documentActions = document.createElement("div");
   documentActions.className = "document-actions";
   documentActions.hidden = true;
@@ -111,12 +119,42 @@ export function createLayout(container: HTMLElement): ViewerElements {
   documentActionsMenu.setAttribute("role", "menu");
   documentActionsMenu.hidden = true;
 
+  const documentCopyRelativePathButton = document.createElement("button");
+  documentCopyRelativePathButton.className = "document-menu-button";
+  documentCopyRelativePathButton.type = "button";
+  documentCopyRelativePathButton.textContent = "Copy relative path";
+  documentCopyRelativePathButton.setAttribute("role", "menuitem");
+
+  const documentCopyAbsolutePathButton = document.createElement("button");
+  documentCopyAbsolutePathButton.className = "document-menu-button";
+  documentCopyAbsolutePathButton.type = "button";
+  documentCopyAbsolutePathButton.textContent = "Copy absolute path";
+  documentCopyAbsolutePathButton.setAttribute("role", "menuitem");
+  documentCopyAbsolutePathButton.hidden = true;
+
+  const documentShowOutlineButton = document.createElement("button");
+  documentShowOutlineButton.className = "document-menu-button";
+  documentShowOutlineButton.type = "button";
+  documentShowOutlineButton.textContent = "Show outline";
+  documentShowOutlineButton.setAttribute("role", "menuitem");
+
+  const documentActionsDivider = document.createElement("hr");
+  documentActionsDivider.className = "document-actions-divider";
+  documentActionsDivider.setAttribute("role", "separator");
+
   const documentArchiveButton = document.createElement("button");
-  documentArchiveButton.className = "document-archive-button";
+  documentArchiveButton.className =
+    "document-menu-button document-archive-button";
   documentArchiveButton.type = "button";
   documentArchiveButton.textContent = "Archive";
   documentArchiveButton.setAttribute("role", "menuitem");
-  documentActionsMenu.append(documentArchiveButton);
+  documentActionsMenu.append(
+    documentCopyRelativePathButton,
+    documentCopyAbsolutePathButton,
+    documentShowOutlineButton,
+    documentActionsDivider,
+    documentArchiveButton,
+  );
 
   const documentActionStatus = document.createElement("div");
   documentActionStatus.className = "document-action-status";
@@ -175,13 +213,97 @@ export function createLayout(container: HTMLElement): ViewerElements {
   sourceDialogCloseIcon.append(sourceDialogClosePath);
   sourceDialogCloseButton.append(sourceDialogCloseIcon);
 
-  const sourceDialogCode = document.createElement("pre");
-  sourceDialogCode.className = "source-dialog-code";
+  const sourceDialogTextarea = document.createElement("textarea");
+  sourceDialogTextarea.className = "source-dialog-code";
+  sourceDialogTextarea.spellcheck = false;
+  sourceDialogTextarea.setAttribute("aria-label", "Source editor");
+
+  const sourceDialogFooter = document.createElement("div");
+  sourceDialogFooter.className = "source-dialog-footer";
+
+  const sourceDialogStatus = document.createElement("div");
+  sourceDialogStatus.className = "source-dialog-status";
+  sourceDialogStatus.setAttribute("role", "status");
+  sourceDialogStatus.setAttribute("aria-live", "polite");
+
+  const sourceDialogSaveButton = document.createElement("button");
+  sourceDialogSaveButton.className = "source-dialog-save";
+  sourceDialogSaveButton.type = "button";
+  sourceDialogSaveButton.textContent = "Save";
+  sourceDialogSaveButton.disabled = true;
 
   sourceDialogHeader.append(sourceDialogTitle, sourceDialogCloseButton);
-  sourceDialog.append(sourceDialogHeader, sourceDialogCode);
+  sourceDialogFooter.append(sourceDialogStatus, sourceDialogSaveButton);
+  sourceDialog.append(
+    sourceDialogHeader,
+    sourceDialogTextarea,
+    sourceDialogFooter,
+  );
 
-  main.append(status, frame, documentActions, documentModeButton);
+  const documentOutline = document.createElement("aside");
+  documentOutline.className = "document-outline";
+  documentOutline.setAttribute("aria-labelledby", "document-outline-title");
+  documentOutline.hidden = true;
+
+  const documentOutlineHeader = document.createElement("div");
+  documentOutlineHeader.className = "document-outline-header";
+
+  const documentOutlineTitle = document.createElement("h2");
+  documentOutlineTitle.id = "document-outline-title";
+  documentOutlineTitle.textContent = "On this page";
+
+  const documentOutlineControls = document.createElement("div");
+  documentOutlineControls.className = "document-outline-controls";
+  documentOutlineControls.setAttribute("role", "group");
+  documentOutlineControls.setAttribute("aria-label", "Outline position");
+
+  const documentOutlineLeftButton = document.createElement("button");
+  documentOutlineLeftButton.className = "document-outline-control";
+  documentOutlineLeftButton.type = "button";
+  documentOutlineLeftButton.textContent = "←";
+  documentOutlineLeftButton.setAttribute("aria-label", "Show outline on left");
+  documentOutlineLeftButton.setAttribute("aria-pressed", "false");
+  documentOutlineLeftButton.title = "Show outline on left";
+
+  const documentOutlineRightButton = document.createElement("button");
+  documentOutlineRightButton.className = "document-outline-control";
+  documentOutlineRightButton.type = "button";
+  documentOutlineRightButton.textContent = "→";
+  documentOutlineRightButton.setAttribute(
+    "aria-label",
+    "Show outline on right",
+  );
+  documentOutlineRightButton.setAttribute("aria-pressed", "true");
+  documentOutlineRightButton.title = "Show outline on right";
+
+  const documentOutlineCloseButton = document.createElement("button");
+  documentOutlineCloseButton.className = "document-outline-control";
+  documentOutlineCloseButton.type = "button";
+  documentOutlineCloseButton.textContent = "×";
+  documentOutlineCloseButton.setAttribute("aria-label", "Hide outline");
+  documentOutlineCloseButton.setAttribute("aria-pressed", "false");
+  documentOutlineCloseButton.title = "Hide outline";
+
+  const documentOutlineList = document.createElement("ol");
+  documentOutlineList.className = "document-outline-list";
+  documentOutlineList.setAttribute("aria-label", "Document outline");
+
+  documentOutlineControls.append(
+    documentOutlineLeftButton,
+    documentOutlineRightButton,
+    documentOutlineCloseButton,
+  );
+  documentOutlineHeader.append(documentOutlineTitle, documentOutlineControls);
+  documentOutline.append(documentOutlineHeader, documentOutlineList);
+
+  main.append(
+    status,
+    frame,
+    documentActions,
+    documentModeButton,
+    documentScrollTopButton,
+    documentOutline,
+  );
   root.append(menuButton, sidebar, main, sourceDialog);
   container.replaceChildren(root);
 
@@ -191,13 +313,24 @@ export function createLayout(container: HTMLElement): ViewerElements {
     documentActions,
     documentActionsButton,
     documentActionsMenu,
+    documentCopyRelativePathButton,
+    documentCopyAbsolutePathButton,
+    documentShowOutlineButton,
     documentArchiveButton,
     documentActionStatus,
     documentModeButton,
+    documentScrollTopButton,
+    documentOutline,
+    documentOutlineList,
+    documentOutlineLeftButton,
+    documentOutlineRightButton,
+    documentOutlineCloseButton,
     sourceDialog,
     sourceDialogTitle,
-    sourceDialogCode,
+    sourceDialogTextarea,
     sourceDialogCloseButton,
+    sourceDialogSaveButton,
+    sourceDialogStatus,
     sortButtons,
     themeButtons,
     sidebar,
@@ -222,6 +355,8 @@ export function renderLoadState(
       elements.frame.hidden = true;
       elements.documentActions.hidden = true;
       elements.documentModeButton.hidden = true;
+      elements.documentScrollTopButton.hidden = true;
+      elements.documentOutline.hidden = true;
       break;
     case "loading":
       elements.status.textContent = "Loading…";
@@ -230,6 +365,8 @@ export function renderLoadState(
       elements.frame.hidden = true;
       elements.documentActions.hidden = true;
       elements.documentModeButton.hidden = true;
+      elements.documentScrollTopButton.hidden = true;
+      elements.documentOutline.hidden = true;
       break;
     case "ready":
       elements.status.replaceChildren();
@@ -245,6 +382,8 @@ export function renderLoadState(
       elements.frame.hidden = true;
       elements.documentActions.hidden = true;
       elements.documentModeButton.hidden = true;
+      elements.documentScrollTopButton.hidden = true;
+      elements.documentOutline.hidden = true;
       break;
   }
 }

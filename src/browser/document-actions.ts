@@ -21,5 +21,6 @@ export function closeDocumentActionsMenu(
 
 export function clearDocumentActionStatus(elements: ViewerElements): void {
   elements.documentActionStatus.replaceChildren();
+  delete elements.documentActionStatus.dataset.tone;
   elements.documentActionStatus.hidden = true;
 }

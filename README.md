@@ -235,9 +235,13 @@ Standard semantic elements such as headings, lists, tables, code, blockquotes, d
 </aside>
 ```
 
-The source button in the lower-right corner opens the current document's original HTML or Markdown in a dialog, making it easy to compare the rendered result with its source.
+The document actions menu in the upper-right corner can copy the current content-root-relative path. When the viewer is accessed through a loopback address, it can also copy the absolute filesystem path; absolute paths are not exposed to non-loopback clients. Archive or Restore is kept at the bottom of the menu.
 
-![The current document's source HTML displayed in a dialog](./assets/source.webp)
+The floating outline is generated from the rendered document's `h1`, `h2`, and `h3` elements, so headings without source IDs still receive temporary anchor targets. It can be placed on the left or right or hidden, and the preference is saved in the browser. On desktop, the document reserves room for the visible outline while the iframe scrollbar stays at the far-right edge. On narrow screens, the outline is placed above the document. A separate floating button appears after scrolling and returns the document to the top.
+
+The source button in the lower-right corner opens the current document's original HTML or Markdown in an editable dialog. **Save** writes the source file and lets live reload refresh the rendered document. If another editor changed the file after the dialog loaded, the save is rejected instead of overwriting the newer version. Unsaved edits are protected by a discard confirmation.
+
+![The current document's source HTML opened in a dialog](./assets/source.webp)
 
 Printing hides the sidebar and mobile menu button and prints the current document with the light color scheme.
 
@@ -317,6 +321,8 @@ Spec HTML is designed for trusted local HTML. Inline scripts in an HTML specific
 Review fixer changes with `--check` before writing unfamiliar documents. Correcting a typo such as `scritp` or `onclik` intentionally activates the corresponding HTML behavior, while leaving the JavaScript source itself unchanged.
 
 The server listens only on `127.0.0.1` by default and accepts only the loopback names `127.0.0.1`, `localhost`, and `::1` for loopback binds. A concrete non-loopback bind can add repeatable `--allowed-host <hostname>` values. A wildcard bind such as `--host 0.0.0.0` requires at least one; it still must not be used on an untrusted network. Cross-origin document-state updates are rejected, and non-loopback listeners require an explicit matching `Origin` header for every state-changing request.
+
+Source editing is limited to discovered HTML and Markdown documents and to request bodies of at most 5 MiB. Saves use revision checks, the shared content mutation lock, and an atomic replacement so an external change is reported as a conflict instead of being overwritten. Absolute filesystem paths are returned only to loopback clients.
 
 Requests that traverse outside the content directory, including symbolic-link escapes, are rejected. Files and directories whose names start with `.` are never served from the content route, even when the segment is percent-encoded.
 

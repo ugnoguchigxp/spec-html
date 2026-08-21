@@ -2,6 +2,29 @@
 
 Notable changes to Spec HTML are recorded here. The project follows [Semantic Versioning](https://semver.org/).
 
+## 0.1.5 - 2026-08-21
+
+### Added
+
+- Viewer controls for copying the current document's relative path and, on loopback connections, its absolute filesystem path; Archive and Restore remain the final action in the menu
+- A generated H1–H3 outline with left, right, and hidden positions, runtime anchor links for headings without IDs, and a floating scroll-to-top button
+- Direct HTML and Markdown source editing from the source dialog, with an explicit Save action and automatic viewer refresh after successful writes
+
+### Changed
+
+- The desktop outline reserves space inside the document while keeping the iframe and its scrollbar at the viewport edge; on narrow screens it occupies normal flow above the document
+- Viewer runtime CSS and JavaScript use a process-specific asset version and `no-store` responses so restarting the server cannot leave stale interface assets in the browser cache
+- Successful path-copy messages use the neutral notification color, while copy failures retain the error color
+
+### Security
+
+- Source saves are limited to discovered HTML and Markdown documents, validated by a SHA-256 revision, serialized with the content mutation lock, and committed through an atomic replacement without following symbolic-link escapes
+- Source updates retain state-changing request Origin checks, reject payloads larger than 5 MiB, and return conflicts instead of overwriting files changed by another editor; absolute filesystem paths are exposed only on loopback connections
+
+### Fixed
+
+- Source editing preserves CRLF-only line endings, protects input made while the initial source request is pending, and blocks saving when a live reload reports an external change during editing
+
 ## 0.1.4 - 2026-08-20
 
 ### Fixed

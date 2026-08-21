@@ -22,7 +22,12 @@
   color: var(--doc-text);
   background: var(--doc-background);
   color-scheme: light dark;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   font-size: 16px;
   line-height: 1.6;
 }
@@ -42,6 +47,14 @@ body {
   overflow-wrap: anywhere;
   color: var(--doc-text);
   background: var(--doc-background);
+}
+
+:root[data-viewer-outline-position="right"] {
+  padding-right: 272px;
+}
+
+:root[data-viewer-outline-position="left"] {
+  padding-left: 272px;
 }
 
 article,
@@ -419,6 +432,11 @@ video {
 }
 
 @media (max-width: 767px) {
+  :root[data-viewer-outline-position] {
+    padding-right: 0;
+    padding-left: 0;
+  }
+
   body {
     padding: 16px;
   }
@@ -453,6 +471,11 @@ video {
     padding: 0;
   }
 
+  :root[data-viewer-outline-position] {
+    padding-right: 0;
+    padding-left: 0;
+  }
+
   h1,
   h2,
   h3,
@@ -476,7 +499,6 @@ video {
     white-space: pre-wrap;
     word-break: break-word;
   }
-
 }
 
 @page {

@@ -1,0 +1,545 @@
+<article lang="ja">
+  <h1>HTMLビューア操作支援・ソース編集機能 実装計画</h1>
+
+  <p>
+    HTMLビューアに、ページ先頭へ戻るフローティングボタン、表示中ドキュメントのパスコピー、
+    実行時に生成する小型目次、HTML・Markdownソースの編集保存を追加する。
+    既存のiframeプレビュー、ドキュメント操作メニュー、ライブリロード、安全な原子的書き込みを活用し、
+    新しい依存ライブラリは追加しない。
+  </p>
+
+  <aside>
+    <p>
+      <strong>結論:</strong>
+      4機能とも実装可能である。相対パスはブラウザが保持する現在のドキュメントパスをそのままコピーできる。
+      絶対パスも実装できるが、ブラウザだけでは取得できないためサーバーから提供する必要がある。
+      絶対パスはローカルのディレクトリ構成やユーザー名を含み得るため、初期実装ではloopback接続時だけ表示する。
+    </p>
+  </aside>
+
+  <section id="implementation-result">
+    <h2>実装結果</h2>
+
+    <p>この計画に含めた機能は2026-08-21に実装した。</p>
+
+    <ul>
+      <li>iframe内のscroll位置に連動するScroll to topボタンを追加した。</li>
+      <li>
+        相対パス、loopback接続時の絶対パス、Show
+        outlineを右上メニューへ追加し、Archive・Restoreを常に最下部へ配置した。
+      </li>
+      <li>
+        iframeの<code>h1</code>・<code>h2</code>・<code>h3</code>から実行時ID付きの目次を生成し、右・左・非表示の選択を保存するようにした。
+      </li>
+      <li>
+        目次表示中はiframeを全幅のまま保ち、iframe内の本文領域に目次幅と余白を確保するため、本文と重ならずscrollbarは常に右端になる。モバイルでは目次を本文の上に配置して、本文の高さを縮める。
+      </li>
+      <li>
+        ソースモーダルを編集可能な<code>textarea</code>とSaveボタンへ変更し、HTMLとMarkdownを保存できるようにした。
+      </li>
+      <li>
+        GET・PUTのdocument source APIを追加し、SHA-256 revision、content mutation
+        lock、原子的置換、Origin検証、本文上限、409競合応答を実装した。
+      </li>
+      <li>
+        保存時はライブリロードを一時保留し、PUTの完了後に既存のファイル監視による再表示へ委ねるようにした。
+      </li>
+      <li>
+        server・security・Playwrightテストを追加し、保存、競合、archive済み文書、コピー、目次、スクロール、実ファイルへの保存を検証した。
+      </li>
+      <li>
+        実装レビューで、読込完了前の入力も未保存変更として扱うようにし、読込中に外部更新を検出した場合は保存を無効化して再オープンを求める保護を追加した。
+        CRLFだけを使う文書は保存時にもその改行コードを維持する。
+      </li>
+      <li>
+        runtime
+        CSS・JavaScriptの5分キャッシュにより再起動後も旧レイアウトが表示される問題を解消した。起動ごとのversion
+        queryをshellから付与し、runtime
+        assetは<code>no-store</code>で配信する。
+      </li>
+    </ul>
+  </section>
+
+  <section id="scope">
+    <h2>対象範囲</h2>
+
+    <table>
+      <caption>
+        追加する5つのビューア機能とUI、挙動、設定保持方法
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">機能</th>
+          <th scope="col">UI</th>
+          <th scope="col">主な挙動</th>
+          <th scope="col">設定の保持</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">ページ先頭へ戻る</th>
+          <td>右下のソースボタンの上に丸いフローティングボタン</td>
+          <td>iframe内を先頭へスクロールする。先頭付近では非表示にする。</td>
+          <td>なし</td>
+        </tr>
+        <tr>
+          <th scope="row">相対パスをコピー</th>
+          <td>右上の「•••」メニュー</td>
+          <td>
+            <code>nested/example.html</code>のようなcontent root基準のパスをコピーする。
+          </td>
+          <td>なし</td>
+        </tr>
+        <tr>
+          <th scope="row">絶対パスをコピー</th>
+          <td>右上の「•••」メニュー。利用不可の場合は項目を表示しない。</td>
+          <td>実際に表示・編集している通常ファイルの絶対パスをサーバーから取得してコピーする。</td>
+          <td>サーバーの公開条件に従う</td>
+        </tr>
+        <tr>
+          <th scope="row">小型目次</th>
+          <td>プレビュー上に重なるフローティングパネル</td>
+          <td>見出しを実行時に抽出し、クリックした見出しへ移動する。右・左・非表示を選べる。</td>
+          <td><code>localStorage</code></td>
+        </tr>
+        <tr>
+          <th scope="row">ソース編集・保存</th>
+          <td>既存の右下ソースボタンから開くモーダル</td>
+          <td>開いた直後から編集でき、保存時に実ファイルを安全に置き換える。</td>
+          <td>保存したファイル自体</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="current-implementation">
+    <h2>現状の実装と接続点</h2>
+
+    <ul>
+      <li>
+        表示中の相対パスは<code>src/browser/start.ts</code>の
+        <code>currentDocument</code>に正規化済みの値として保持されている。
+      </li>
+      <li>
+        プレビューは<code>srcdoc</code>を使った同一オリジンのiframeであり、親画面から
+        <code>contentDocument</code
+        >と<code>contentWindow</code>を操作できる。
+      </li>
+      <li>
+        右上メニューは現在Archive・Restoreだけを持ち、右下のソースモーダルは
+        <code>pre</code>でソースを読み取り専用表示している。
+      </li>
+      <li>
+        サーバーにはArchive・Restore用の更新経路はあるが、ソースを書き込むHTTP APIはまだない。
+      </li>
+      <li>
+        <code>src/content/safe-write.ts</code
+        >には、権限を保った原子的置換、SHA-256ダイジェスト、
+        通常ファイル確認の部品がある。Archive・migration用の排他ロックも再利用できる。
+      </li>
+      <li>
+        content
+        rootの変更はファイル監視されており、保存後は既存のライブリロードでプレビューを更新できる。
+      </li>
+    </ul>
+  </section>
+
+  <section id="ui-behavior">
+    <h2>UI・操作仕様</h2>
+
+    <section>
+      <h3>ページ先頭へ戻るボタン</h3>
+
+      <ul>
+        <li>iframe内の縦スクロール量が480pxを超えたときだけ表示する。</li>
+        <li>
+          クリック時はiframeの<code>window.scrollTo</code>を呼び、先頭へ移動する。
+        </li>
+        <li>
+          通常はsmooth scrollとし、<code>prefers-reduced-motion: reduce</code>では即時移動する。
+        </li>
+        <li><code>aria-label="Scroll to top"</code>を設定し、印刷時は非表示にする。</li>
+        <li>ドキュメント切替時に古いiframeのscroll listenerを解除し、新しいiframeへ付け替える。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h3>パスコピー</h3>
+
+      <p>右上メニューに次の項目を追加する。</p>
+
+      <ol>
+        <li>
+          <strong>Copy relative path:</strong>
+          <code>currentDocument</code>をコピーする。
+        </li>
+        <li>
+          <strong>Copy absolute path:</strong>
+          サーバーが返した実ファイルの絶対パスをコピーする。
+        </li>
+      </ol>
+
+      <p>右上メニュー全体の表示順は次のとおりとする。</p>
+
+      <ol>
+        <li>Copy relative path</li>
+        <li>Copy absolute path（利用可能な場合のみ）</li>
+        <li>Show outline</li>
+        <li>区切り線</li>
+        <li>ArchiveまたはRestore</li>
+      </ol>
+
+      <p>
+        Archive・Restoreは破壊的または状態変更を伴う操作として他の操作から分離し、
+        メニュー項目が今後増えた場合も常に一番下へ配置する。
+      </p>
+
+      <p>
+        コピー成功時はメニューを閉じて「Copied relative path」または「Copied absolute
+        path」を通常色で短時間表示する。失敗時はメニュー付近にエラー色で表示する。Clipboard
+        APIを第一候補とし、利用できないHTTP環境では
+        一時的な<code>textarea</code>を使うフォールバックを設ける。
+      </p>
+
+      <p>
+        絶対パスはloopback接続時だけAPI応答に含める。非loopback接続では値を<code>null</code>にして
+        メニュー項目を表示しない。将来リモート利用で必要になった場合だけ、明示的なCLIオプションを別途追加する。
+      </p>
+    </section>
+
+    <section>
+      <h3>小型目次</h3>
+
+      <p>
+        本仕様では「H3以上」を文書階層の上位3段階である<code>h1</code>・<code>h2</code>・<code>h3</code>と解釈する。
+        <code>h3</code
+        >から<code>h6</code>を意図していた場合も、抽出selectorを変更するだけで対応できる。
+      </p>
+
+      <ul>
+        <li>
+          iframeの読み込み完了後に<code>h1, h2, h3</code>をDOMから抽出する。
+        </li>
+        <li>
+          一意な既存<code>id</code>は変更しない。<code>id</code>がない見出し、または重複した<code>id</code>を持つ後続見出しには衝突しない実行時IDを付与する。
+        </li>
+        <li>実行時IDはiframeのDOMだけに追加し、保存対象のソースには書き戻さない。</li>
+        <li>
+          目次項目は実際の<code>a href="#..."</code>とし、既存の履歴・hash
+          navigationへ接続する。
+        </li>
+        <li>同じ見出し名が複数あっても、連番を含むIDで個別に移動できる。</li>
+        <li>
+          右上メニューの「Show
+          outline」で再表示でき、パネル内のLeft・Right・Close操作で位置を変える。
+        </li>
+        <li>
+          位置は<code>right</code>・<code>left</code>・<code>hidden</code>の3値で保存し、初期値は<code>right</code>とする。
+        </li>
+        <li>
+          パネルは幅240px程度、最大高60vhとし、本文のレイアウトを押し広げずプレビュー上に重ねる。
+        </li>
+        <li>
+          デスクトップではiframeを全幅に保ち、表示中の目次位置に応じてiframe内のdocument
+          rootの左または右へ272pxを確保する。本文がパネルの背後へ入らず、iframeのscrollbarは画面右端に残る。非表示時と見出しがない文書では確保しない。
+        </li>
+        <li>
+          幅767px以下では、目次をiframeの上に通常フローで配置する。目次の高さだけiframeを縮め、本文や目次が重ならないようにする。
+        </li>
+        <li>対象見出しがない文書ではパネルを表示せず、メニュー項目を無効化する。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h3>ソース編集モーダル</h3>
+
+      <ul>
+        <li>
+          既存の<code>pre</code>を等幅フォントの<code>textarea</code>へ置き換え、モーダルを開いた直後から編集可能にする。
+        </li>
+        <li>HTMLだけでなく、既存仕様どおりMarkdownドキュメントではMarkdownソースを編集する。</li>
+        <li>ヘッダーまたはフッターにSaveボタン、保存状態、Closeボタンを置く。</li>
+        <li>未変更時はSaveを無効化し、入力後に有効化する。保存中は二重送信を防ぐ。</li>
+        <li>
+          未保存の変更がある状態でEscape・Close・履歴移動・ページ離脱を行う場合は破棄確認を表示する。
+        </li>
+        <li>
+          保存成功後はモーダルを閉じ、ライブリロードを1回だけ行ってプレビューと目次を再生成する。
+        </li>
+        <li>保存失敗時はモーダルを閉じず、入力内容を保持したまま原因を表示する。</li>
+        <li>
+          外部エディタで同じファイルが変更されていた場合は上書きせず、競合メッセージを表示する。
+        </li>
+        <li>
+          ダイアログを開いた直後に入力され、続いて取得した最新ソースが初期表示と異なる場合も保存しない。入力内容を表示したまま、閉じて再オープンして最新ソースから編集し直すよう案内する。
+        </li>
+        <li>
+          <code>textarea</code
+          >で正規化される改行コードによって未変更と誤判定しない。元ファイルがCRLFのみを使う場合、保存する内容もCRLFに戻す。
+        </li>
+      </ul>
+    </section>
+  </section>
+
+  <section id="source-api">
+    <h2>保存APIとデータ整合性</h2>
+
+    <p>
+      新しい<code>/_spec-html/document-source?doc=...</code>エンドポイントを追加する。
+      プレビュー本文の画像・相対リンク用には従来どおり<code>/_content/</code>
+      URLを使う。
+    </p>
+
+    <table>
+      <caption>
+        document source APIのHTTP操作、要求、応答
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">操作</th>
+          <th scope="col">要求</th>
+          <th scope="col">応答</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><code>GET</code></th>
+          <td>正規化済みの相対<code>doc</code></td>
+          <td>
+            <code>doc</code
+            >、<code>format</code>、<code>source</code>、<code>revision</code>、条件付き<code
+              >absolutePath</code
+            >
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>PUT</code></th>
+          <td>
+            <code>source</code
+            >と<code>expectedRevision</code>を持つJSON
+          </td>
+          <td>
+            保存後の<code>doc</code>と新しい<code
+              >revision</code
+            >
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>
+      <code>revision</code
+      >はUTF-8ソースのSHA-256ダイジェストとする。PUT時に実ファイルの現在値と
+      <code>expectedRevision</code
+      >が一致しなければ<code>409 Conflict</code>を返す。
+      これにより、モーダルを開いた後に外部エディタが行った変更を誤って消さない。
+    </p>
+
+    <figure>
+      <pre class="mermaid">
+flowchart LR
+  Viewer[Viewer shell] -->|GET document-source| Api[Document source API]
+  Api --> Resolver[Active or archived file resolver]
+  Resolver --> File[(HTML or Markdown file)]
+  Editor[Source textarea] -->|PUT source + expectedRevision| Api
+  Api --> Lock[Content mutation lock]
+  Lock --> Compare{Revision matches?}
+  Compare -->|No| Conflict[409 Conflict]
+  Compare -->|Yes| Replace[Atomic replace]
+  Replace --> File
+  Replace --> Watcher[Existing file watcher]
+  Watcher --> Reload[Deferred live reload]
+  Frame[iframe DOM] --> Outline[Runtime outline]
+  TopButton[Scroll-to-top button] --> Frame
+      </pre>
+      <figcaption>読み取り、競合検知付き保存、プレビュー更新、iframe内操作の関係。</figcaption>
+    </figure>
+
+    <h3>サーバー側の安全条件</h3>
+
+    <ul>
+      <li>
+        既存の<code>normalizeDocumentPath</code>で絶対パス、親参照、バックスラッシュ、不正な拡張子を拒否する。
+      </li>
+      <li>
+        一覧探索で確認できるactiveまたはarchivedの通常ファイルだけを編集対象とし、symlinkは拒否する。
+      </li>
+      <li>activeとarchivedの両方に同名ファイルがある場合は競合として保存しない。</li>
+      <li>Archive・migration・ソース保存で同じcontent mutation lockを使う。</li>
+      <li>
+        既存の<code>atomicReplace</code>で元ファイルのmodeを保ち、同一ディレクトリ内の一時ファイルから置換する。
+      </li>
+      <li>PUTは既存のdocument state更新と同じOrigin検証を必須にする。</li>
+      <li>
+        JSON本文には上限を設け、上限超過は<code>413 Payload Too Large</code>にする。
+      </li>
+      <li>UTF-8文字列として保存し、HTMLやMarkdownの構文エラーだけを理由に保存を拒否しない。</li>
+      <li>絶対パスはloopback接続に限って返し、ログやエラーメッセージへ不要に含めない。</li>
+    </ul>
+
+    <h3>ライブリロードとの協調</h3>
+
+    <p>
+      現状はファイル変更イベントを受けると即座にページを再読み込みするため、PUTの応答前に画面が更新される可能性がある。
+      <code>installLiveReload</code
+      >からcontrollerを返す形に変更し、保存中だけreloadを保留する。
+      保存成功後は保留中のreloadを1回実行し、失敗時は編集内容を残したまま外部変更分のreloadだけを通知する。
+    </p>
+  </section>
+
+  <section id="code-structure">
+    <h2>コード構成案</h2>
+
+    <table>
+      <caption>
+        変更・追加するソースファイルと責務
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">ファイル</th>
+          <th scope="col">変更内容</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><code>src/browser/layout.ts</code></th>
+          <td>
+            パスコピー項目、目次パネル、先頭へ戻るボタン、編集用textarea、Save・statusを生成する。
+            Archive・Restoreはメニューの一番下に配置する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>src/browser/types.ts</code></th>
+          <td>追加した要素と目次位置の型を定義する。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>src/browser/start.ts</code></th>
+          <td>
+            現在のdocument snapshotを保持し、各controllerをドキュメント切替時に接続・破棄する。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>src/browser/document-source.ts</code></th>
+          <td>GET・PUT client、dirty状態、保存、競合表示、離脱確認を担当する新規module。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>src/browser/outline-controller.ts</code></th>
+          <td>見出し抽出、実行時ID、目次描画、位置保持、リンク操作を担当する新規module。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>src/browser/scroll-top-controller.ts</code></th>
+          <td>iframeのscroll監視、表示切替、先頭移動を担当する新規module。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>src/browser/clipboard.ts</code></th>
+          <td>Clipboard APIとフォールバックをまとめる新規module。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>src/styles/shell.css</code></th>
+          <td>フローティング操作、目次、editor、mobile、dark mode、printのスタイルを追加する。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>src/shared/runtime-paths.ts</code></th>
+          <td><code>DOCUMENT_SOURCE_PATH</code>を追加する。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>src/content/document-source.ts</code></th>
+          <td>
+            対象ファイル解決、snapshot読取、revision比較、排他、原子的保存を担当する新規module。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><code>src/server/routes.ts</code></th>
+          <td>document-sourceのGET・HEAD・PUT、Origin、本文上限、status codeを実装する。</td>
+        </tr>
+        <tr>
+          <th scope="row"><code>src/browser/live-reload.ts</code></th>
+          <td>保存中にreloadを保留し、完了後に1回だけ反映するcontrollerを返す。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="implementation-order">
+    <h2>実装順序</h2>
+
+    <ol>
+      <li>
+        <strong>読み取り専用の操作支援:</strong>
+        先頭へ戻るボタン、相対パスコピー、目次抽出・移動・位置保持を実装する。
+      </li>
+      <li>
+        <strong>document source API:</strong>
+        通常・archivedファイルの安全な解決、GET snapshot、PUT保存、revision競合を実装する。
+      </li>
+      <li>
+        <strong>編集UI:</strong>
+        textarea、dirty状態、保存、離脱確認、エラー表示、ライブリロード保留を接続する。
+      </li>
+      <li>
+        <strong>絶対パス:</strong>
+        loopback判定とAPI応答を追加し、利用可能な場合だけコピー項目を表示する。
+      </li>
+      <li>
+        <strong>回帰確認:</strong>
+        mobile、dark mode、print、Archive・Restore、Markdown、Mermaid、Chart.jsを確認する。
+      </li>
+    </ol>
+  </section>
+
+  <section id="test-plan">
+    <h2>テスト計画</h2>
+
+    <h3>Unit・server</h3>
+
+    <ul>
+      <li>通常ファイルとarchivedファイルのsource snapshotを取得できる。</li>
+      <li>正しいrevisionなら保存され、modeが維持され、新しいrevisionが返る。</li>
+      <li>revision不一致、active・archived競合、symlink、不正パス、対象なしを拒否する。</li>
+      <li>cross-origin PUT、JSON以外、本文上限超過、未許可methodを拒否する。</li>
+      <li>非loopbackでは絶対パスを返さない。</li>
+      <li>Archiveまたはmigrationの処理中に競合する保存を安全に失敗させる。</li>
+    </ul>
+
+    <h3>Playwright</h3>
+
+    <ul>
+      <li>長い文書をスクロールするとボタンが現れ、クリックでiframe先頭へ戻る。</li>
+      <li>相対パスと、loopback時の絶対パスをクリップボードへコピーできる。</li>
+      <li>IDのない見出しを含む目次から目的位置へ移動できる。</li>
+      <li>右・左・非表示を切り替え、再読み込み後も設定が維持される。</li>
+      <li>
+        HTMLとMarkdownのソースが最初から編集可能で、Save後に実ファイルとプレビューが更新される。
+      </li>
+      <li>未保存の変更を閉じようとすると確認され、保存失敗時は入力内容が残る。</li>
+      <li>外部変更後のSaveが409となり、外部変更を上書きしない。</li>
+      <li>目次とフローティング操作が印刷時に表示されない。</li>
+    </ul>
+  </section>
+
+  <section id="acceptance-criteria">
+    <h2>受け入れ条件</h2>
+
+    <ul>
+      <li>表示中のdocumentがない状態では、追加した操作を実行できない。</li>
+      <li>4機能がキーボードだけで操作でき、focus表示とaccessible nameを持つ。</li>
+      <li>右上メニューではArchiveまたはRestoreが常に一番下に表示される。</li>
+      <li>目次のために元ソースへIDを自動保存しない。</li>
+      <li>保存は明示的なSave操作でのみ発生し、未変更のファイルを書き換えない。</li>
+      <li>外部変更、Archive、migrationとの競合時に既存ファイルを失わない。</li>
+      <li>既存の閲覧、navigation、Archive・Restore、theme、print、ライブリロードが回帰しない。</li>
+    </ul>
+  </section>
+
+  <section id="out-of-scope">
+    <h2>今回見送る項目</h2>
+
+    <ul>
+      <li>Monaco Editorなど大型editor依存の導入、syntax highlight、補完、整形。</li>
+      <li>自動保存と入力中のライブプレビュー。</li>
+      <li>見出しをソースへ永続的に書き戻す処理。</li>
+      <li>複数ユーザーの共同編集と競合マージ。</li>
+      <li>リモート接続時の絶対パス公開。</li>
+    </ul>
+  </section>
+</article>

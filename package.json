@@ -1,6 +1,6 @@
 {
   "name": "spec-html",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Local HTML and Markdown viewer for AI-generated specifications.",
   "keywords": [
     "documentation",

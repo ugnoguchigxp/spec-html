@@ -3,11 +3,18 @@ import type {
   RequestListener,
   ServerResponse,
 } from "node:http";
+import { randomUUID } from "node:crypto";
 import {
   ARCHIVED_DIRECTORY,
   ContentDocumentNotFoundError,
   DocumentArchiveConflictError,
 } from "../content/archive.js";
+import {
+  DocumentSourceConflictError,
+  readDocumentSource,
+  writeDocumentSource,
+} from "../content/document-source.js";
+import { ContentMutationLockedError } from "../content/mutation-lock.js";
 import {
   getDocumentArchiveState,
   MigrationManagedDocumentError,
@@ -39,6 +46,7 @@ import {
 import {
   CHART_PATH,
   CONTENT_PREFIX,
+  DOCUMENT_SOURCE_PATH,
   DOCUMENT_STATE_PATH,
   LIVE_RELOAD_PATH,
   MERMAID_PREFIX,
@@ -46,7 +54,18 @@ import {
   RUNTIME_PREFIX,
 } from "../shared/runtime-paths.js";
 
-const RUNTIME_CACHE_CONTROL = "private, max-age=300";
+const RUNTIME_CACHE_CONTROL = "no-store";
+const INTEGRATION_CACHE_CONTROL = "private, max-age=300";
+const RUNTIME_ASSET_VERSION = randomUUID();
+const MAX_DOCUMENT_SOURCE_REQUEST_BYTES = 5 * 1024 * 1024;
+
+class RequestBodyTooLargeError extends Error {
+  override name = "RequestBodyTooLargeError";
+}
+
+class InvalidRequestBodyError extends Error {
+  override name = "InvalidRequestBodyError";
+}
 
 type RequestHandlerOptions = Pick<
   StartServerOptions,
@@ -124,6 +143,19 @@ async function handleRequest(
     return;
   }
 
+  if (url.pathname === DOCUMENT_SOURCE_PATH) {
+    await handleDocumentSource(
+      request,
+      response,
+      options.contentRoot,
+      url,
+      hostValidation.origin,
+      options.hostPolicy.mutationOriginRequired,
+      !options.hostPolicy.mutationOriginRequired,
+    );
+    return;
+  }
+
   if (request.method !== "GET" && request.method !== "HEAD") {
     sendMethodNotAllowed(request, response, "GET, HEAD");
     return;
@@ -133,11 +165,14 @@ async function handleRequest(
     sendHtml(
       request,
       response,
-      createShellHtml({
-        chartJs: options.integrations?.chartFile !== undefined,
-        mermaid: options.integrations?.mermaidRoot !== undefined,
-        markdownLanguage: options.markdownLanguage,
-      }),
+      createShellHtml(
+        {
+          chartJs: options.integrations?.chartFile !== undefined,
+          mermaid: options.integrations?.mermaidRoot !== undefined,
+          markdownLanguage: options.markdownLanguage,
+        },
+        RUNTIME_ASSET_VERSION,
+      ),
     );
     return;
   }
@@ -151,7 +186,7 @@ async function handleRequest(
       request,
       response,
       options.integrations.chartFile,
-      RUNTIME_CACHE_CONTROL,
+      INTEGRATION_CACHE_CONTROL,
     );
     return;
   }
@@ -191,7 +226,7 @@ async function handleRequest(
       response,
       options.integrations.mermaidRoot,
       url.pathname.slice(MERMAID_PREFIX.length),
-      RUNTIME_CACHE_CONTROL,
+      INTEGRATION_CACHE_CONTROL,
     );
     return;
   }
@@ -280,6 +315,113 @@ async function handleDocumentState(
     }
     throw error;
   }
+}
+
+async function handleDocumentSource(
+  request: IncomingMessage,
+  response: ServerResponse,
+  contentRoot: string,
+  url: URL,
+  requestOrigin: string,
+  originRequired: boolean,
+  exposeAbsolutePath: boolean,
+): Promise<void> {
+  if (
+    request.method !== "GET" &&
+    request.method !== "HEAD" &&
+    request.method !== "PUT"
+  ) {
+    sendMethodNotAllowed(request, response, "GET, HEAD, PUT");
+    return;
+  }
+
+  const rawDocumentPath = url.searchParams.get("doc") ?? "";
+  const documentPath = normalizeDocumentPath(rawDocumentPath);
+  if (documentPath === null) {
+    sendText(request, response, 400, "Invalid document path");
+    return;
+  }
+
+  try {
+    const snapshot =
+      request.method === "PUT"
+        ? await updateDocumentSource(
+            request,
+            contentRoot,
+            documentPath,
+            requestOrigin,
+            originRequired,
+          )
+        : await readDocumentSource(contentRoot, documentPath);
+    if (snapshot === null) {
+      sendText(request, response, 403, "Forbidden");
+      return;
+    }
+    sendJson(
+      request,
+      response,
+      request.method === "PUT"
+        ? {
+            doc: snapshot.doc,
+            format: snapshot.format,
+            revision: snapshot.revision,
+          }
+        : {
+            doc: snapshot.doc,
+            format: snapshot.format,
+            source: snapshot.source,
+            revision: snapshot.revision,
+            absolutePath: exposeAbsolutePath ? snapshot.absolutePath : null,
+          },
+    );
+  } catch (error: unknown) {
+    if (error instanceof ContentDocumentNotFoundError) {
+      sendText(request, response, 404, "Document not found");
+      return;
+    }
+    if (
+      error instanceof DocumentArchiveConflictError ||
+      error instanceof DocumentSourceConflictError
+    ) {
+      sendText(request, response, 409, "Document source conflict");
+      return;
+    }
+    if (error instanceof ContentMutationLockedError) {
+      sendText(request, response, 423, "Document is being changed");
+      return;
+    }
+    if (error instanceof RequestBodyTooLargeError) {
+      sendText(request, response, 413, "Payload Too Large");
+      return;
+    }
+    if (error instanceof InvalidRequestBodyError) {
+      sendText(request, response, 400, "Invalid request body");
+      return;
+    }
+    throw error;
+  }
+}
+
+async function updateDocumentSource(
+  request: IncomingMessage,
+  contentRoot: string,
+  documentPath: string,
+  requestOrigin: string,
+  originRequired: boolean,
+) {
+  if (!requestOriginMatches(request, requestOrigin, originRequired)) {
+    return null;
+  }
+  const update = await readDocumentSourceUpdate(request);
+  if (update === null) {
+    throw new InvalidRequestBodyError();
+  }
+  return writeDocumentSource(
+    contentRoot,
+    documentPath,
+    update.source,
+    update.expectedRevision,
+  );
 }
 
 function parseNavigationView(value: string | null): NavigationView | null {
@@ -392,6 +534,59 @@ async function readArchivedUpdate(
     return null;
   }
   return parsed.archived;
+}
+
+async function readDocumentSourceUpdate(request: IncomingMessage): Promise<{
+  readonly source: string;
+  readonly expectedRevision: string;
+} | null> {
+  if (!isJsonContentType(request.headers["content-type"])) {
+    return null;
+  }
+
+  const parsed = await readJsonBody(request, MAX_DOCUMENT_SOURCE_REQUEST_BYTES);
+  if (
+    typeof parsed !== "object" ||
+    parsed === null ||
+    !("source" in parsed) ||
+    typeof parsed.source !== "string" ||
+    !("expectedRevision" in parsed) ||
+    typeof parsed.expectedRevision !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(parsed.expectedRevision)
+  ) {
+    return null;
+  }
+  return { source: parsed.source, expectedRevision: parsed.expectedRevision };
+}
+
+async function readJsonBody(
+  request: IncomingMessage,
+  maxBytes: number,
+): Promise<unknown> {
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of request as AsyncIterable<unknown>) {
+    const buffer =
+      typeof chunk === "string"
+        ? Buffer.from(chunk)
+        : chunk instanceof Uint8Array
+          ? chunk
+          : null;
+    if (buffer === null) {
+      return null;
+    }
+    size += buffer.length;
+    if (size > maxBytes) {
+      throw new RequestBodyTooLargeError();
+    }
+    chunks.push(buffer);
+  }
+
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    return null;
+  }
 }
 
 function isJsonContentType(value: string | undefined): boolean {

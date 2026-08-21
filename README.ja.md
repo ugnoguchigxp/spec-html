@@ -228,9 +228,13 @@ Sidebar上部の「Name」「Date」で、各directory内の文書を名前順�
 </aside>
 ```
 
-画面右下のsource buttonから、現在の文書の元HTMLまたはMarkdownをdialogで確認できます。描画結果とsourceを同じ画面で見比べられます。
+画面右上の文書操作menuから、現在の文書のcontent root相対pathをコピーできます。loopback addressでViewerを開いている場合だけ絶対pathもコピーでき、非loopback clientには絶対pathを公開しません。ArchiveまたはRestoreはmenuの一番下に配置します。
 
-![現在の文書のソースHTMLをdialogで表示している画面](./assets/source.webp)
+フローティング目次は、描画した文書の`h1`、`h2`、`h3`から自動生成します。sourceにIDがない見出しにも一時的なanchorを付けるため、そのまま見出しへ移動できます。目次は左・右・非表示を選択でき、設定をbrowserへ保存します。desktopではiframeのscrollbarを画面右端に保ったまま、表示中の目次に合わせて文書側へ余白を確保します。狭い画面では目次を文書の上に配置します。文書を下へscrollすると、先頭へ戻るフローティングbuttonも表示します。
+
+画面右下のsource buttonから、現在の文書の元HTMLまたはMarkdownを編集可能なdialogで開けます。「Save」を押すと実fileへ保存し、live reloadで描画結果を更新します。dialogを開いた後に外部editorが同じfileを変更した場合は、新しい内容を上書きせず保存を拒否します。未保存の編集を破棄する操作では確認を表示します。
+
+![現在の文書のソースHTMLをdialogで開いている画面](./assets/source.webp)
 
 印刷時はSidebarとmobile menu buttonを除外し、現在の文書をlight配色で印刷します。
 
@@ -310,6 +314,8 @@ Spec HTMLはローカルの信頼済みHTMLを対象にします。HTML設計書
 不慣れな文書へFixerを使う場合は、先に`--check`で変更を確認してください。`scritp`や`onclik`の訂正は対応するHTMLの動作を意図どおり有効にしますが、JavaScript source自体は変更しません。
 
 既定では`127.0.0.1`だけで待ち受けます。loopback bindで許可するHTTP Hostは`127.0.0.1`、`localhost`、`::1`だけです。具体的な非loopback bindでは、repeat可能な`--allowed-host <hostname>`を追加できます。`--host 0.0.0.0`のようなwildcard bindには1件以上の指定が必須です。この設定を使っても、信頼できないnetworkへ公開しないでください。cross-originの文書状態更新を拒否し、非loopback listenerの状態変更requestには一致する`Origin` headerを必須にします。
+
+source編集は、探索済みのHTML・Markdown文書と5 MiB以下のrequest bodyだけを対象にします。保存時はrevision確認、共有content mutation lock、原子的置換を使い、外部変更があれば上書きせず競合として通知します。絶対filesystem pathはloopback clientにだけ返します。
 
 content directory外を指すpath traversalとsymbolic linkは配信しません。名前が`.`で始まるfileとdirectoryは、percent encodeされた場合もcontent routeから配信しません。
 

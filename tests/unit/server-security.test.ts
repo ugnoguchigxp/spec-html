@@ -1,4 +1,11 @@
-import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -88,6 +95,29 @@ describe("server request boundary", () => {
     await access(join(contentRoot, "document.html"));
   });
 
+  it("rejects a cross-origin source update without changing the document", async () => {
+    const sourceUrl = `${runningServer!.origin}/_spec-html/document-source?doc=document.html`;
+    const snapshot = (await (await fetch(sourceUrl)).json()) as {
+      revision: string;
+    };
+    const response = await sendRequest(
+      "/_spec-html/document-source?doc=document.html",
+      {
+        method: "PUT",
+        origin: "http://attacker.example",
+        body: JSON.stringify({
+          source: "<h1>Changed</h1>",
+          expectedRevision: snapshot.revision,
+        }),
+      },
+    );
+
+    expect(response.status).toBe(403);
+    await expect(
+      readFile(join(contentRoot, "document.html"), "utf8"),
+    ).resolves.toBe("<h1>Document</h1>");
+  });
+
   it("allows a same-origin archive update", async () => {
     const response = await sendRequest(
       "/_spec-html/document-state?doc=document.html",
@@ -133,6 +163,14 @@ describe("server request boundary", () => {
     await expect(
       getDocumentArchived(contentRoot, "document.html"),
     ).resolves.toBe(false);
+
+    await expect(
+      (
+        await fetch(
+          `${runningServer.origin}/_spec-html/document-source?doc=document.html`,
+        )
+      ).json(),
+    ).resolves.toMatchObject({ absolutePath: null });
   });
 
   it("rejects a misleading JSON-prefixed content type without moving the document", async () => {

@@ -3,6 +3,13 @@ import type { NavigationView } from "../content/document-path.js";
 import { documentFormatFromPath } from "../content/document-format.js";
 import { renderMarkdownDocument } from "./markdown.js";
 import { fetchDocument } from "./document-loader.js";
+import {
+  DocumentSourceHttpError,
+  fetchDocumentSource,
+  saveDocumentSource,
+  type DocumentSourceSnapshot,
+} from "./document-source.js";
+import { copyText } from "./clipboard.js";
 import { buildSrcdoc } from "./frame.js";
 import type { FrameIntegrations } from "./frame.js";
 import { createLayout, renderLoadState } from "./layout.js";
@@ -46,6 +53,10 @@ import {
 import { type HistoryMode, updateHistory } from "./history.js";
 import { installLiveReload } from "./live-reload.js";
 import {
+  installOutlineController,
+  type OutlineController,
+} from "./outline-controller.js";
+import {
   installSidebarLinkHandler,
   renderEmptyNavigation,
   showInitialRoute,
@@ -55,6 +66,7 @@ import { installPrintController } from "./print-controller.js";
 import { installSidebarController } from "./sidebar-controller.js";
 import { SortController } from "./sort-controller.js";
 import { updateThemeButtons } from "./theme-controls.js";
+import { installScrollTopController } from "./scroll-top-controller.js";
 
 void initializeViewer().catch((error: unknown) => {
   console.error("Spec HTML failed to initialize", error);
@@ -66,7 +78,7 @@ async function initializeViewer(): Promise<void> {
     throw new Error("Viewer mount element was not found");
   }
 
-  installLiveReload();
+  const liveReload = installLiveReload();
 
   const integrations: FrameIntegrations = {
     chartJs: app.dataset.chartJs === "true",
@@ -82,10 +94,17 @@ async function initializeViewer(): Promise<void> {
       : initialRoute.route.view;
   applyThemePreference(document.documentElement, themePreference);
   const elements = createLayout(app);
+  const absolutePathCopyAvailable = isLoopbackHostname(
+    window.location.hostname,
+  );
+  elements.documentCopyAbsolutePathButton.hidden = !absolutePathCopyAvailable;
   updateThemeButtons(elements, themePreference);
   const sortController = new SortController(elements);
   updateNavigationViewButton(elements, navigationView);
   const sidebarController = installSidebarController(elements);
+  const scrollTopController = installScrollTopController(
+    elements.documentScrollTopButton,
+  );
   installPrintController(elements.frame);
   elements.root.dataset.navigationView = navigationView;
   const contentBaseUrl = new URL(CONTENT_PREFIX, window.location.origin);
@@ -93,21 +112,83 @@ async function initializeViewer(): Promise<void> {
   let activeAbortController: AbortController | undefined;
   let currentDocument: string | null = null;
   let currentDocumentSource: string | null = null;
+  let currentDocumentAbsolutePath: string | null = null;
   let currentDocumentArchived: boolean | null = null;
   let currentDocumentRestoreAllowed = true;
   let currentDocumentMigrationId: string | null = null;
   let currentRoute: RouteState = { doc: null, hash: "", view: navigationView };
+  let sourceDialogSnapshot: DocumentSourceSnapshot | undefined;
+  let sourceDialogInitialSource: string | undefined;
+  let sourceDialogRequiresReload = false;
+  let sourceFetchAbortController: AbortController | undefined;
+  let sourceDialogSaving = false;
+  let documentActionStatusTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const resetSourceEditor = (): void => {
+    sourceFetchAbortController?.abort();
+    sourceFetchAbortController = undefined;
+    sourceDialogSnapshot = undefined;
+    sourceDialogInitialSource = undefined;
+    sourceDialogRequiresReload = false;
+    sourceDialogSaving = false;
+    elements.sourceDialogTextarea.value = "";
+    elements.sourceDialogStatus.replaceChildren();
+    elements.sourceDialogSaveButton.disabled = true;
+    elements.sourceDialogSaveButton.removeAttribute("aria-busy");
+  };
+
+  const sourceEditorIsDirty = (): boolean =>
+    sourceDialogInitialSource !== undefined &&
+    elements.sourceDialogTextarea.value !== sourceDialogInitialSource;
+
+  const updateSourceSaveButton = (): void => {
+    elements.sourceDialogSaveButton.disabled =
+      sourceDialogSaving ||
+      sourceDialogSnapshot === undefined ||
+      sourceDialogRequiresReload ||
+      !sourceEditorIsDirty();
+  };
+
+  const closeSourceEditor = (): boolean => {
+    if (
+      elements.sourceDialog.open &&
+      sourceEditorIsDirty() &&
+      !window.confirm("Discard unsaved source changes?")
+    ) {
+      return false;
+    }
+    closeSourceDialog(elements);
+    return true;
+  };
+
+  const showDocumentActionStatus = (message: string): void => {
+    if (documentActionStatusTimer !== undefined) {
+      clearTimeout(documentActionStatusTimer);
+    }
+    elements.documentActionStatus.textContent = message;
+    elements.documentActionStatus.dataset.tone = "neutral";
+    elements.documentActionStatus.hidden = false;
+    documentActionStatusTimer = setTimeout(() => {
+      clearDocumentActionStatus(elements);
+      documentActionStatusTimer = undefined;
+    }, 2_500);
+  };
+
   const clearDocument = (): void => {
     activeAbortController?.abort();
     activeAbortController = undefined;
     currentDocument = null;
     currentDocumentSource = null;
+    currentDocumentAbsolutePath = null;
     currentDocumentArchived = null;
     currentDocumentRestoreAllowed = true;
     currentDocumentMigrationId = null;
     closeSourceDialog(elements);
+    resetSourceEditor();
     closeDocumentActionsMenu(elements);
     clearDocumentActionStatus(elements);
+    scrollTopController.clear();
+    outlineController?.clear();
     elements.frame.title = "Document";
     updateSourceLabels(elements, "html");
     resetDocumentTitle();
@@ -222,10 +303,14 @@ async function initializeViewer(): Promise<void> {
     activeAbortController = abortController;
     currentDocument = null;
     currentDocumentSource = null;
+    currentDocumentAbsolutePath = null;
     currentDocumentArchived = null;
     closeSourceDialog(elements);
+    resetSourceEditor();
     closeDocumentActionsMenu(elements);
     clearDocumentActionStatus(elements);
+    scrollTopController.clear();
+    outlineController?.clear();
     renderLoadState(elements, { kind: "loading", doc });
     sidebarController.close();
 
@@ -297,6 +382,8 @@ async function initializeViewer(): Promise<void> {
         throw new Error("iframe document is unavailable");
       }
       installFrameLinkHandler(frameDocument, navigate, () => navigationView);
+      outlineController?.setDocument(frameDocument);
+      scrollTopController.setFrame(elements.frame);
       updateDocumentArchiveButton(elements, documentState);
       renderLoadState(elements, { kind: "ready", doc, title });
       scrollToHash(route.hash);
@@ -314,6 +401,22 @@ async function initializeViewer(): Promise<void> {
       console.error("Spec HTML: Could not display document", error);
     }
   };
+
+  const outlineController: OutlineController = installOutlineController(
+    elements,
+    (hash) => {
+      if (currentDocument === null) {
+        return;
+      }
+      void navigate(
+        { doc: currentDocument, hash, view: navigationView },
+        "push",
+      );
+    },
+  );
+  elements.documentShowOutlineButton.addEventListener("click", () =>
+    closeDocumentActionsMenu(elements, true),
+  );
 
   for (const preference of THEME_PREFERENCES) {
     elements.themeButtons[preference].addEventListener("click", () => {
@@ -350,8 +453,112 @@ async function initializeViewer(): Promise<void> {
       String(willOpen),
     );
     if (willOpen) {
-      elements.documentArchiveButton.focus();
+      elements.documentCopyRelativePathButton.focus();
     }
+  });
+
+  const visibleDocumentMenuItems = (): HTMLButtonElement[] =>
+    [
+      elements.documentCopyRelativePathButton,
+      elements.documentCopyAbsolutePathButton,
+      elements.documentShowOutlineButton,
+      elements.documentArchiveButton,
+    ].filter((button) => !button.hidden && !button.disabled);
+
+  elements.documentActionsButton.addEventListener("keydown", (event) => {
+    if (
+      (event.key !== "ArrowDown" && event.key !== "ArrowUp") ||
+      !elements.documentActionsMenu.hidden
+    ) {
+      return;
+    }
+    event.preventDefault();
+    elements.documentActionsButton.click();
+    const items = visibleDocumentMenuItems();
+    (event.key === "ArrowUp" ? items.at(-1) : items[0])?.focus();
+  });
+  elements.documentActionsMenu.addEventListener("keydown", (event) => {
+    const items = visibleDocumentMenuItems();
+    if (items.length === 0) {
+      return;
+    }
+    const currentIndex = items.indexOf(
+      document.activeElement as HTMLButtonElement,
+    );
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeDocumentActionsMenu(elements, true);
+      return;
+    }
+    if (event.key === "Tab") {
+      closeDocumentActionsMenu(elements);
+      return;
+    }
+    let nextIndex: number | undefined;
+    if (event.key === "ArrowDown") {
+      nextIndex = (currentIndex + 1 + items.length) % items.length;
+    } else if (event.key === "ArrowUp") {
+      nextIndex = (currentIndex - 1 + items.length) % items.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = items.length - 1;
+    }
+    if (nextIndex !== undefined) {
+      event.preventDefault();
+      items[nextIndex]?.focus();
+    }
+  });
+
+  elements.documentCopyRelativePathButton.addEventListener("click", () => {
+    if (currentDocument === null) {
+      return;
+    }
+    const documentPath = currentDocument;
+    void copyText(documentPath)
+      .then(() => {
+        closeDocumentActionsMenu(elements, true);
+        showDocumentActionStatus("Copied relative path");
+      })
+      .catch((error: unknown) => {
+        console.error("Spec HTML: Could not copy relative path", error);
+        elements.documentActionStatus.textContent =
+          "Could not copy relative path.";
+        elements.documentActionStatus.dataset.tone = "error";
+        elements.documentActionStatus.hidden = false;
+      });
+  });
+
+  elements.documentCopyAbsolutePathButton.addEventListener("click", () => {
+    if (currentDocument === null) {
+      return;
+    }
+    const documentPath = currentDocument;
+    void (async () => {
+      try {
+        let absolutePath = currentDocumentAbsolutePath;
+        if (absolutePath === null) {
+          const snapshot = await fetchDocumentSource(documentPath);
+          if (
+            currentDocument !== documentPath ||
+            snapshot.absolutePath === null
+          ) {
+            throw new Error("Absolute path is unavailable");
+          }
+          currentDocumentAbsolutePath = snapshot.absolutePath;
+          absolutePath = snapshot.absolutePath;
+        }
+        await copyText(absolutePath);
+        closeDocumentActionsMenu(elements, true);
+        showDocumentActionStatus("Copied absolute path");
+      } catch (error: unknown) {
+        console.error("Spec HTML: Could not copy absolute path", error);
+        elements.documentActionStatus.textContent =
+          "Could not copy absolute path.";
+        elements.documentActionStatus.dataset.tone = "error";
+        elements.documentActionStatus.hidden = false;
+      }
+    })();
   });
 
   elements.documentArchiveButton.addEventListener("click", () => {
@@ -376,6 +583,7 @@ async function initializeViewer(): Promise<void> {
         currentDocumentArchived = updatedState.archived;
         currentDocumentRestoreAllowed = updatedState.restoreAllowed;
         currentDocumentMigrationId = updatedState.migrationId;
+        currentDocumentAbsolutePath = null;
         const view = viewForArchived(updatedState.archived);
         updateDocumentArchiveButton(elements, updatedState);
         await loadNavigation(view);
@@ -389,6 +597,7 @@ async function initializeViewer(): Promise<void> {
           error,
           archived,
         );
+        elements.documentActionStatus.dataset.tone = "error";
         elements.documentActionStatus.hidden = false;
       } finally {
         elements.documentArchiveButton.disabled =
@@ -440,12 +649,122 @@ async function initializeViewer(): Promise<void> {
     ) {
       return;
     }
-    elements.sourceDialogCode.textContent = currentDocumentSource;
+    const documentPath = currentDocument;
+    if (documentPath === null) {
+      return;
+    }
+    resetSourceEditor();
+    const sourceAtOpen = currentDocumentSource;
+    sourceDialogInitialSource = normalizeSourceEditorValue(sourceAtOpen);
+    elements.sourceDialogTextarea.value = sourceAtOpen;
+    elements.sourceDialogStatus.textContent = "Loading current source…";
     elements.sourceDialog.showModal();
+    elements.sourceDialogTextarea.focus();
+    const abortController = new AbortController();
+    sourceFetchAbortController = abortController;
+    void fetchDocumentSource(documentPath, abortController.signal)
+      .then((snapshot) => {
+        if (
+          abortController.signal.aborted ||
+          currentDocument !== documentPath ||
+          !elements.sourceDialog.open
+        ) {
+          return;
+        }
+        sourceDialogSnapshot = snapshot;
+        currentDocumentAbsolutePath = snapshot.absolutePath;
+        currentDocumentSource = snapshot.source;
+        const hasUnsavedInput = sourceEditorIsDirty();
+        if (!hasUnsavedInput) {
+          elements.sourceDialogTextarea.value = snapshot.source;
+          sourceDialogInitialSource = normalizeSourceEditorValue(
+            snapshot.source,
+          );
+        } else if (snapshot.source !== sourceAtOpen) {
+          sourceDialogRequiresReload = true;
+          elements.sourceDialogStatus.textContent =
+            "File changed on disk. Close and reopen the editor before saving.";
+          updateSourceSaveButton();
+          return;
+        }
+        sourceDialogInitialSource = normalizeSourceEditorValue(snapshot.source);
+        elements.sourceDialogStatus.replaceChildren();
+        updateSourceSaveButton();
+      })
+      .catch((error: unknown) => {
+        if (abortController.signal.aborted) {
+          return;
+        }
+        console.error("Spec HTML: Could not load source for editing", error);
+        elements.sourceDialogStatus.textContent =
+          "Could not load the current source.";
+        updateSourceSaveButton();
+      });
   });
-  elements.sourceDialogCloseButton.addEventListener("click", () =>
-    closeSourceDialog(elements),
-  );
+  elements.sourceDialogTextarea.addEventListener("input", () => {
+    if (sourceDialogSnapshot !== undefined && !sourceDialogRequiresReload) {
+      elements.sourceDialogStatus.replaceChildren();
+    }
+    updateSourceSaveButton();
+  });
+  elements.sourceDialogCloseButton.addEventListener("click", () => {
+    closeSourceEditor();
+  });
+  elements.sourceDialog.addEventListener("cancel", (event) => {
+    if (
+      sourceEditorIsDirty() &&
+      !window.confirm("Discard unsaved source changes?")
+    ) {
+      event.preventDefault();
+    }
+  });
+  elements.sourceDialog.addEventListener("close", resetSourceEditor);
+  elements.sourceDialogSaveButton.addEventListener("click", () => {
+    if (
+      sourceDialogSnapshot === undefined ||
+      sourceDialogSaving ||
+      sourceDialogRequiresReload ||
+      !sourceEditorIsDirty()
+    ) {
+      return;
+    }
+    const snapshot = sourceDialogSnapshot;
+    const source = restoreSourceLineEndings(
+      elements.sourceDialogTextarea.value,
+      snapshot.source,
+    );
+    sourceDialogSaving = true;
+    elements.sourceDialogSaveButton.setAttribute("aria-busy", "true");
+    elements.sourceDialogStatus.textContent = "Saving…";
+    updateSourceSaveButton();
+    const releaseReload = liveReload.deferReload();
+    void saveDocumentSource(snapshot.doc, source, snapshot.revision)
+      .then((result) => {
+        if (currentDocument !== snapshot.doc) {
+          return;
+        }
+        currentDocumentSource = source;
+        sourceDialogSnapshot = {
+          ...snapshot,
+          source,
+          revision: result.revision,
+        };
+        elements.sourceDialogStatus.textContent = "Saved. Refreshing preview…";
+        showDocumentActionStatus("Source saved. Refreshing preview…");
+        closeSourceDialog(elements);
+      })
+      .catch((error: unknown) => {
+        console.error("Spec HTML: Could not save source", error);
+        elements.sourceDialogStatus.textContent =
+          messageForSourceSaveError(error);
+      })
+      .finally(() => {
+        sourceDialogSaving = false;
+        elements.sourceDialogSaveButton.removeAttribute("aria-busy");
+        updateSourceSaveButton();
+        releaseReload();
+      });
+  });
 
   document.addEventListener("pointerdown", (event) => {
     const target = event.target;
@@ -462,9 +781,23 @@ async function initializeViewer(): Promise<void> {
       sidebarController.close(true);
     }
   });
+  window.addEventListener("beforeunload", (event) => {
+    if (!sourceEditorIsDirty()) {
+      return;
+    }
+    event.preventDefault();
+    event.returnValue = "";
+  });
   installSidebarLinkHandler(elements, navigate, () => navigationView);
 
   window.addEventListener("popstate", () => {
+    if (
+      sourceEditorIsDirty() &&
+      !window.confirm("Discard unsaved source changes?")
+    ) {
+      updateHistory(currentRoute, "replace");
+      return;
+    }
     void (async () => {
       const parsed = parseRoute(new URL(window.location.href));
       const requestedView =
@@ -534,4 +867,38 @@ async function initializeViewer(): Promise<void> {
   }
 
   await showInitialRoute(initialRoute, navigationItems, navigate, elements);
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  return (
+    hostname === "127.0.0.1" ||
+    hostname === "localhost" ||
+    hostname === "::1" ||
+    hostname === "[::1]"
+  );
+}
+
+function messageForSourceSaveError(error: unknown): string {
+  if (error instanceof DocumentSourceHttpError && error.status === 409) {
+    return "File changed on disk. Reload the document before saving again.";
+  }
+  if (error instanceof DocumentSourceHttpError && error.status === 423) {
+    return "Document is being changed by another operation. Try again shortly.";
+  }
+  if (error instanceof DocumentSourceHttpError && error.status === 413) {
+    return "Source is too large to save from the viewer.";
+  }
+  return "Could not save source.";
+}
+
+function normalizeSourceEditorValue(source: string): string {
+  return source.replace(/\r\n?/gu, "\n");
+}
+
+function restoreSourceLineEndings(source: string, original: string): string {
+  const containsCrLf = original.includes("\r\n");
+  const containsBareLf = original.replace(/\r\n/gu, "").includes("\n");
+  return containsCrLf && !containsBareLf
+    ? source.replace(/\n/gu, "\r\n")
+    : source;
 }

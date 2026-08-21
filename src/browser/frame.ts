@@ -1,6 +1,8 @@
 import { RUNTIME_PREFIX } from "./constants.js";
 import type { ThemePreference } from "./theme.js";
 
+const runtimeAssetVersion = new URL(import.meta.url).searchParams.get("v");
+
 export interface FrameIntegrations {
   chartJs: boolean;
   mermaid: boolean;
@@ -21,7 +23,11 @@ export function buildSrcdoc(
     appendScript(frameDocument, runtimeUrl(documentUrl, "chart-theme.js"));
   }
   if (integrations.mermaid) {
-    appendScript(frameDocument, runtimeUrl(documentUrl, "mermaid.js"), "module");
+    appendScript(
+      frameDocument,
+      runtimeUrl(documentUrl, "mermaid.js"),
+      "module",
+    );
   }
 
   frameDocument.body.innerHTML = fragment;
@@ -38,7 +44,12 @@ function createFrameDocument(
   frameDocument.head.querySelector("title")?.remove();
 
   appendMeta(frameDocument, "charset", "utf-8");
-  appendMeta(frameDocument, "name", "viewport", "width=device-width, initial-scale=1");
+  appendMeta(
+    frameDocument,
+    "name",
+    "viewport",
+    "width=device-width, initial-scale=1",
+  );
 
   const base = frameDocument.createElement("base");
   base.href = documentUrl.href;
@@ -52,7 +63,12 @@ function serializeFrameDocument(frameDocument: Document): string {
   return `<!doctype html>\n${frameDocument.documentElement.outerHTML}`;
 }
 
-function appendMeta(documentToEdit: Document, name: string, value: string, content?: string): void {
+function appendMeta(
+  documentToEdit: Document,
+  name: string,
+  value: string,
+  content?: string,
+): void {
   const meta = documentToEdit.createElement("meta");
   meta.setAttribute(name, value);
   if (content !== undefined) {
@@ -82,5 +98,9 @@ function appendScript(
 }
 
 function runtimeUrl(documentUrl: URL, path: string): string {
-  return new URL(`${RUNTIME_PREFIX}${path}`, documentUrl.origin).href;
+  const url = new URL(`${RUNTIME_PREFIX}${path}`, documentUrl.origin);
+  if (runtimeAssetVersion !== null) {
+    url.searchParams.set("v", runtimeAssetVersion);
+  }
+  return url.href;
 }

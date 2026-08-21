@@ -88,8 +88,13 @@ describe("local content server", () => {
     expect(shellBody).toContain('data-chart-js="true"');
     expect(shellBody).toContain('data-mermaid="true"');
     expect(shellBody).toContain('data-markdown-language="en"');
+    expect(shellBody).toMatch(/href="\/_spec-html\/shell\.css\?v=[0-9a-f-]+"/u);
+    expect(shellBody).toMatch(/src="\/_spec-html\/viewer\.js\?v=[0-9a-f-]+"/u);
     expect(viewer.headers.get("content-type")).toContain("text/javascript");
-    expect(viewer.headers.get("cache-control")).toBe("private, max-age=300");
+    expect(viewer.headers.get("cache-control")).toBe("no-store");
+    expect(shellCss.headers.get("cache-control")).toBe("no-store");
+    expect(documentCss.headers.get("cache-control")).toBe("no-store");
+    expect(chart.headers.get("cache-control")).toBe("private, max-age=300");
     expect(shellCss.status).toBe(200);
     expect(documentCss.status).toBe(200);
     expect(mermaidLoader.status).toBe(200);
@@ -198,6 +203,82 @@ describe("local content server", () => {
     );
   });
 
+  it("reads and saves document source with a revision check", async () => {
+    const origin = requireServer().origin;
+    const sourceUrl = `${origin}/_spec-html/document-source?doc=nested%2Fpage.html`;
+    const initial = await fetch(sourceUrl);
+
+    expect(initial.status).toBe(200);
+    const snapshot = (await initial.json()) as unknown as {
+      doc: string;
+      format: string;
+      source: string;
+      revision: string;
+      absolutePath: string | null;
+    };
+    expect(snapshot).toMatchObject({
+      doc: "nested/page.html",
+      format: "html",
+      source: "<article><h1>Nested</h1></article>",
+      absolutePath: join(contentRoot, "nested", "page.html"),
+    });
+    expect(snapshot.revision).toMatch(/^[a-f0-9]{64}$/u);
+
+    const saved = await fetch(sourceUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: "<article><h1>Updated</h1></article>",
+        expectedRevision: snapshot.revision,
+      }),
+    });
+    expect(saved.status).toBe(200);
+    const savedBody = (await saved.json()) as unknown;
+    expect(savedBody).toMatchObject({
+      doc: "nested/page.html",
+      format: "html",
+    });
+    const savedRevision = (savedBody as { revision?: unknown }).revision;
+    expect(savedRevision).toMatch(/^[a-f0-9]{64}$/u);
+    await expect(
+      readFile(join(contentRoot, "nested", "page.html"), "utf8"),
+    ).resolves.toBe("<article><h1>Updated</h1></article>");
+
+    const stale = await fetch(sourceUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: "<article><h1>Stale</h1></article>",
+        expectedRevision: snapshot.revision,
+      }),
+    });
+    expect(stale.status).toBe(409);
+    await expect(
+      readFile(join(contentRoot, "nested", "page.html"), "utf8"),
+    ).resolves.toBe("<article><h1>Updated</h1></article>");
+  });
+
+  it("keeps archived document source available through its stable path", async () => {
+    const origin = requireServer().origin;
+    const stateUrl = `${origin}/_spec-html/document-state?doc=design.md`;
+    await fetch(stateUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived: true }),
+    });
+
+    const response = await fetch(
+      `${origin}/_spec-html/document-source?doc=design.md`,
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      doc: "design.md",
+      format: "markdown",
+      source: "# Markdown Design\n",
+      absolutePath: join(contentRoot, ".archived", "design.md"),
+    });
+  });
+
   it("archives and restores documents through persisted document state", async () => {
     const origin = requireServer().origin;
     const stateUrl = `${origin}/_spec-html/document-state?doc=nested%2Fpage.html`;
@@ -292,9 +373,9 @@ describe("local content server", () => {
       "text/markdown; charset=utf-8",
     );
     await expect(source.text()).resolves.toBe("# Markdown Design\n");
-    expect(
-      (await fetch(`${origin}/_content/.archived/design.md`)).status,
-    ).toBe(404);
+    expect((await fetch(`${origin}/_content/.archived/design.md`)).status).toBe(
+      404,
+    );
   });
 
   it("rejects individual Restore for migration-managed Markdown", async () => {
@@ -361,6 +442,32 @@ describe("local content server", () => {
       "<h1>Conflicting page</h1>",
     );
     expect((await fetch(validState)).status).toBe(409);
+  });
+
+  it("validates document source requests", async () => {
+    const origin = requireServer().origin;
+    const sourceUrl = `${origin}/_spec-html/document-source?doc=nested%2Fpage.html`;
+
+    const unsupported = await fetch(sourceUrl, { method: "POST" });
+    expect(unsupported.status).toBe(405);
+    expect(unsupported.headers.get("allow")).toBe("GET, HEAD, PUT");
+    expect(
+      (await fetch(`${origin}/_spec-html/document-source?doc=..%2Fpage.html`))
+        .status,
+    ).toBe(400);
+    expect(
+      (await fetch(`${origin}/_spec-html/document-source?doc=missing.html`))
+        .status,
+    ).toBe(404);
+    expect(
+      (
+        await fetch(sourceUrl, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source: "<h1>Bad</h1>" }),
+        })
+      ).status,
+    ).toBe(400);
   });
 
   it("returns useful HTTP errors", async () => {

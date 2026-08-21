@@ -1,10 +1,14 @@
 import { expect, test } from "@playwright/test";
-import { access, rename, rm, rmdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import {
-  applyMigration,
-  rollbackMigration,
-} from "../../src/migrate/runner.js";
+  access,
+  readFile,
+  rename,
+  rm,
+  rmdir,
+  writeFile,
+} from "node:fs/promises";
+import { resolve } from "node:path";
+import { applyMigration, rollbackMigration } from "../../src/migrate/runner.js";
 
 test("reloads only when the content directory changes", async ({
   page,
@@ -56,6 +60,9 @@ test("@smoke shows the first navigation document and updates active navigation",
 
   const frame = page.frameLocator("iframe.viewer-document");
   await expect(frame.locator("h1")).toHaveText("Overview");
+  await expect(
+    frame.locator('link[href*="/_spec-html/document.css"]'),
+  ).toHaveAttribute("href", /\?v=[0-9a-f-]+$/u);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(frame.locator("html")).toHaveAttribute("lang", "en");
   await expect(
@@ -80,7 +87,9 @@ test("@smoke shows the first navigation document and updates active navigation",
   await expect(
     sortSwitcher.locator('[data-sort-value="date"]'),
   ).toHaveAttribute("aria-pressed", "false");
-  const longTitleLink = page.getByRole("link", { name: "Overview" });
+  const longTitleLink = page
+    .locator(".viewer-sidebar")
+    .getByRole("link", { name: "Overview" });
   const longTitle = longTitleLink.locator(".viewer-navigation-title");
   const updatedAt = longTitleLink.locator("time");
   await expect(longTitleLink).toHaveAttribute("title", "Overview");
@@ -110,7 +119,9 @@ test("@smoke shows the first navigation document and updates active navigation",
     .toBe(true);
 });
 
-test("loads the Markdown compiler only after opening Markdown", async ({ page }) => {
+test("loads the Markdown compiler only after opening Markdown", async ({
+  page,
+}) => {
   const parserChunks: string[] = [];
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
@@ -155,9 +166,24 @@ test("@smoke archives and restores the current document from the actions menu", 
       "Show archived documents",
     );
 
-    await actionsButton.click();
+    await actionsButton.focus();
+    await page.keyboard.press("ArrowDown");
     await expect(actionsButton).toHaveAttribute("aria-expanded", "true");
+    await expect(
+      page.getByRole("menuitem", { name: "Copy relative path" }),
+    ).toBeFocused();
+    await expect(page.getByRole("menuitem")).toHaveText([
+      "Copy relative path",
+      "Copy absolute path",
+      "Show outline",
+      "Archive",
+    ]);
+    await page.keyboard.press("End");
     await expect(page.getByRole("menuitem", { name: "Archive" })).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(
+      page.getByRole("menuitem", { name: "Copy relative path" }),
+    ).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(actionsButton).toHaveAttribute("aria-expanded", "false");
     await expect(actionsButton).toBeFocused();
@@ -256,7 +282,9 @@ test("disables individual Restore for migration-managed Markdown", async ({
       name: "Document actions",
     });
     await actionsButton.click();
-    await expect(page.getByRole("menuitem", { name: "Restore" })).toBeDisabled();
+    await expect(
+      page.getByRole("menuitem", { name: "Restore" }),
+    ).toBeDisabled();
     await expect(page.locator(".document-action-status")).toContainText(
       migrationId,
     );
@@ -267,15 +295,10 @@ test("disables individual Restore for migration-managed Markdown", async ({
     if (applied) {
       await rollbackMigration(contentRoot, migrationId);
     }
-    await rm(
-      resolve(
-        contentRoot,
-        ".spec-html",
-        "migrations",
-        migrationId,
-      ),
-      { recursive: true, force: true },
-    );
+    await rm(resolve(contentRoot, ".spec-html", "migrations", migrationId), {
+      recursive: true,
+      force: true,
+    });
   }
 });
 
@@ -360,7 +383,7 @@ test("opens source HTML in a modal without replacing the document preview", asyn
   await modeButton.click();
   const sourceDialog = page.getByRole("dialog", { name: "Source HTML" });
   await expect(sourceDialog).toBeVisible();
-  await expect(sourceDialog.locator("pre")).toContainText("<h1>Chart</h1>");
+  await expect(sourceDialog.locator("textarea")).toHaveValue(/<h1>Chart<\/h1>/);
   await expect(frame.locator("h1")).toHaveText("Chart");
   await expect
     .poll(() =>
@@ -406,7 +429,9 @@ test("opens source HTML in a modal without replacing the document preview", asyn
   });
 
   await modeButton.click();
-  await expect(sourceDialog.locator("pre")).toContainText("<h1>Diagram</h1>");
+  await expect(sourceDialog.locator("textarea")).toHaveValue(
+    /<h1>Diagram<\/h1>/,
+  );
   await expect(frame.locator(".mermaid svg")).toBeVisible();
   await expect
     .poll(() =>
@@ -503,9 +528,11 @@ test("@smoke previews Markdown safely, shows its source, and routes across forma
   });
   await sourceButton.click();
   const sourceDialog = page.getByRole("dialog", { name: "Source Markdown" });
-  await expect(sourceDialog.locator("pre")).toContainText("# Markdown design");
-  await expect(sourceDialog.locator("pre")).toContainText(
-    "[Unsafe link](javascript:",
+  await expect(sourceDialog.locator("textarea")).toHaveValue(
+    /# Markdown design/,
+  );
+  await expect(sourceDialog.locator("textarea")).toHaveValue(
+    /\[Unsafe link\]\(javascript:/,
   );
   await sourceDialog.getByRole("button", { name: "Close" }).click();
 
@@ -525,10 +552,10 @@ test("wraps long source HTML lines inside the modal", async ({ page }) => {
   await page.getByRole("button", { name: "View source HTML" }).click();
   const sourceCode = page
     .getByRole("dialog", { name: "Source HTML" })
-    .locator("pre");
-  await sourceCode.evaluate((element) => {
-    element.textContent = `  <p data-value="${"x".repeat(400)}">\n    content\n  </p>`;
-  });
+    .locator("textarea");
+  await sourceCode.fill(
+    `  <p data-value="${"x".repeat(400)}">\n    content\n  </p>`,
+  );
 
   await expect(sourceCode).toHaveCSS("white-space", "pre-wrap");
   await expect(sourceCode).toHaveCSS("overflow-wrap", "anywhere");
@@ -539,6 +566,274 @@ test("wraps long source HTML lines inside the modal", async ({ page }) => {
       ),
     )
     .toBe(true);
+});
+
+test("scrolls the iframe document back to the top", async ({ page }) => {
+  await page.goto("/");
+  const frame = page.frameLocator("iframe.viewer-document");
+  await frame
+    .locator("body")
+    .evaluate((body) => body.ownerDocument.defaultView?.scrollTo({ top: 900 }));
+
+  const scrollTop = page.getByRole("button", { name: "Scroll to top" });
+  await expect(scrollTop).toBeVisible();
+  await scrollTop.click();
+  await expect
+    .poll(() =>
+      frame
+        .locator("body")
+        .evaluate((body) => body.ownerDocument.defaultView?.scrollY ?? -1),
+    )
+    .toBe(0);
+});
+
+test("navigates an outline generated from iframe headings and remembers its side", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  const outline = page.locator(".document-outline");
+  const frame = page.frameLocator("iframe.viewer-document");
+  await expect(outline).toBeVisible();
+  await expect(page.locator(".viewer")).toHaveAttribute(
+    "data-outline-visible",
+    "true",
+  );
+  await expect
+    .poll(() =>
+      page.locator(".viewer-document").evaluate((frame) => {
+        const main = document.querySelector(".viewer-main");
+        const outlineElement = document.querySelector(".document-outline");
+        if (
+          !(frame instanceof HTMLIFrameElement) ||
+          main === null ||
+          outlineElement === null ||
+          frame.contentDocument === null
+        ) {
+          return false;
+        }
+        const frameRect = frame.getBoundingClientRect();
+        const bodyRect = frame.contentDocument.body.getBoundingClientRect();
+        return (
+          Math.abs(frameRect.right - main.getBoundingClientRect().right) < 1 &&
+          frameRect.left + bodyRect.right <=
+            outlineElement.getBoundingClientRect().left
+        );
+      }),
+    )
+    .toBe(true);
+  await expect(outline.getByRole("link", { name: "Overview" })).toBeVisible();
+  await outline.getByRole("link", { name: "Details" }).click();
+  await expect(page).toHaveURL(/#spec-html-outline-\d+$/);
+  await expect(frame.locator("h2", { hasText: "Details" })).toHaveAttribute(
+    "id",
+    "spec-html-outline-2",
+  );
+
+  await outline.getByRole("button", { name: "Show outline on left" }).click();
+  await expect(page.locator(".viewer")).toHaveAttribute(
+    "data-outline-position",
+    "left",
+  );
+  await expect
+    .poll(() =>
+      page.locator(".viewer-document").evaluate((frame) => {
+        const main = document.querySelector(".viewer-main");
+        const outlineElement = document.querySelector(".document-outline");
+        if (
+          !(frame instanceof HTMLIFrameElement) ||
+          main === null ||
+          outlineElement === null ||
+          frame.contentDocument === null
+        ) {
+          return false;
+        }
+        const frameRect = frame.getBoundingClientRect();
+        const bodyRect = frame.contentDocument.body.getBoundingClientRect();
+        return (
+          Math.abs(frameRect.left - main.getBoundingClientRect().left) < 1 &&
+          frameRect.left + bodyRect.left >=
+            outlineElement.getBoundingClientRect().right
+        );
+      }),
+    )
+    .toBe(true);
+  await page.reload();
+  await expect(page.locator(".viewer")).toHaveAttribute(
+    "data-outline-position",
+    "left",
+  );
+  await page
+    .locator(".document-outline")
+    .getByRole("button", { name: "Hide outline" })
+    .click();
+  await expect(outline).toBeHidden();
+  await expect(page.locator(".viewer")).toHaveAttribute(
+    "data-outline-visible",
+    "false",
+  );
+  await expect(frame.locator("html")).not.toHaveAttribute(
+    "data-viewer-outline-position",
+  );
+
+  await page.getByRole("button", { name: "Document actions" }).click();
+  await page.getByRole("menuitem", { name: "Show outline" }).click();
+  await expect(outline).toBeVisible();
+});
+
+test("keeps the mobile document below the visible outline", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 700 });
+  await page.goto("/");
+
+  await expect
+    .poll(() =>
+      page.locator(".viewer-document").evaluate((frame) => {
+        const outline = document.querySelector(".document-outline");
+        const main = document.querySelector(".viewer-main");
+        if (
+          !(frame instanceof HTMLIFrameElement) ||
+          outline === null ||
+          main === null
+        ) {
+          return false;
+        }
+        const frameRect = frame.getBoundingClientRect();
+        return (
+          outline.getBoundingClientRect().bottom <= frameRect.top &&
+          Math.abs(frameRect.right - main.getBoundingClientRect().right) < 1
+        );
+      }),
+    )
+    .toBe(true);
+  await expect
+    .poll(() =>
+      page
+        .frameLocator("iframe.viewer-document")
+        .locator("html")
+        .evaluate((root) => ({
+          paddingLeft: getComputedStyle(root).paddingLeft,
+          paddingRight: getComputedStyle(root).paddingRight,
+        })),
+    )
+    .toEqual({ paddingLeft: "0px", paddingRight: "0px" });
+});
+
+test("copies the current relative and absolute document paths", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/");
+
+  const actions = page.getByRole("button", { name: "Document actions" });
+  await actions.click();
+  await page.getByRole("menuitem", { name: "Copy relative path" }).click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe("overview.html");
+  await expect(page.locator(".document-action-status")).toHaveAttribute(
+    "data-tone",
+    "neutral",
+  );
+
+  await actions.click();
+  await page.getByRole("menuitem", { name: "Copy absolute path" }).click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toMatch(/tests\/fixtures\/browser\/overview\.html$/);
+});
+
+test("saves edited source to the current document", async ({ page }) => {
+  const path = activeOverviewPath();
+  const original = await readFile(path, "utf8");
+  const initialSource = original.replace(/\n/gu, "\r\n");
+  const editedSource = [
+    "<article>",
+    "  <h1>Edited overview</h1>",
+    "  <p>Saved</p>",
+    "</article>",
+    "",
+  ].join("\n");
+  try {
+    await writeFile(path, initialSource);
+    await page.goto("/");
+    await page.getByRole("button", { name: "View source HTML" }).click();
+    const sourceDialog = page.getByRole("dialog", { name: "Source HTML" });
+    const editor = sourceDialog.locator("textarea");
+    await expect(editor).toHaveValue(/<h1>Overview<\/h1>/);
+    const save = sourceDialog.getByRole("button", { name: "Save" });
+    await expect(save).toBeDisabled();
+    await editor.fill(editedSource);
+    await expect(save).toBeEnabled();
+    await save.click();
+    await expect
+      .poll(() => readFile(path, "utf8"))
+      .toBe(editedSource.replace(/\n/gu, "\r\n"));
+    await expect(
+      page.frameLocator("iframe.viewer-document").locator("h1"),
+    ).toHaveText("Edited overview");
+  } finally {
+    await writeFile(path, original);
+    await page.waitForTimeout(150);
+  }
+});
+
+test("protects immediate source edits when the file changed before loading", async ({
+  page,
+}) => {
+  let releaseSourceResponse: (() => void) | undefined;
+  const sourceResponseReleased = new Promise<void>((resolve) => {
+    releaseSourceResponse = resolve;
+  });
+  await page.route(
+    (url) =>
+      url.pathname === "/_spec-html/document-source" &&
+      url.searchParams.get("doc") === "overview.html",
+    async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.fallback();
+        return;
+      }
+      await sourceResponseReleased;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          doc: "overview.html",
+          format: "html",
+          source: "<article><h1>Changed externally</h1></article>",
+          revision: "a".repeat(64),
+          absolutePath: "/tmp/overview.html",
+        }),
+      });
+    },
+  );
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "View source HTML" }).click();
+  const sourceDialog = page.getByRole("dialog", { name: "Source HTML" });
+  const editor = sourceDialog.locator("textarea");
+  await editor.fill("<article><h1>Local edit</h1></article>");
+
+  const discardDialog = page.waitForEvent("dialog");
+  const closeEditor = sourceDialog
+    .getByRole("button", { name: "Close" })
+    .click();
+  const confirmDialog = await discardDialog;
+  expect(confirmDialog.type()).toBe("confirm");
+  await confirmDialog.dismiss();
+  await closeEditor;
+  await expect(sourceDialog).toBeVisible();
+
+  releaseSourceResponse?.();
+  await expect(sourceDialog.locator(".source-dialog-status")).toHaveText(
+    "File changed on disk. Close and reopen the editor before saving.",
+  );
+  await expect(
+    sourceDialog.getByRole("button", { name: "Save" }),
+  ).toBeDisabled();
+  await expect(editor).toHaveValue("<article><h1>Local edit</h1></article>");
 });
 
 test("sorts navigation by name or updated date", async ({ page }) => {

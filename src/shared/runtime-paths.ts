@@ -2,6 +2,7 @@ export const CONTENT_PREFIX = "/_content/";
 export const RUNTIME_PREFIX = "/_spec-html/";
 export const NAVIGATION_PATH = `${RUNTIME_PREFIX}navigation`;
 export const DOCUMENT_STATE_PATH = `${RUNTIME_PREFIX}document-state`;
+export const DOCUMENT_SOURCE_PATH = `${RUNTIME_PREFIX}document-source`;
 export const LIVE_RELOAD_PATH = `${RUNTIME_PREFIX}live-reload`;
 export const CHART_PATH = `${RUNTIME_PREFIX}integrations/chart.js`;
 export const MERMAID_PREFIX = `${RUNTIME_PREFIX}integrations/mermaid/`;
