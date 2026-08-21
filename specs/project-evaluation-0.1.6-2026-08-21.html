@@ -1,0 +1,639 @@
+<article lang="ja">
+  <header>
+    <h1>Spec HTML 多角プロジェクト評価（0.1.6 / 2026-08-21）</h1>
+    <p>
+      commit <code>85b4a73</code>のSpec HTML
+      0.1.6を、製品価値、scope、設計、実装、security、data安全性、test、UX、accessibility、性能、文書、互換性、release、持続性の14観点で評価した。
+    </p>
+  </header>
+
+  <aside data-type="success" aria-labelledby="evaluation-verdict">
+    <strong id="evaluation-verdict">総合評価: 85 / 100。trusted local用途では採用推奨</strong>
+    <p>
+      0.1系かつ作成から約3日のprojectとしては、書込安全性、回帰test、runtime互換性、利用者向け文書が非常に強い。Markdownのpreview、単体変換、一括migration、HTMLのlint／fix／format、Viewer内編集を、既存sourceを壊さない方向で一貫させている。
+    </p>
+    <p>
+      一方、公開OSSとしてのtraceabilityと持続性は実装品質に追いついていない。公開済み6
+      versionにremote git tagとGitHub Releaseがなく、0.1.6はlocal
+      HEADだけでCI未実行である。主要orchestratorの再肥大化、CLI messageの英日混在、固定test
+      port、accessibilityの自動監査不足も残る。
+    </p>
+  </aside>
+
+  <section id="decision">
+    <h2>用途別の採用判断</h2>
+    <table>
+      <caption>
+        利用場面ごとの推奨度
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">利用場面</th>
+          <th scope="col">判断</th>
+          <th scope="col">理由</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">個人・小規模teamのlocal仕様書Viewer</th>
+          <td>推奨</td>
+          <td>目的とsecurity boundaryが一致し、性能、編集安全性、文書検査が十分である。</td>
+        </tr>
+        <tr>
+          <th scope="row">Markdownからsemantic HTMLへの段階移行</th>
+          <td>推奨</td>
+          <td>preview、convert、check、rollback可能なmigrateという段階的な導線がある。</td>
+        </tr>
+        <tr>
+          <th scope="row">組織標準tool</th>
+          <td>pilot推奨</td>
+          <td>
+            品質は高いが、0.1.x、実質1 maintainer、release
+            tagなしのため、version固定と撤退手段が必要である。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">不特定のHTMLを扱うhosted service</th>
+          <td>非推奨</td>
+          <td>
+            trusted HTMLのscript実行を許すlocal toolであり、sanitizerやmulti-tenant
+            boundaryを提供しない。
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="scope-and-method">
+    <h2>評価範囲と方法</h2>
+    <p>
+      評価対象はlocal <code>main</code>のcommit
+      <code>85b4a73</code
+      >で、versionは<code>0.1.6</code>、比較対象の<code>origin/main</code>はcommit
+      <code>616ce0a</code>の0.1.5である。調査開始時点のworking
+      treeはcleanだった。調査途中に出現した本評価と無関係なlocal変更は対象外とし、編集していない。
+    </p>
+    <p>
+      source、test、英日README、authoring guide、security／release／contribution文書、package
+      metadata、CI設定、公開repository metadata、npm
+      registryを確認した。第三者への利用者調査、screen reader実機試験、penetration
+      test、長期負荷試験は実施していない。
+    </p>
+    <details>
+      <summary>評点の算出方法</summary>
+      <p>
+        各観点を10点満点で採点し、総合点へのweightを合計100にした。総合点は「評点×weight÷10」の合計を四捨五入した85点である。実装の信頼性を重く、project作成直後であること自体を過剰に罰しないようcommunityのweightは2に抑えた。14観点を同じ重さで平均すると8.2
+        / 10である。
+      </p>
+    </details>
+  </section>
+
+  <section id="evidence">
+    <h2>実測スナップショット</h2>
+    <table>
+      <caption>
+        2026年8月21日のlocal実測と公開状態
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">指標</th>
+          <th scope="col">結果</th>
+          <th scope="col">評価上の意味</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">実行環境</th>
+          <td>Node.js 24.11.1、npm 11.6.4、macOS</td>
+          <td>local検証条件を固定した。</td>
+        </tr>
+        <tr>
+          <th scope="row">source規模</th>
+          <td>TypeScript 87 files、16,054行</td>
+          <td>小規模toolを越え、中規模の複合CLIへ成長している。</td>
+        </tr>
+        <tr>
+          <th scope="row">test規模</th>
+          <td>TypeScript 31 files、7,927行</td>
+          <td>source行数の約49%に相当するtest codeがある。</td>
+        </tr>
+        <tr>
+          <th scope="row">Vitest</th>
+          <td>30 files、452 tests、全件成功</td>
+          <td>unitとserver integrationの回帰網が厚い。</td>
+        </tr>
+        <tr>
+          <th scope="row">coverage</th>
+          <td>statements 87.86%、branches 81.79%、functions 95.15%、lines 87.95%</td>
+          <td>全指標が80% gateを上回る。ただしbrowser codeは集計対象外である。</td>
+        </tr>
+        <tr>
+          <th scope="row">Playwright</th>
+          <td>39 tests成功。Chromium 31、Firefox smoke 4、WebKit smoke 4</td>
+          <td>主要UXと3 browser engineを実表示で検証している。</td>
+        </tr>
+        <tr>
+          <th scope="row">文書品質gate</th>
+          <td>specs 18 files、examples 4 filesでfix／format／lint成功</td>
+          <td>自製toolをrepository自身へ適用している。</td>
+        </tr>
+        <tr>
+          <th scope="row">dependency audit</th>
+          <td>382 dependencies、既知の脆弱性0件</td>
+          <td>調査時点のnpm advisoryに該当なし。</td>
+        </tr>
+        <tr>
+          <th scope="row">package検証</th>
+          <td>consumer test成功、tarball 487,119 byte、展開後1,011,926 byte、24 entries</td>
+          <td>pack後のCLI、migration、optional peer、文書同梱を別projectで検証している。</td>
+        </tr>
+        <tr>
+          <th scope="row">公開version</th>
+          <td>npm latest 0.1.5。0.1.0から0.1.5まで6 version</td>
+          <td>0.1.6は未公開のrelease準備状態である。</td>
+        </tr>
+        <tr>
+          <th scope="row">公開CI</th>
+          <td>origin/mainの6 jobsが全件成功</td>
+          <td>Node 20.19／22.16／24、Bun 1.3、Ubuntu／macOS／Windowsを確認済み。</td>
+        </tr>
+        <tr>
+          <th scope="row">release traceability</th>
+          <td>remote tag 0、GitHub Release 0</td>
+          <td>npm artifactからreview済みsource commitへ辿る公開導線がない。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <aside data-type="warning" aria-labelledby="quality-gate-note">
+      <strong id="quality-gate-note">全体checkの環境依存</strong>
+      <p>
+        <code>npm run check</code
+        >はtypecheck、ESLint、coverage、build、文書検査、benchmarkまで成功した後、別projectのSpec
+        HTML serverが既定port
+        4173を使用中だったためPlaywright開始前に停止した。既存processを変更せず<code>SPEC_HTML_TEST_PORT=42731</code>で再実行するとbrowser
+        test 39件は全て成功し、その後のpack testも成功した。code
+        failureではないが、日常的にViewerを起動したまま全checkを走らせにくいtest
+        infrastructure上の弱点である。
+      </p>
+    </aside>
+  </section>
+
+  <section id="architecture-map">
+    <h2>機能と安全策の構造</h2>
+    <figure>
+      <pre class="mermaid">
+flowchart LR
+  MD[既存Markdown] --> Preview[安全なpreview]
+  MD --> Convert[create-only convert]
+  MD --> Migrate[batch migrate]
+  Convert --> HTML[Spec HTML fragment]
+  Migrate --> HTML
+  Migrate --> Journal[lock・journal・rollback]
+  HTML --> Check[fix・format・lint]
+  HTML --> Viewer[local Viewer]
+  Preview --> Viewer
+  Viewer --> Edit[source editor]
+  Edit --> Guard[revision・size・origin・atomic replace]
+  Guard --> HTML
+      </pre>
+      <figcaption>
+        Markdownを直ちに置換せず、preview、単体変換、一括移行を分離する。書込経路には別々の競合検知と復旧策がある。
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="scores">
+    <h2>14観点の評点</h2>
+    <figure>
+      <canvas
+        id="project-evaluation-scores"
+        width="900"
+        height="520"
+        aria-labelledby="project-evaluation-scores-caption"
+        >製品価値8.8、scope 7.8、architecture 7.5、code品質8.8、security 9.2、data安全性9.5、test
+        9.2、UX 8.3、accessibility 7.8、性能8.8、文書9.3、互換性9.4、release
+        5.6、持続性4.8。</canvas
+      >
+      <figcaption id="project-evaluation-scores-caption">
+        14観点の評点。正確な値、weight、根拠は次の表に記載する。
+      </figcaption>
+    </figure>
+    <table>
+      <caption>
+        観点別の評点、weight、主な根拠
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">観点</th>
+          <th scope="col">評点</th>
+          <th scope="col">weight</th>
+          <th scope="col">主な加点</th>
+          <th scope="col">主な減点</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">製品価値と差別化</th>
+          <td>8.8 / 10</td>
+          <td>8</td>
+          <td>
+            AI生成仕様をsemantic HTMLとして残す問題設定が明確。Markdownからの段階移行も現実的。
+          </td>
+          <td>外部利用実績がなく、nicheの需要規模は未検証。</td>
+        </tr>
+        <tr>
+          <th scope="row">scopeの一貫性</th>
+          <td>7.8 / 10</td>
+          <td>5</td>
+          <td>trusted local viewerという非目標をREADMEとsecurity policyで明示。</td>
+          <td>
+            短期間にViewer、editor、archive、converter、migration、lint、fix、formatまで広がり、0.1系としてsurfaceが大きい。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">architecture</th>
+          <td>7.5 / 10</td>
+          <td>9</td>
+          <td>
+            browser／server／content／lint／format／fix／migrateの責務をdirectoryで分離し、shared
+            moduleも限定的。
+          </td>
+          <td>
+            <code>browser/start.ts</code>は911行・27 imports、500行以上のsourceが10
+            files。型だけの相互参照を除き大きな循環はないが、orchestratorへの集中が進む。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">code品質と型安全性</th>
+          <td>8.8 / 10</td>
+          <td>9</td>
+          <td>
+            <code>strict</code
+            >、<code>noUncheckedIndexedAccess</code>、<code>exactOptionalPropertyTypes</code>を使用。production
+            sourceの<code>any</code>、抑止comment、TODO／FIXMEは0件。
+          </td>
+          <td>
+            user-facing errorにgeneric
+            <code>Error</code>と日本語literalが多く、message
+            contractが分散している。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">security boundary</th>
+          <td>9.2 / 10</td>
+          <td>9</td>
+          <td>
+            loopback既定、Host／Origin検証、path traversal・dotfile・symlink escape防止、unsafe
+            Markdown URL除去、strict Mermaid。
+          </td>
+          <td>
+            trusted HTMLのscript実行は意図どおりだが、利用者がhosted
+            sanitizerと誤解すると危険。第三者security reviewは未実施。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">data安全性と復旧性</th>
+          <td>9.5 / 10</td>
+          <td>8</td>
+          <td>
+            snapshot digest、atomic create／replace、mutation lock、migration
+            journal、rollback／finalize、no-overwriteを組み合わせる。
+          </td>
+          <td>複雑なmigration state machine自体が高い保守costであり、将来変更時の慎重さが必要。</td>
+        </tr>
+        <tr>
+          <th scope="row">testと品質保証</th>
+          <td>9.2 / 10</td>
+          <td>11</td>
+          <td>
+            452 Vitest、39 Playwright、coverage gate、consumer tarball test、document
+            self-check、benchmarkを持つ。
+          </td>
+          <td>
+            browser sourceはcoverage集計外。mutation lockはlines 38.98%、document
+            sourceは74%。固定test portも競合した。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">UX</th>
+          <td>8.3 / 10</td>
+          <td>8</td>
+          <td>
+            navigation、theme、outline、print、history、copy、Archive、source editor、live
+            reloadが一体化している。
+          </td>
+          <td>
+            文書横断検索がなく、大量文書では到達性がnavigationに依存。機能増加に対する第三者usability
+            testもない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">accessibility</th>
+          <td>7.8 / 10</td>
+          <td>6</td>
+          <td>
+            semantic lint、table
+            caption、alt、ARIA参照、heading順、keyboard、mobile、printを実装・testしている。
+          </td>
+          <td>
+            axe等の自動監査、screen reader、high contrast、reduced
+            motionの明示的な受け入れtestがない。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">性能と拡張性</th>
+          <td>8.8 / 10</td>
+          <td>7</td>
+          <td>
+            5,000文書でstartup 180.8ms、navigation cold 397.0ms、warm 41.2ms、reload 57.2ms。title
+            cacheとlazy Markdown compilerが効く。
+          </td>
+          <td>
+            CI budgetは50／500文書だけで、5,000文書の回帰を強制しない。benchmark
+            fixtureも短い単純Markdownに限る。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">文書とonboarding</th>
+          <td>9.3 / 10</td>
+          <td>8</td>
+          <td>
+            英日README、authoring
+            guide、security、contribution、release、changelog、showcase、設計specが揃う。
+          </td>
+          <td>
+            英語既定方針に対し、format missing pathやwildcard Host設定など一部CLI
+            errorは日本語で出る。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">互換性とportability</th>
+          <td>9.4 / 10</td>
+          <td>5</td>
+          <td>
+            Node 20.19／22.16／24、Bun
+            1.3、Ubuntu／macOS／Windows、Chromium／Firefox／WebKitをCIで検証。
+          </td>
+          <td>FirefoxとWebKitはsmoke subsetで、全browser feature parityまでは保証しない。</td>
+        </tr>
+        <tr>
+          <th scope="row">releaseとsupply chain</th>
+          <td>5.6 / 10</td>
+          <td>5</td>
+          <td>
+            SemVer、CHANGELOG、<code>release:check</code>、files allowlist、exact
+            dependency、manual 2FA publish、consumer testがある。
+          </td>
+          <td>
+            公開tag／GitHub Releaseが0件で手順と実態が不一致。provenanceなし。GitHub Actionsはcommit
+            SHAではなくmajor tag参照。0.1.6は公開CI未実行。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">communityと持続性</th>
+          <td>4.8 / 10</td>
+          <td>2</td>
+          <td>
+            MIT、CONTRIBUTING、SECURITY、issue template、Dependabot、明確なrepository
+            metadataがある。
+          </td>
+          <td>
+            作成約3日、star 0、fork 0、open issue 0、実質1 maintainerで、bus
+            factorと外部検証が不足。
+          </td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <th scope="row">加重合計</th>
+          <td>85 / 100</td>
+          <td>100</td>
+          <td colspan="2">計算値84.99を四捨五入。14観点の単純平均は8.2 / 10。</td>
+        </tr>
+      </tfoot>
+    </table>
+  </section>
+
+  <section id="strengths">
+    <h2>特に強い点</h2>
+    <ol>
+      <li>
+        <strong>破壊的操作の設計が慎重である。</strong>
+        変換はcreate-only、一括移行はpreflight、lock、journal、digest、rollbackを備え、Viewer編集もrevision付きatomic
+        replaceを使う。機能ごとの安全策がREADMEの約束と一致している。
+      </li>
+      <li>
+        <strong>test pyramidが実用的である。</strong>
+        pure unitだけでなくHTTP、3
+        browser、pack後consumer、複数runtime／OS、性能、repository自身の文書まで検査対象にする。0.1系でこの幅は稀である。
+      </li>
+      <li>
+        <strong>Markdownを敵にしない。</strong>
+        Markdownをそのまま読め、必要な文書だけ変換でき、root全体の移行もrollbackできる。採用時に既存資産を一括置換させない。
+      </li>
+      <li>
+        <strong>security modelが正直である。</strong>
+        「localだから安全」と曖昧にせず、trusted
+        HTMLはscriptを実行すること、non-loopback利用の制約、sanitizerではないことを明示している。
+      </li>
+      <li>
+        <strong>自分のtoolを自分で使っている。</strong>
+        <code>specs/</code
+        >を実際の設計・評価・showcaseへ使い、CIでfix／format／lintを強制するため、dogfoodingが継続的な回帰検出になっている。
+      </li>
+    </ol>
+  </section>
+
+  <section id="risks">
+    <h2>主要な懸念</h2>
+    <table>
+      <caption>
+        影響と発生可能性で並べたrisk
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">risk</th>
+          <th scope="col">影響</th>
+          <th scope="col">可能性</th>
+          <th scope="col">根拠</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">npm artifactとsource commitの対応を公に証明できない</th>
+          <td>高</td>
+          <td>確定</td>
+          <td>0.1.0から0.1.5まで公開済みだがremote tagとGitHub Releaseが0件。</td>
+        </tr>
+        <tr>
+          <th scope="row">主要fileへの変更集中で回帰範囲が広がる</th>
+          <td>中〜高</td>
+          <td>高</td>
+          <td>
+            <code>browser/start.ts</code
+            >、<code>migrate/planner.ts</code>、<code>fix/document.ts</code>など10
+            filesが500行以上。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">英語利用者が一部errorを理解できない</th>
+          <td>中</td>
+          <td>高</td>
+          <td>
+            実行すると<code>対象pathが見つかりません</code>、<code>wildcard hostには...</code>などが出力される。
+          </td>
+        </tr>
+        <tr>
+          <th scope="row">active Viewerとlocal full checkが競合する</th>
+          <td>中</td>
+          <td>中〜高</td>
+          <td>製品既定portとPlaywright既定portが同じ4173で、今回実際に停止した。</td>
+        </tr>
+        <tr>
+          <th scope="row">複雑なUIのaccessibility回帰を見逃す</th>
+          <td>中</td>
+          <td>中</td>
+          <td>modal、menu、outline、editorがあるが、formalな自動監査と実機支援技術testがない。</td>
+        </tr>
+        <tr>
+          <th scope="row">単独maintainerに知識とrelease権限が集中する</th>
+          <td>高</td>
+          <td>中</td>
+          <td>外部contributor／adoptionの証拠がまだなく、project自体も非常に新しい。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="priorities">
+    <h2>改善優先順位</h2>
+    <aside data-type="note" aria-labelledby="priority-policy">
+      <strong id="priority-policy">P0の機能blockerは確認していない</strong>
+      <p>
+        trusted
+        local用途を直ちに止める欠陥は見つからなかった。以下は公開前に整えるP1と、次のiterationで扱うP2である。
+      </p>
+    </aside>
+    <ol>
+      <li>
+        <strong>P1: release traceabilityを実態に合わせる。</strong>
+        少なくとも今後のversionはreview済みcommitへ署名付きannotated tagを付け、GitHub
+        Releaseを作る。可能なら既存0.1.0〜0.1.5もnpm publish時刻とcommitを照合して補完する。release
+        gateへtag／Release存在の事後確認を追加し、npm provenanceも検討する。
+      </li>
+      <li>
+        <strong>P1: 0.1.6をremote CIで通してから公開する。</strong>
+        localの全stageは成功したが、commit
+        <code>85b4a73</code>はorigin/mainより1 commit先である。6
+        jobsの成功とnpm未公開を再確認してからpublishする。
+      </li>
+      <li>
+        <strong>P1: user-facing messageを英語既定へ統一する。</strong>
+        format、fix、convert、migrate、Host設定、safe writeのerrorをtyped errorまたはmessage
+        catalogへ寄せる。成功条件はCLI
+        testで日本語literalの混入を検知し、READMEの言語方針と実出力が一致すること。
+      </li>
+      <li>
+        <strong>P1: orchestration hotspotを責務境界で縮める。</strong>
+        行数だけを目的に分割せず、<code>browser/start.ts</code>のsource
+        editor／outline／routing
+        lifecycle、<code>cli/options.ts</code>のcommand別parser、<code>server/routes.ts</code>のstate
+        mutation
+        route、<code>migrate/planner.ts</code>のpreflight群を独立APIへ寄せる。fan-outと変更影響範囲を測る。
+      </li>
+      <li>
+        <strong>P2: Playwright serverのport衝突をなくす。</strong>
+        test専用の空きport選択を自動化し、別のSpec HTML
+        Viewerが4173で動いていても<code>npm run check</code>が成功するintegration
+        testを追加する。
+      </li>
+      <li>
+        <strong>P2: accessibilityの外部基準を導入する。</strong>
+        axe等の自動検査を主要画面状態へ追加し、keyboard-only、screen reader、high contrast、reduced
+        motionの手動checklistをrelease文書へ入れる。
+      </li>
+      <li>
+        <strong>P2: 大規模性能を継続監視する。</strong>
+        5,000文書を毎回CIへ入れる必要はないが、scheduledまたはrelease
+        gateで予算を持つ。検索は現時点で必須ではなく、実利用でnavigation到達性が問題化した時点で導入する。
+      </li>
+      <li>
+        <strong>P2: supply-chain hardeningを追加する。</strong>
+        GitHub Actionsをcommit
+        SHAへpinし、Dependabotで更新する。公開tarballのprovenance、checksum、SBOMの費用対効果もrelease運用と合わせて決める。
+      </li>
+    </ol>
+  </section>
+
+  <section id="comparison">
+    <h2>過去評価からの変化</h2>
+    <p>
+      <a href="./project-evaluation-0.1.2-2026-08-19.html">0.1.2の11観点評価</a>で弱点だったMarkdown
+      lint、非loopback mutation保護、CLI help、security policy、repository metadata、navigation
+      cache、runtime層分離、browser controller test、benchmarkは改善済みである。詳細は<a
+        href="./project-evaluation-remediation-0.1.3-2026-08-19.html"
+        >0.1.3準備の対処記録</a
+      >に残っている。
+    </p>
+    <p>
+      新たな課題は、0.1.5／0.1.6で追加したdocument action、outline、source editorによるbrowser
+      orchestrationの再肥大化と、公開version数が増えてもtag／Releaseが作られていない点である。つまり、品質は全体として上がったが、実装surfaceとrelease負債も同時に増えた。
+    </p>
+  </section>
+
+  <section id="limitations">
+    <h2>未確認事項</h2>
+    <ul>
+      <li>実利用者が長文書、多階層navigation、source editorをどの程度迷わず使えるか。</li>
+      <li>screen readerとOS別accessibility APIでの実際の読み上げ順・操作性。</li>
+      <li>悪意あるlocal user、filesystem race、巨大入力に対する独立したsecurity assessment。</li>
+      <li>10,000文書超、巨大画像、多数Mermaid／Chart.jsを含む実データでのmemoryとrender性能。</li>
+      <li>単独maintainer不在時のissue triage、security response、npm ownership継続性。</li>
+    </ul>
+  </section>
+
+  <script>
+    new Chart(document.getElementById("project-evaluation-scores"), {
+      type: "bar",
+      data: {
+        labels: [
+          "製品価値",
+          "scope",
+          "architecture",
+          "code品質",
+          "security",
+          "data安全性",
+          "test",
+          "UX",
+          "accessibility",
+          "性能",
+          "文書",
+          "互換性",
+          "release",
+          "持続性",
+        ],
+        datasets: [
+          {
+            label: "評点（10点満点）",
+            data: [8.8, 7.8, 7.5, 8.8, 9.2, 9.5, 9.2, 8.3, 7.8, 8.8, 9.3, 9.4, 5.6, 4.8],
+          },
+        ],
+      },
+      options: {
+        indexAxis: "y",
+        scales: {
+          x: {
+            beginAtZero: true,
+            max: 10,
+          },
+        },
+        plugins: {
+          legend: {
+            display: false,
+          },
+        },
+      },
+    });
+  </script>
+</article>

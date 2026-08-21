@@ -4,3 +4,8 @@ test-results/
 playwright-report/
 coverage/
 *.tgz
+
+# GitHub Pages LP build caches and local audit output
+.jekyll-cache/
+.preview/
+reports/

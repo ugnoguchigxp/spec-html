@@ -1,0 +1,251 @@
+---
+layout: default
+title: 仕様を、読める画面へ。
+description: 構造的なHTMLとMarkdownの設計書・仕様書を、ローカルで読みやすく閲覧・編集できるオープンソースViewer。
+permalink: /
+image: /assets/img/og-image.jpg
+body_class: lp-body
+preload_hero: true
+twitter_image_alt: Spec HTMLでMermaidを含む設計書を表示している画面
+og_image_alt: Spec HTMLでMermaidを含む設計書を表示している画面
+---
+
+<header class="site-header">
+  <a class="skip-link" href="#main">本文へ移動</a>
+  <div class="shell header-inner">
+    <a class="brand" href="{{ '/' | relative_url }}" aria-label="Spec HTML トップ">
+      <span class="brand-mark" aria-hidden="true">S/</span>
+      <span>Spec HTML</span>
+    </a>
+    <nav class="site-nav" aria-label="メインナビゲーション">
+      <a href="#features">特徴</a>
+      <a href="#quick-start">使い方</a>
+      <a href="#security">安全性</a>
+    </nav>
+    <a class="header-link" href="https://github.com/ugnoguchigxp/spec-html">GitHub <span aria-hidden="true">↗</span></a>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="shell hero-grid">
+      <div class="hero-copy">
+        <p class="eyebrow"><span></span> Local viewer for specs &amp; docs</p>
+        <h1 id="hero-title">仕様を、<br><em>読める画面</em>へ。</h1>
+        <p class="hero-lead">
+          構造的なHTMLも、手元のMarkdownも、そのままひとつのViewerで。
+          Spec HTMLは、設計書を探す・読む・直す時間を心地よく整えます。
+        </p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="https://github.com/ugnoguchigxp/spec-html">GitHubで見る <span aria-hidden="true">↗</span></a>
+          <a class="button button-secondary" href="https://github.com/ugnoguchigxp/spec-html/blob/main/README.ja.md#quick-start">3分で始める <span aria-hidden="true">→</span></a>
+        </div>
+        <ul class="hero-facts">
+          <li><span aria-hidden="true">✓</span> Local-first</li>
+          <li><span aria-hidden="true">✓</span> Markdown対応</li>
+          <li><span aria-hidden="true">✓</span> OSS / MIT</li>
+        </ul>
+      </div>
+
+      <div class="hero-product">
+        <div class="product-note note-html" aria-hidden="true"><b>&lt;article&gt;</b><span>semantic HTML</span></div>
+        <div class="product-note note-live" aria-hidden="true"><i></i><span>live reload</span></div>
+        <figure class="app-frame">
+          <div class="window-bar" aria-hidden="true">
+            <span></span><span></span><span></span>
+            <small>localhost:4173</small>
+          </div>
+          <img
+            src="{{ '/assets/img/viewer-light.webp' | relative_url }}"
+            alt="Spec HTMLのライトテーマでMermaid図を含む仕様書を閲覧している画面"
+            width="2882"
+            height="1460"
+            loading="eager"
+            decoding="async"
+            fetchpriority="high"
+          >
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="outcomes" aria-label="Spec HTMLでできること">
+    <div class="shell outcome-grid">
+      <article>
+        <span class="outcome-number">01</span>
+        <h2>置くだけで、見つかる</h2>
+        <p>HTMLとMarkdownを再帰的に読み取り、見出しからナビゲーションを自動生成します。</p>
+      </article>
+      <article>
+        <span class="outcome-number">02</span>
+        <h2>表現力を、削らない</h2>
+        <p>表、注記、詳細、画像、Mermaid、Chart.js。仕様に必要な意味を構造のまま伝えられます。</p>
+      </article>
+      <article>
+        <span class="outcome-number">03</span>
+        <h2>読む場所で、直せる</h2>
+        <p>元ソースをViewerから開いて保存。変更はlive reloadですぐ表示に反映されます。</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="section features" id="features" aria-labelledby="features-title">
+    <div class="shell">
+      <div class="section-heading">
+        <div>
+          <p class="kicker">Designed for real specifications</p>
+          <h2 id="features-title">文書のための、小さく強い道具。</h2>
+        </div>
+        <p>Webアプリ一式ではなく、仕様書を読みやすくすることに集中。文書ごとのCSSやメニュー管理は不要です。</p>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature-card feature-wide feature-navigation">
+          <div>
+            <span class="feature-index">A</span>
+            <h3>迷わないナビゲーション</h3>
+            <p>フォルダ構造と最初の見出しからメニューを自動構成。名前順・更新日順の切り替えにも対応します。</p>
+          </div>
+          <div class="nav-demo" aria-hidden="true">
+            <div class="nav-demo-controls"><span>Name ↑</span><span>Date</span></div>
+            <div><i></i><b>Architecture</b><small>2 min</small></div>
+            <div class="active"><i></i><b>API design</b><small>now</small></div>
+            <div><i></i><b>Release plan</b><small>1 day</small></div>
+          </div>
+        </article>
+
+        <article class="feature-card feature-theme">
+          <span class="feature-index">B</span>
+          <h3>Light / Dark</h3>
+          <p>OS設定に追従し、文書・図表まで同時に切り替わります。</p>
+          <div class="theme-orbit" aria-hidden="true"><span>Light</span><i></i><span>Dark</span></div>
+        </article>
+
+        <article class="feature-card feature-format">
+          <span class="feature-index">C</span>
+          <h3>HTML + Markdown</h3>
+          <p>既存Markdownはそのまま。必要な文書だけ編集可能なHTML fragmentへ変換できます。</p>
+          <div class="format-demo" aria-hidden="true"><span>.md</span><i>→</i><span>&lt;article&gt;</span></div>
+        </article>
+
+        <article class="feature-card feature-code">
+          <span class="feature-index">D</span>
+          <h3>Lint / Fix / Format</h3>
+          <p>構造、参照、accessibilityを検査し、明白なHTMLのtypoと書式をCLIで整えます。</p>
+          <pre><code><span>$</span> npx spec-html check ./specs
+<b>✓ 12 documents checked</b></code></pre>
+        </article>
+
+        <article class="feature-card feature-diagram">
+          <span class="feature-index">E</span>
+          <h3>図表を、ソースのまま</h3>
+          <p>MermaidとChart.jsはoptional。生成SVGを管理せず、文書の中の記述をViewerが描画します。</p>
+          <div class="diagram-demo" aria-hidden="true">
+            <span>Source</span><i></i><span>Viewer</span><i></i><span>Diagram</span>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section quick-start" id="quick-start" aria-labelledby="quick-title">
+    <div class="shell quick-grid">
+      <div class="quick-copy">
+        <p class="kicker">Quick start</p>
+        <h2 id="quick-title">いつものプロジェクトで、すぐ使える。</h2>
+        <p>設計書を置くディレクトリに追加して、Viewerを起動するだけ。文書の変更は自動で反映されます。</p>
+        <ol>
+          <li><span>1</span><div><b>Install</b><small>開発依存として追加</small></div></li>
+          <li><span>2</span><div><b>Write</b><small>HTML fragment または Markdown を配置</small></div></li>
+          <li><span>3</span><div><b>View</b><small>ローカルViewerを起動</small></div></li>
+        </ol>
+      </div>
+
+      <div class="terminal" role="region" aria-label="Spec HTMLのクイックスタートコマンド">
+        <div class="terminal-bar">
+          <div aria-hidden="true"><span></span><span></span><span></span></div>
+          <small>Terminal</small>
+        </div>
+        <pre><code><span class="comment"># 1. install</span>
+<span class="prompt">$</span> npm install --save-dev spec-html
+
+<span class="comment"># 2. add your documents</span>
+<span class="prompt">$</span> mkdir -p specs
+
+<span class="comment"># 3. open the viewer</span>
+<span class="prompt">$</span> npx spec-html ./specs
+
+<span class="success">✓ Viewer ready at http://127.0.0.1:4173</span></code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="section showcase" aria-labelledby="showcase-title">
+    <div class="shell showcase-grid">
+      <div class="showcase-image-wrap">
+        <figure>
+          <img
+            src="{{ '/assets/img/viewer-dark.webp' | relative_url }}"
+            alt="Spec HTMLのダークテーマで実装計画を閲覧している画面"
+            width="2874"
+            height="1454"
+            loading="lazy"
+            decoding="async"
+          >
+        </figure>
+        <span class="showcase-label">Tokyo Night Storm inspired</span>
+      </div>
+      <div class="showcase-copy">
+        <p class="kicker">Made for deep reading</p>
+        <h2 id="showcase-title">長い文書にも、<br>ちゃんと居場所を。</h2>
+        <p>フローティング目次、履歴、文書間リンク、印刷表示、モバイルナビゲーション。大きな仕様書でも読み進めやすい基本を揃えました。</p>
+        <ul>
+          <li>見出しから目次を自動生成</li>
+          <li>相対リンクとローカル画像を解決</li>
+          <li>Light / Darkの設定を保存</li>
+          <li>印刷時は文書だけを読みやすく整形</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section security" id="security" aria-labelledby="security-title">
+    <div class="shell security-panel">
+      <div class="security-icon" aria-hidden="true">⌂</div>
+      <div>
+        <p class="kicker">Local by design</p>
+        <h2 id="security-title">信頼できる手元の文書に、閉じた道具。</h2>
+        <p>Spec HTMLは公開Webサービスではありません。指定ディレクトリ外へのpath traversalとsymbolic link escapeを拒否し、dot fileを非公開にします。HTMLのinline scriptは実行されるため、信頼できないHTMLは開かないでください。</p>
+      </div>
+      <div class="security-tags">
+        <span>Host validation</span>
+        <span>Path boundary</span>
+        <span>Dot files hidden</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="final-cta" aria-labelledby="cta-title">
+    <div class="shell cta-panel">
+      <p class="kicker">Open source · MIT</p>
+      <h2 id="cta-title">次の仕様書から、<br>読み方を変えよう。</h2>
+      <p>HTMLの表現力とMarkdownの手軽さを、ひとつのローカルViewerで。</p>
+      <div class="hero-actions">
+        <a class="button button-inverse" href="https://github.com/ugnoguchigxp/spec-html">GitHubで始める <span aria-hidden="true">↗</span></a>
+        <a class="text-link" href="https://www.npmjs.com/package/spec-html">npm packageを見る <span aria-hidden="true">→</span></a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="shell">
+    <a class="brand footer-brand" href="{{ '/' | relative_url }}"><span class="brand-mark" aria-hidden="true">S/</span><span>Spec HTML</span></a>
+    <p>Structured specs. Comfortable reading.</p>
+    <div>
+      <a href="https://github.com/ugnoguchigxp/spec-html">GitHub</a>
+      <a href="https://www.npmjs.com/package/spec-html">npm</a>
+      <a href="https://github.com/ugnoguchigxp/spec-html/blob/main/LICENSE">MIT License</a>
+    </div>
+  </div>
+</footer>

@@ -1,0 +1,27 @@
+title: Spec HTML
+description: 構造的なHTMLとMarkdownの設計書・仕様書を、ローカルで読みやすく閲覧・編集するためのViewer。
+lang: ja
+url: "https://ugnoguchigxp.github.io"
+baseurl: "/spec-html"
+
+source: site
+destination: docs
+
+markdown: kramdown
+permalink: pretty
+
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+
+include:
+  - .nojekyll
+
+exclude:
+  - README.md

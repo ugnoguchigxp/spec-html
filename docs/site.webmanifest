@@ -1,0 +1,18 @@
+{
+  "name": "Spec HTML",
+  "short_name": "Spec HTML",
+  "description": "構造的なHTMLとMarkdownの設計書・仕様書を、ローカルで読みやすく閲覧・編集するためのViewer。",
+  "lang": "ja",
+  "start_url": "/spec-html/",
+  "scope": "/spec-html/",
+  "display": "standalone",
+  "background_color": "#f5f4ef",
+  "theme_color": "#161922",
+  "icons": [
+    {
+      "src": "/spec-html/assets/img/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://ugnoguchigxp.github.io/spec-html/sitemap.xml
