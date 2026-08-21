@@ -32,6 +32,11 @@ export interface ViewerElements {
   documentOutlineCloseButton: HTMLButtonElement;
   sourceDialog: HTMLDialogElement;
   sourceDialogTitle: HTMLHeadingElement;
+  sourceDialogEditor: HTMLDivElement;
+  sourceDialogGutter: HTMLDivElement;
+  sourceDialogLineNumbers: HTMLPreElement;
+  sourceDialogLanguage: HTMLSpanElement;
+  sourceDialogPosition: HTMLOutputElement;
   sourceDialogTextarea: HTMLTextAreaElement;
   sourceDialogCloseButton: HTMLButtonElement;
   sourceDialogSaveButton: HTMLButtonElement;

@@ -546,26 +546,38 @@ test("@smoke previews Markdown safely, shows its source, and routes across forma
   await expect(frame.locator("h1")).toHaveText("Markdown design");
 });
 
-test("wraps long source HTML lines inside the modal", async ({ page }) => {
+test("shows a roomy source editor with line numbers and code controls", async ({
+  page,
+}) => {
   await page.goto("/");
 
   await page.getByRole("button", { name: "View source HTML" }).click();
-  const sourceCode = page
-    .getByRole("dialog", { name: "Source HTML" })
-    .locator("textarea");
-  await sourceCode.fill(
-    `  <p data-value="${"x".repeat(400)}">\n    content\n  </p>`,
+  const sourceDialog = page.getByRole("dialog", { name: "Source HTML" });
+  const sourceEditor = sourceDialog.locator(".source-dialog-editor");
+  const sourceCode = sourceDialog.locator("textarea");
+  const lineNumbers = sourceDialog.locator(".source-dialog-line-numbers");
+
+  await expect(sourceEditor).toHaveCSS("background-color", "rgb(30, 30, 30)");
+  await expect
+    .poll(() => sourceEditor.evaluate((element) => element.clientHeight))
+    .toBeGreaterThan(400);
+  await expect(sourceCode).toHaveAttribute("wrap", "off");
+  await expect(sourceDialog.locator(".source-dialog-language")).toHaveText(
+    "HTML",
   );
 
-  await expect(sourceCode).toHaveCSS("white-space", "pre-wrap");
-  await expect(sourceCode).toHaveCSS("overflow-wrap", "anywhere");
-  await expect
-    .poll(() =>
-      sourceCode.evaluate(
-        (element) => element.scrollWidth <= element.clientWidth,
-      ),
-    )
-    .toBe(true);
+  await sourceCode.fill("<article>\n  <h1>Title</h1>\n</article>");
+  await expect(lineNumbers).toHaveText("1\n2\n3");
+  await sourceCode.evaluate((editor) => {
+    (editor as HTMLTextAreaElement).setSelectionRange(0, 0);
+  });
+  await sourceCode.press("Tab");
+  await expect(sourceCode).toHaveValue(
+    "  <article>\n  <h1>Title</h1>\n</article>",
+  );
+  await expect(sourceDialog.locator(".source-dialog-position")).toHaveText(
+    "Ln 1, Col 3",
+  );
 });
 
 test("scrolls the iframe document back to the top", async ({ page }) => {
@@ -767,7 +779,7 @@ test("saves edited source to the current document", async ({ page }) => {
     await expect(save).toBeDisabled();
     await editor.fill(editedSource);
     await expect(save).toBeEnabled();
-    await save.click();
+    await editor.press("ControlOrMeta+s");
     await expect
       .poll(() => readFile(path, "utf8"))
       .toBe(editedSource.replace(/\n/gu, "\r\n"));

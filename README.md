@@ -239,7 +239,7 @@ The document actions menu in the upper-right corner can copy the current content
 
 The floating outline is generated from the rendered document's `h1`, `h2`, and `h3` elements, so headings without source IDs still receive temporary anchor targets. It can be placed on the left or right or hidden, and the preference is saved in the browser. On desktop, the document reserves room for the visible outline while the iframe scrollbar stays at the far-right edge. On narrow screens, the outline is placed above the document. A separate floating button appears after scrolling and returns the document to the top.
 
-The source button in the lower-right corner opens the current document's original HTML or Markdown in an editable dialog. **Save** writes the source file and lets live reload refresh the rendered document. If another editor changed the file after the dialog loaded, the save is rejected instead of overwriting the newer version. Unsaved edits are protected by a discard confirmation.
+The source button in the lower-right corner opens the current document's original HTML or Markdown in a roomy code editor with line numbers, Tab indentation, and line/column status. **Save** or <kbd>Command</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd> writes the source file and lets live reload refresh the rendered document. If another editor changed the file after the dialog loaded, the save is rejected instead of overwriting the newer version. Unsaved edits are protected by a discard confirmation.
 
 ![The current document's source HTML opened in a dialog](./assets/source.webp)
 

@@ -232,7 +232,7 @@ Sidebar上部の「Name」「Date」で、各directory内の文書を名前順�
 
 フローティング目次は、描画した文書の`h1`、`h2`、`h3`から自動生成します。sourceにIDがない見出しにも一時的なanchorを付けるため、そのまま見出しへ移動できます。目次は左・右・非表示を選択でき、設定をbrowserへ保存します。desktopではiframeのscrollbarを画面右端に保ったまま、表示中の目次に合わせて文書側へ余白を確保します。狭い画面では目次を文書の上に配置します。文書を下へscrollすると、先頭へ戻るフローティングbuttonも表示します。
 
-画面右下のsource buttonから、現在の文書の元HTMLまたはMarkdownを編集可能なdialogで開けます。「Save」を押すと実fileへ保存し、live reloadで描画結果を更新します。dialogを開いた後に外部editorが同じfileを変更した場合は、新しい内容を上書きせず保存を拒否します。未保存の編集を破棄する操作では確認を表示します。
+画面右下のsource buttonから、現在の文書の元HTMLまたはMarkdownを、行番号、Tabインデント、現在行・列表示を備えた広いコードエディタで開けます。「Save」または<kbd>Command</kbd>/<kbd>Ctrl</kbd>+<kbd>S</kbd>を押すと実fileへ保存し、live reloadで描画結果を更新します。dialogを開いた後に外部editorが同じfileを変更した場合は、新しい内容を上書きせず保存を拒否します。未保存の編集を破棄する操作では確認を表示します。
 
 ![現在の文書のソースHTMLをdialogで開いている画面](./assets/source.webp)
 

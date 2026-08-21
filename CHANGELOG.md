@@ -2,6 +2,12 @@
 
 Notable changes to Spec HTML are recorded here. The project follows [Semantic Versioning](https://semver.org/).
 
+## 0.1.6 - 2026-08-21
+
+### Changed
+
+- The source dialog now provides a taller code-editor layout with line numbers, Tab indentation, line and column status, and Command/Ctrl+S saving
+
 ## 0.1.5 - 2026-08-21
 
 ### Added

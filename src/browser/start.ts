@@ -67,6 +67,7 @@ import { installSidebarController } from "./sidebar-controller.js";
 import { SortController } from "./sort-controller.js";
 import { updateThemeButtons } from "./theme-controls.js";
 import { installScrollTopController } from "./scroll-top-controller.js";
+import { installSourceEditor } from "./source-editor.js";
 
 void initializeViewer().catch((error: unknown) => {
   console.error("Spec HTML failed to initialize", error);
@@ -124,6 +125,18 @@ async function initializeViewer(): Promise<void> {
   let sourceDialogSaving = false;
   let documentActionStatusTimer: ReturnType<typeof setTimeout> | undefined;
 
+  const sourceEditor = installSourceEditor(elements, {
+    onChange: () => {
+      if (sourceDialogSnapshot !== undefined && !sourceDialogRequiresReload) {
+        elements.sourceDialogStatus.replaceChildren();
+      }
+      updateSourceSaveButton();
+    },
+    onSave: () => {
+      elements.sourceDialogSaveButton.click();
+    },
+  });
+
   const resetSourceEditor = (): void => {
     sourceFetchAbortController?.abort();
     sourceFetchAbortController = undefined;
@@ -131,7 +144,7 @@ async function initializeViewer(): Promise<void> {
     sourceDialogInitialSource = undefined;
     sourceDialogRequiresReload = false;
     sourceDialogSaving = false;
-    elements.sourceDialogTextarea.value = "";
+    sourceEditor.clear();
     elements.sourceDialogStatus.replaceChildren();
     elements.sourceDialogSaveButton.disabled = true;
     elements.sourceDialogSaveButton.removeAttribute("aria-busy");
@@ -139,7 +152,7 @@ async function initializeViewer(): Promise<void> {
 
   const sourceEditorIsDirty = (): boolean =>
     sourceDialogInitialSource !== undefined &&
-    elements.sourceDialogTextarea.value !== sourceDialogInitialSource;
+    sourceEditor.getValue() !== sourceDialogInitialSource;
 
   const updateSourceSaveButton = (): void => {
     elements.sourceDialogSaveButton.disabled =
@@ -656,10 +669,10 @@ async function initializeViewer(): Promise<void> {
     resetSourceEditor();
     const sourceAtOpen = currentDocumentSource;
     sourceDialogInitialSource = normalizeSourceEditorValue(sourceAtOpen);
-    elements.sourceDialogTextarea.value = sourceAtOpen;
+    sourceEditor.setValue(normalizeSourceEditorValue(sourceAtOpen));
     elements.sourceDialogStatus.textContent = "Loading current source…";
     elements.sourceDialog.showModal();
-    elements.sourceDialogTextarea.focus();
+    sourceEditor.focus();
     const abortController = new AbortController();
     sourceFetchAbortController = abortController;
     void fetchDocumentSource(documentPath, abortController.signal)
@@ -676,7 +689,7 @@ async function initializeViewer(): Promise<void> {
         currentDocumentSource = snapshot.source;
         const hasUnsavedInput = sourceEditorIsDirty();
         if (!hasUnsavedInput) {
-          elements.sourceDialogTextarea.value = snapshot.source;
+          sourceEditor.setValue(normalizeSourceEditorValue(snapshot.source));
           sourceDialogInitialSource = normalizeSourceEditorValue(
             snapshot.source,
           );
@@ -701,12 +714,6 @@ async function initializeViewer(): Promise<void> {
         updateSourceSaveButton();
       });
   });
-  elements.sourceDialogTextarea.addEventListener("input", () => {
-    if (sourceDialogSnapshot !== undefined && !sourceDialogRequiresReload) {
-      elements.sourceDialogStatus.replaceChildren();
-    }
-    updateSourceSaveButton();
-  });
   elements.sourceDialogCloseButton.addEventListener("click", () => {
     closeSourceEditor();
   });
@@ -730,7 +737,7 @@ async function initializeViewer(): Promise<void> {
     }
     const snapshot = sourceDialogSnapshot;
     const source = restoreSourceLineEndings(
-      elements.sourceDialogTextarea.value,
+      sourceEditor.getValue(),
       snapshot.source,
     );
     sourceDialogSaving = true;

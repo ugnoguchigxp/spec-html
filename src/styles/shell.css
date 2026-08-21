@@ -508,9 +508,11 @@ body,
 }
 
 .source-dialog {
-  width: min(860px, calc(100vw - 32px));
+  width: min(1120px, calc(100vw - 32px));
+  height: min(84vh, 820px);
+  min-height: min(560px, calc(100vh - 32px));
   max-width: none;
-  max-height: min(80vh, 720px);
+  max-height: calc(100vh - 32px);
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--shell-border);
@@ -566,24 +568,87 @@ body,
   background: var(--shell-surface-hover);
 }
 
-.source-dialog-code {
-  width: 100%;
+.source-dialog-editor {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
   margin: 0;
-  padding: 16px;
+  overflow: hidden;
+  color: #d4d4d4;
+  background: #1e1e1e;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.source-dialog-editor-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.source-dialog-gutter {
+  min-width: 52px;
+  overflow: hidden;
+  border-right: 1px solid #333333;
+  color: #858585;
+  background: #1e1e1e;
+  text-align: right;
+  user-select: none;
+}
+
+.source-dialog-line-numbers {
+  margin: 0;
+  padding: 14px 12px 14px 8px;
+  font: inherit;
+  line-height: inherit;
+}
+
+.source-dialog-code {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 14px 16px;
   overflow: auto;
   border: 0;
   border-radius: 0;
-  overflow-wrap: anywhere;
-  color: var(--shell-text);
-  background: var(--shell-surface);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.55;
+  outline: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  line-height: inherit;
   tab-size: 2;
-  white-space: pre-wrap;
-  word-break: break-word;
+  white-space: pre;
   resize: none;
+}
+
+.source-dialog-editor:focus-within {
+  box-shadow: inset 0 0 0 1px var(--shell-focus);
+}
+
+.source-dialog-editor-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  min-height: 24px;
+  padding: 2px 12px;
+  border-top: 1px solid #333333;
+  color: #cccccc;
+  background: #181818;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.source-dialog-language {
+  margin-right: auto;
+  color: #9cdcfe;
+}
+
+.source-dialog-position {
+  color: inherit;
 }
 
 .source-dialog-footer {
@@ -708,6 +773,17 @@ body,
     width: 100%;
     height: 100%;
     margin-left: 0;
+  }
+
+  .source-dialog {
+    width: calc(100vw - 24px);
+    height: calc(100dvh - 24px);
+    min-height: 0;
+    max-height: calc(100dvh - 24px);
+  }
+
+  .source-dialog-gutter {
+    min-width: 44px;
   }
 }
 

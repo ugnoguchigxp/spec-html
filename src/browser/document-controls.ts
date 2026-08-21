@@ -14,6 +14,7 @@ export function updateSourceLabels(
   elements.documentModeButton.setAttribute("aria-label", actionLabel);
   elements.documentModeButton.title = actionLabel;
   elements.sourceDialogTitle.textContent = `Source ${formatLabel}`;
+  elements.sourceDialogLanguage.textContent = formatLabel;
 }
 
 export function installFrameLinkHandler(

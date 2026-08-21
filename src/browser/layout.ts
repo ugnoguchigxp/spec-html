@@ -213,10 +213,49 @@ export function createLayout(container: HTMLElement): ViewerElements {
   sourceDialogCloseIcon.append(sourceDialogClosePath);
   sourceDialogCloseButton.append(sourceDialogCloseIcon);
 
+  const sourceDialogEditor = document.createElement("div");
+  sourceDialogEditor.className = "source-dialog-editor";
+
+  const sourceDialogEditorBody = document.createElement("div");
+  sourceDialogEditorBody.className = "source-dialog-editor-body";
+
+  const sourceDialogGutter = document.createElement("div");
+  sourceDialogGutter.className = "source-dialog-gutter";
+  sourceDialogGutter.setAttribute("aria-hidden", "true");
+
+  const sourceDialogLineNumbers = document.createElement("pre");
+  sourceDialogLineNumbers.className = "source-dialog-line-numbers";
+  sourceDialogGutter.append(sourceDialogLineNumbers);
+
   const sourceDialogTextarea = document.createElement("textarea");
   sourceDialogTextarea.className = "source-dialog-code";
   sourceDialogTextarea.spellcheck = false;
+  sourceDialogTextarea.autocomplete = "off";
+  sourceDialogTextarea.autocapitalize = "off";
+  sourceDialogTextarea.wrap = "off";
   sourceDialogTextarea.setAttribute("aria-label", "Source editor");
+
+  const sourceDialogEditorStatus = document.createElement("div");
+  sourceDialogEditorStatus.className = "source-dialog-editor-status";
+
+  const sourceDialogLanguage = document.createElement("span");
+  sourceDialogLanguage.className = "source-dialog-language";
+  sourceDialogLanguage.textContent = "HTML";
+
+  const sourceDialogIndent = document.createElement("span");
+  sourceDialogIndent.textContent = "Spaces: 2";
+
+  const sourceDialogPosition = document.createElement("output");
+  sourceDialogPosition.className = "source-dialog-position";
+  sourceDialogPosition.textContent = "Ln 1, Col 1";
+
+  sourceDialogEditorBody.append(sourceDialogGutter, sourceDialogTextarea);
+  sourceDialogEditorStatus.append(
+    sourceDialogLanguage,
+    sourceDialogIndent,
+    sourceDialogPosition,
+  );
+  sourceDialogEditor.append(sourceDialogEditorBody, sourceDialogEditorStatus);
 
   const sourceDialogFooter = document.createElement("div");
   sourceDialogFooter.className = "source-dialog-footer";
@@ -236,7 +275,7 @@ export function createLayout(container: HTMLElement): ViewerElements {
   sourceDialogFooter.append(sourceDialogStatus, sourceDialogSaveButton);
   sourceDialog.append(
     sourceDialogHeader,
-    sourceDialogTextarea,
+    sourceDialogEditor,
     sourceDialogFooter,
   );
 
@@ -327,6 +366,11 @@ export function createLayout(container: HTMLElement): ViewerElements {
     documentOutlineCloseButton,
     sourceDialog,
     sourceDialogTitle,
+    sourceDialogEditor,
+    sourceDialogGutter,
+    sourceDialogLineNumbers,
+    sourceDialogLanguage,
+    sourceDialogPosition,
     sourceDialogTextarea,
     sourceDialogCloseButton,
     sourceDialogSaveButton,
