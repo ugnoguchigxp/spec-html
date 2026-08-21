@@ -8,8 +8,8 @@
 <meta name="generator" content="Jekyll v4.4.1" />
 <meta property="og:title" content="仕様書を、読みやすく。" />
 <meta property="og:locale" content="ja" />
-<meta name="description" content="HTMLとMarkdownで書いた設計書や仕様書を、手元のブラウザで読みやすく表示・編集できるオープンソースのビューアー。" />
-<meta name="twitter:description" property="og:description" content="HTMLとMarkdownで書いた設計書や仕様書を、手元のブラウザで読みやすく表示・編集できるオープンソースのビューアー。" />
+<meta name="description" content="HTMLとMarkdownの設計書をローカルで閲覧・編集し、MarkdownからHTMLへの変換・移行と、Lint・Fix・Formatまで行えるオープンソースのビューアー。" />
+<meta name="twitter:description" property="og:description" content="HTMLとMarkdownの設計書をローカルで閲覧・編集し、MarkdownからHTMLへの変換・移行と、Lint・Fix・Formatまで行えるオープンソースのビューアー。" />
 <link rel="canonical" href="https://ugnoguchigxp.github.io/spec-html/" />
 <meta property="og:url" content="https://ugnoguchigxp.github.io/spec-html/" />
 <meta property="og:site_name" content="Spec HTML" />
@@ -19,7 +19,7 @@
 <meta name="twitter:image" content="https://ugnoguchigxp.github.io/spec-html/assets/img/og-image.jpg" />
 <meta name="twitter:title" content="仕様書を、読みやすく。" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebSite","description":"HTMLとMarkdownで書いた設計書や仕様書を、手元のブラウザで読みやすく表示・編集できるオープンソースのビューアー。","headline":"仕様書を、読みやすく。","image":"https://ugnoguchigxp.github.io/spec-html/assets/img/og-image.jpg","name":"Spec HTML","url":"https://ugnoguchigxp.github.io/spec-html/"}</script>
+{"@context":"https://schema.org","@type":"WebSite","description":"HTMLとMarkdownの設計書をローカルで閲覧・編集し、MarkdownからHTMLへの変換・移行と、Lint・Fix・Formatまで行えるオープンソースのビューアー。","headline":"仕様書を、読みやすく。","image":"https://ugnoguchigxp.github.io/spec-html/assets/img/og-image.jpg","name":"Spec HTML","url":"https://ugnoguchigxp.github.io/spec-html/"}</script>
 <!-- End Jekyll SEO tag -->
 
     <meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1">
@@ -60,17 +60,17 @@
         <p class="eyebrow"><span></span> 設計書と仕様書のローカルビューアー</p>
         <h1 id="hero-title"><span class="heading-line">仕様書を、</span><span class="heading-line"><em>読みやすく。</em></span></h1>
         <p class="hero-lead">
-          HTMLで書いた新しい仕様書も、既存のMarkdownも、同じ画面で読めます。
-          フォルダ内の文書を自動で一覧にし、表示したまま元のファイルを編集できます。
+          HTMLで書いた仕様書も、既存のMarkdownも、同じ画面で読んで編集できます。
+          Markdownをそのまま使いながら、必要な文書だけHTMLへ変換・移行し、見出しやリンクを検査できます。
         </p>
         <div class="hero-actions">
           <a class="button button-primary" href="https://github.com/ugnoguchigxp/spec-html">GitHubで見る <span aria-hidden="true">↗</span></a>
           <a class="button button-secondary" href="https://github.com/ugnoguchigxp/spec-html/blob/main/README.ja.md#quick-start">すぐに試す <span aria-hidden="true">→</span></a>
         </div>
         <ul class="hero-facts">
-          <li><span aria-hidden="true">✓</span> ローカルで動作</li>
           <li><span aria-hidden="true">✓</span> Markdownをそのまま表示</li>
-          <li><span aria-hidden="true">✓</span> MITライセンス</li>
+          <li><span aria-hidden="true">✓</span> HTMLへ変換・一括移行</li>
+          <li><span aria-hidden="true">✓</span> Lint / Fix / Format</li>
         </ul>
       </div>
 
@@ -87,18 +87,18 @@
     <div class="shell outcome-grid">
       <article>
         <span class="outcome-number">01</span>
-        <h2>文書を自動で一覧化</h2>
-        <p>フォルダ内のHTMLとMarkdownを読み取り、文書の見出しからメニューを作ります。</p>
+        <h2>Markdownを残して始める</h2>
+        <p>まずはそのまま表示。必要な文書だけ変換でき、複数文書も内容とリンクを確かめながらまとめて移せます。</p>
       </article>
       <article>
         <span class="outcome-number">02</span>
-        <h2>必要な情報を見やすく表示</h2>
-        <p>表、注記、画像に加え、Mermaidの図やChart.jsのグラフも文書の中に表示できます。</p>
+        <h2>構造を残して検査</h2>
+        <p>見出し、表、図、注記の関係をHTMLに残し、リンクや説明の不足を検査します。明らかなタグの誤りや書式も整えられます。</p>
       </article>
       <article>
         <span class="outcome-number">03</span>
-        <h2>表示したまま編集</h2>
-        <p>元のHTMLやMarkdownをビューアーから開いて保存できます。変更後は表示が自動で更新されます。</p>
+        <h2>読んで、その場で直す</h2>
+        <p>目次付きのビューアーから元のHTMLやMarkdownを開いて保存できます。変更後は表示が自動で更新されます。</p>
       </article>
     </div>
   </section>
@@ -107,10 +107,10 @@
     <div class="shell">
       <div class="section-heading">
         <div>
-          <p class="kicker">仕様書を読むための機能</p>
+          <p class="kicker">閲覧、変換、検査をひとつに</p>
           <h2 id="features-title"><span class="heading-line">仕様書を探す、</span><span class="heading-line">読む、直す。</span></h2>
         </div>
-        <p>Spec HTMLは、文書の閲覧と編集に必要な機能に絞ったツールです。文書ごとにCSSやメニューを用意する必要はありません。</p>
+        <p>LLMには本文のHTML断片だけを書かせ、表示は共通ビューアーに任せられます。既存Markdownの閲覧、変換、編集、検査も同じプロジェクトで扱えます。</p>
       </div>
 
       <div class="feature-grid">
@@ -138,14 +138,14 @@
         <article class="feature-card feature-format">
           <span class="feature-index">C</span>
           <h3>HTML + Markdown</h3>
-          <p>既存のMarkdownは変換せずに表示し、必要な文書だけを編集できるHTMLへ変換できます。</p>
+          <p>Markdownはそのまま表示。1文書の変換と、リンク検査・ロールバック付きの一括移行にも対応します。</p>
           <div class="format-demo" aria-hidden="true"><span>.md</span><i>→</i><span>&lt;article&gt;</span></div>
         </article>
 
         <article class="feature-card feature-code">
           <span class="feature-index">D</span>
           <h3>Lint / Fix / Format</h3>
-          <p>見出し構造、リンク、アクセシビリティを検査します。タグ名や属性名の明らかな誤りと書式もCLIで直せます。</p>
+          <p>HTMLとMarkdownの見出し・リンクを検査し、HTMLでは図表やアクセシビリティも確認します。明らかな誤りと書式はCLIで直せます。</p>
           <pre><code><span>$</span> npx spec-html check ./specs
 <b>✓ 12 documents checked</b></code></pre>
         </article>
@@ -165,13 +165,14 @@
   <section class="section quick-start" id="quick-start" aria-labelledby="quick-title">
     <div class="shell quick-grid">
       <div class="quick-copy">
-        <p class="kicker">使い始める</p>
-        <h2 id="quick-title"><span class="heading-line">プロジェクトへ追加。</span><span class="heading-line">すぐに使えます。</span></h2>
-        <p>Spec HTMLをインストールし、仕様書を<code>specs/</code>に置いて起動します。ファイルを保存すると、ブラウザの表示も自動で更新されます。</p>
+        <p class="kicker">Markdownのまま始める</p>
+        <h2 id="quick-title"><span class="heading-line">いまある文書で、</span><span class="heading-line">すぐに試せます。</span></h2>
+        <p>Spec HTMLをインストールし、仕様書のフォルダを開くだけです。Markdownを変換せずに読み、必要な文書だけHTMLへ移せます。</p>
         <ol>
           <li><span>1</span><div><b>インストール</b><small>プロジェクトの開発用ツールとして追加</small></div></li>
-          <li><span>2</span><div><b>文書を置く</b><small>HTMLまたはMarkdownを<code>specs/</code>へ追加</small></div></li>
-          <li><span>3</span><div><b>ブラウザで開く</b><small>ローカルビューアーを起動</small></div></li>
+          <li><span>2</span><div><b>そのまま開く</b><small>既存のHTMLとMarkdownをブラウザで表示</small></div></li>
+          <li><span>3</span><div><b>必要なら変換</b><small>選んだMarkdownだけをHTMLへ変換</small></div></li>
+          <li><span>4</span><div><b>文書を検査</b><small>見出し、リンク、書式をまとめて確認</small></div></li>
         </ol>
       </div>
 
@@ -180,16 +181,19 @@
           <div aria-hidden="true"><span></span><span></span><span></span></div>
           <small>Terminal</small>
         </div>
-        <pre><code><span class="comment"># 1. install</span>
+        <pre><code><span class="comment"># install</span>
 <span class="prompt">$</span> npm install --save-dev spec-html
 
-<span class="comment"># 2. add your documents</span>
-<span class="prompt">$</span> mkdir -p specs
-
-<span class="comment"># 3. open the viewer</span>
+<span class="comment"># open existing HTML and Markdown</span>
 <span class="prompt">$</span> npx spec-html ./specs
 
-<span class="success">✓ Viewer ready at http://127.0.0.1:4173</span></code></pre>
+<span class="comment"># convert only when needed</span>
+<span class="prompt">$</span> npx spec-html convert ./specs/design.md --lang ja --output ./specs/design.html
+
+<span class="comment"># fix, format, and lint</span>
+<span class="prompt">$</span> npx spec-html check ./specs --fix --warnings-as-errors
+
+<span class="success">✓ Documents ready</span></code></pre>
       </div>
     </div>
   </section>
@@ -236,7 +240,7 @@
     <div class="shell cta-panel">
       <p class="kicker">Open source · MIT</p>
       <h2 id="cta-title"><span class="heading-line">手元の仕様書を、</span><span class="heading-line">もっと読みやすく。</span></h2>
-      <p>まずは、既存のMarkdownを開くところから始められます。</p>
+      <p>いまあるMarkdownをそのまま開き、必要になった文書だけHTMLへ移せます。</p>
       <div class="hero-actions">
         <a class="button button-inverse" href="https://github.com/ugnoguchigxp/spec-html">GitHubで使い方を見る <span aria-hidden="true">↗</span></a>
         <a class="text-link" href="https://www.npmjs.com/package/spec-html">npmで確認する <span aria-hidden="true">→</span></a>
