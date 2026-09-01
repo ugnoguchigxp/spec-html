@@ -72,7 +72,7 @@
     "github-slugger": "2.0.0",
     "html-validate": "10.17.0",
     "jsdom": "26.1.0",
-    "marked": "18.0.10",
+    "marked": "18.0.11",
     "open": "11.0.1",
     "prettier": "3.9.6"
   },
